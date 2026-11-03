@@ -59,6 +59,27 @@ describe('saved day history', () => {
     expect(parseSavedState(JSON.stringify({}), now).auto).toBe(false);
   });
 
+  it('falls back to the default lengths for a bad cfg', () => {
+    const state = parseSavedState(JSON.stringify({
+      cfg: { focus: 0, short: 'ten', long: 400 },
+    }), now);
+    expect(state.cfg).toEqual({ focus: 25, short: 5, long: 90 });
+  });
+
+  it('keeps a cfg within the settings bounds and drives an idle session from it', () => {
+    const state = parseSavedState(JSON.stringify({ cfg: { focus: 50, short: 10, long: 20 } }), now);
+    expect(state.cfg).toEqual({ focus: 50, short: 10, long: 20 });
+    expect(state.session.totalMs).toBe(50 * 60_000);
+  });
+
+  it('rejects an xp that would hang levelInfo', () => {
+    expect(parseSavedState(JSON.stringify({ xp: 1e999 }), now).xp).toBe(0);
+    expect(parseSavedState(JSON.stringify({ xp: 'many' }), now).xp).toBe(0);
+    expect(parseSavedState(JSON.stringify({ xp: -5 }), now).xp).toBe(0);
+    expect(parseSavedState(JSON.stringify({ xp: 1e300 }), now).xp).toBe(1_000_000_000);
+    expect(parseSavedState(JSON.stringify({ xp: 40 }), now).xp).toBe(40);
+  });
+
   it('caps a stored session length at the limit the settings allow', () => {
     const inflated = parseSavedState(JSON.stringify({
       session: { mode: 'focus', status: 'idle', endAt: null, remainingMs: 60_000_000, totalMs: 60_000_000 },

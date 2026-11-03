@@ -13,6 +13,11 @@ const MODES: TimerMode[] = ['focus', 'short', 'long'];
 // Same ceilings the timer settings enforce, so a stored or hand-edited value
 // cannot pay out more minutes, XP or quest progress than the UI allows.
 const MAX_MINUTES: Record<TimerMode, number> = { focus: 180, short: 60, long: 90 };
+const MIN_MINUTES = 1;
+const DEFAULT_MINUTES: Record<TimerMode, number> = { focus: 25, short: 5, long: 15 };
+// levelInfo walks XP a level at a time, so a huge finite total would spin for
+// years. This sits far above any reachable score but keeps the walk bounded.
+const MAX_XP = 1_000_000_000;
 
 export interface SavedState extends ProgressState {
   auto: boolean;
@@ -54,12 +59,13 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
   try {
     const saved = JSON.parse(raw) as Partial<SavedState>;
     const restored = restoreDayHistory(readHistory(saved.days), isDayStats(saved.day) ? saved.day : null, now);
-    const cfg = { ...fresh.cfg, ...saved.cfg };
+    const cfg = readCfg(saved.cfg);
     const tasks = readTasks(saved.tasks) ?? fresh.tasks;
     return {
       ...fresh,
       ...saved,
       cfg,
+      xp: readXp(saved.xp),
       mix: { ...fresh.mix, ...saved.mix },
       streak: { ...fresh.streak, ...saved.streak },
       day: restored.day,
@@ -74,6 +80,26 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
   } catch {
     return fresh;
   }
+}
+
+function readCfg(value: unknown): TimerCfg {
+  if (!value || typeof value !== 'object') return { ...DEFAULT_MINUTES };
+  const saved = value as Partial<Record<TimerMode, unknown>>;
+  const cfg = {} as TimerCfg;
+  for (const mode of MODES) {
+    const minutes = saved[mode];
+    // A missing, non-numeric or out-of-range length falls back to the default
+    // rather than reaching modeDurationMs, which would not clamp it.
+    cfg[mode] = typeof minutes === 'number' && Number.isFinite(minutes) && minutes >= MIN_MINUTES
+      ? Math.min(minutes, MAX_MINUTES[mode])
+      : DEFAULT_MINUTES[mode];
+  }
+  return cfg;
+}
+
+function readXp(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(Math.floor(value), MAX_XP);
 }
 
 function readMusicEnd(value: unknown): MusicEnd {

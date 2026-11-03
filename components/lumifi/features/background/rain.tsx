@@ -75,7 +75,7 @@ function RainStreak({
 }) {
   const phase = index / count;
   const length = BASE_LENGTH + (index % 5) * 8;
-  const left = `${(index * 37) % 100}%`;
+  const left = `${(index * 37) % 100}%` as const;
   const style = useAnimatedStyle(() => {
     const height = span.get();
     if (height <= 0) return { opacity: 0, transform: [{ translateY: -length }] };

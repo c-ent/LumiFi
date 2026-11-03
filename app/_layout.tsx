@@ -1,31 +1,26 @@
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { colors } from '@/src/theme/tokens';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SystemUI from 'expo-system-ui';
+import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
-import { BackgroundProvider } from '../components/background-context';
-
-
-
-function LayoutWithBackground() {
-  const colorScheme = useColorScheme();
-  return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
-  );
-}
 
 export default function RootLayout() {
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      document.title = 'LumiFi';
+      return;
+    }
+    void SystemUI.setBackgroundColorAsync(colors.bgBase);
+  }, []);
+
   return (
-    <BackgroundProvider>
-      <LayoutWithBackground />
-    </BackgroundProvider>
+    <>
+      <StatusBar style="light" />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bgBase } }}>
+        <Stack.Screen name="index" options={{ title: 'LumiFi' }} />
+      </Stack>
+    </>
   );
 }
-

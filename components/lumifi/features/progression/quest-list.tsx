@@ -14,7 +14,9 @@ export function QuestList({ mobile = false }: { mobile?: boolean }) {
       <Text style={styles.kicker}>Daily quests</Text>
       {QUESTS.map((quest) => {
         const value = Math.min(day[quest.key], quest.goal);
-        const done = value >= quest.goal;
+        // The reward stays claimed after a task is undone, so the paid state comes
+        // from the stored claim, not from a counter that can fall back below goal.
+        const done = day.claimed.includes(quest.id);
         const width = `${Math.round((value / quest.goal) * 100)}%` as const;
         return (
           <View key={quest.id} style={styles.quest}>

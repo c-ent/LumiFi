@@ -24,6 +24,7 @@ export function MusicBlock({ mobile = false }: { mobile?: boolean }) {
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Next track" style={styles.round} onPress={lamp.nextTrack}><NextIcon color={colors.textPrimary} /></Pressable>
         <Slider
+          accessibilityLabel="Music volume"
           style={styles.slider}
           minimumValue={0}
           maximumValue={100}

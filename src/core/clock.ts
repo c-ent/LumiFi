@@ -1,4 +1,4 @@
-import { modeDurationMs } from './phase';
+import { durationMinutes, modeDurationMs } from './phase';
 import { completeSession } from './session';
 import { ProgressState, TimerMode } from './types';
 
@@ -9,13 +9,23 @@ export interface SessionClock {
   status: ClockStatus;
   endAt: number | null;
   remainingMs: number;
+  /**
+   * The length the current session was set to when it started. `remainingMs`
+   * only says how much time is left, so the two differ once a session runs:
+   * with 90 minutes set, `remainingMs` is 1,800,000 at the 60-minute mark.
+   */
+  totalMs: number;
 }
 
 /** A session that ended this long before we noticed was finished while the app was away. */
 export const SESSION_AWAY_MS = 2000;
 
 export function idleSession(mode: TimerMode, durationMs: number): SessionClock {
-  return { mode, status: 'idle', endAt: null, remainingMs: durationMs };
+  return { mode, status: 'idle', endAt: null, remainingMs: durationMs, totalMs: durationMs };
+}
+
+export function sessionMinutes(clock: SessionClock): number {
+  return durationMinutes(clock.totalMs);
 }
 
 export function sessionRemaining(clock: SessionClock, now: number): number {
@@ -34,7 +44,7 @@ export function sessionAwaitingCompletion(clock: SessionClock, now: number): boo
 
 export function startSession(clock: SessionClock, now: number): SessionClock {
   const remaining = sessionRemaining(clock, now);
-  return { mode: clock.mode, status: 'running', remainingMs: remaining, endAt: now + remaining };
+  return { mode: clock.mode, status: 'running', remainingMs: remaining, totalMs: clock.totalMs, endAt: now + remaining };
 }
 
 export function pauseSession(clock: SessionClock, now: number): SessionClock {
@@ -43,6 +53,7 @@ export function pauseSession(clock: SessionClock, now: number): SessionClock {
     status: 'paused',
     endAt: null,
     remainingMs: sessionRemaining(clock, now),
+    totalMs: clock.totalMs,
   };
 }
 
@@ -66,7 +77,7 @@ export function takeCompletedSession<T extends ProgressState>(
   }
 
   const endedAt = clock.endAt;
-  const result = completeSession(state, clock.mode, endedAt);
+  const result = completeSession(state, clock.mode, endedAt, sessionMinutes(clock));
   const away = now - endedAt > SESSION_AWAY_MS;
   const autoStarted = auto && !away;
   const duration = modeDurationMs(result.state.cfg, result.nextMode);

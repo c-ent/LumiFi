@@ -86,9 +86,13 @@ function readSession(value: unknown, cfg: TimerCfg): SessionClock {
   const remainingMs = typeof session.remainingMs === 'number' && Number.isFinite(session.remainingMs) && session.remainingMs >= 0
     ? session.remainingMs
     : modeDurationMs(cfg, mode);
+  // A save from before totalMs existed falls back to the configured length.
+  const totalMs = typeof session.totalMs === 'number' && Number.isFinite(session.totalMs) && session.totalMs > 0
+    ? session.totalMs
+    : modeDurationMs(cfg, mode);
   const endAt = typeof session.endAt === 'number' && Number.isFinite(session.endAt) ? session.endAt : null;
-  if (status === 'running' && endAt == null) return { mode, status: 'paused', endAt: null, remainingMs };
-  return { mode, status, endAt: status === 'running' ? endAt : null, remainingMs };
+  if (status === 'running' && endAt == null) return { mode, status: 'paused', endAt: null, remainingMs, totalMs };
+  return { mode, status, endAt: status === 'running' ? endAt : null, remainingMs, totalMs };
 }
 
 function readTasks(value: unknown): Task[] | null {
@@ -98,7 +102,10 @@ function readTasks(value: unknown): Task[] | null {
     if (!item || typeof item !== 'object') continue;
     const task = item as Partial<Task>;
     if (typeof task.id !== 'number' || typeof task.text !== 'string' || typeof task.done !== 'boolean' || typeof task.pomos !== 'number') continue;
-    tasks.push({ id: task.id, text: task.text, done: task.done, pomos: task.pomos });
+    // A save from before doneOn existed has no completion day to fall back on,
+    // so only a task already marked done keeps an unknown day.
+    const doneOn = typeof task.doneOn === 'string' ? task.doneOn : null;
+    tasks.push({ id: task.id, text: task.text, done: task.done, pomos: task.pomos, doneOn });
   }
   return tasks;
 }

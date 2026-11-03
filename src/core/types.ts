@@ -11,6 +11,8 @@ export interface Task {
   text: string;
   done: boolean;
   pomos: number;
+  /** The day the task was completed, so an undo can hit the day it counted toward. */
+  doneOn: string | null;
 }
 
 export interface DayStats {

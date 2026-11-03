@@ -74,21 +74,22 @@ export function toggleTask<T extends ProgressState>(state: T, id: number, now: n
   // Completing counts toward today. Undoing counts against the day the task was
   // completed, so undoing a task finished on a past day cannot erase today's
   // count. The stored history, which feeds the week chart, is adjusted too.
+  // A completion with no known day (a save from before doneOn existed) carries
+  // no day to count for or against, so neither today's nor any past count moves.
   const dayKey = rolled.day.d;
-  const targetKey = doneOn ?? task.doneOn ?? dayKey;
-  const known = rolled.days[targetKey];
-  const total = known ? known.tasks : 0;
-  const nextTotal = done ? total + 1 : Math.max(0, total - 1);
+  const targetKey = done ? dayKey : task.doneOn;
 
+  let day: DayStats = rolled.day;
   let days = rolled.days;
-  if (known) days = { ...days, [targetKey]: { ...known, tasks: nextTotal } };
-  else if (nextTotal > 0) {
-    days = { ...days, [targetKey]: { d: targetKey, sessions: 0, minutes: 0, tasks: nextTotal, claimed: [] } };
+  if (targetKey === dayKey) {
+    const nextTotal = done ? rolled.day.tasks + 1 : Math.max(0, rolled.day.tasks - 1);
+    day = { ...rolled.day, tasks: nextTotal, claimed: [...rolled.day.claimed] };
+    const known = rolled.days[dayKey] ?? day;
+    days = { ...rolled.days, [dayKey]: { ...known, tasks: nextTotal } };
+  } else if (targetKey != null) {
+    const known = rolled.days[targetKey];
+    if (known) days = { ...rolled.days, [targetKey]: { ...known, tasks: Math.max(0, known.tasks - 1) } };
   }
-
-  const day: DayStats = targetKey === dayKey
-    ? { ...rolled.day, tasks: nextTotal, claimed: [...rolled.day.claimed] }
-    : rolled.day;
 
   const messages: string[] = [];
   const claimed = claimReachedQuests(day, rolled.xp, messages);

@@ -51,6 +51,34 @@ describe('saved day history', () => {
     expect(state.mix.music).toBe(60);
   });
 
+  it('only accepts a boolean auto-start flag', () => {
+    expect(parseSavedState(JSON.stringify({ auto: true }), now).auto).toBe(true);
+    expect(parseSavedState(JSON.stringify({ auto: false }), now).auto).toBe(false);
+    expect(parseSavedState(JSON.stringify({ auto: null }), now).auto).toBe(false);
+    expect(parseSavedState(JSON.stringify({ auto: 'yes' }), now).auto).toBe(false);
+    expect(parseSavedState(JSON.stringify({}), now).auto).toBe(false);
+  });
+
+  it('caps a stored session length at the limit the settings allow', () => {
+    const inflated = parseSavedState(JSON.stringify({
+      session: { mode: 'focus', status: 'idle', endAt: null, remainingMs: 60_000_000, totalMs: 60_000_000 },
+    }), now);
+    expect(inflated.session.totalMs).toBe(180 * 60_000);
+    expect(inflated.session.remainingMs).toBe(180 * 60_000);
+
+    const breakTooLong = parseSavedState(JSON.stringify({
+      session: { mode: 'long', status: 'idle', endAt: null, remainingMs: 9_000_000, totalMs: 9_000_000 },
+    }), now);
+    expect(breakTooLong.session.totalMs).toBe(90 * 60_000);
+    expect(breakTooLong.session.remainingMs).toBe(90 * 60_000);
+
+    const honest = parseSavedState(JSON.stringify({
+      session: { mode: 'focus', status: 'paused', endAt: null, remainingMs: 25 * 60_000, totalMs: 25 * 60_000 },
+    }), now);
+    expect(honest.session.totalMs).toBe(25 * 60_000);
+    expect(honest.session.remainingMs).toBe(25 * 60_000);
+  });
+
   it('keeps a paused remainder and ignores a running session with no deadline', () => {
     const paused = parseSavedState(JSON.stringify({
       session: { mode: 'short', status: 'paused', endAt: null, remainingMs: 120_000, totalMs: 300_000 },

@@ -1,0 +1,16 @@
+import { colors } from '@/src/theme/tokens';
+import React from 'react';
+import { Pressable, Text, View } from 'react-native';
+import { CloseIcon } from '@/components/lumifi/shared/icons';
+import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
+
+export function PanelHeading({ title, onClose }: { title: string; onClose: () => void }) {
+  return (
+    <View style={styles.head}>
+      <Text style={styles.panelTitle}>{title}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Close ${title}`} onPress={onClose} style={styles.roundSm}>
+        <CloseIcon color={colors.textPrimary} />
+      </Pressable>
+    </View>
+  );
+}

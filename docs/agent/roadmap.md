@@ -11,27 +11,29 @@ Read this when starting or planning a feature, or when asked what comes next. Ea
 
 ## Reward eligibility
 
-Applies to pets, streaks, session quests and achievements. Only a focus session of at least a minimum length counts. Today the spec allows 1 minute sessions, which would let a user earn rewards by repeating very short sessions.
+Applies to streaks, session quests and achievements. Only a focus session of at least a minimum length counts. Today the spec allows 1 minute sessions, which would let a user earn rewards by repeating very short sessions.
 
 Open question for the owner: the minimum length (a starting point to discuss is 10 minutes). When decided, update the progression rules in `spec.md` and the `change-progression-rules` skill before building any item that grants a reward.
 
 ## Order
 
-| #   | Feature                                 | Version | Depends on                    |
-| --- | --------------------------------------- | ------- | ----------------------------- |
-| 1   | Your own music files                    | v2      | v1 music player               |
-| 2   | Unlocks (XP lights the room)            | v2      | v1                            |
-| 3   | Goal-linked quests                      | v2      | v1                            |
-| 4   | Calendar stats                          | v2      | v1 daily minutes history      |
-| 5   | Accounts and sync                       | v2      | v1                            |
-| 6   | Study pets                              | v2      | v1 (server drops after #5)    |
-| 7   | Achievements                            | v2      | #5                            |
-| 8   | Streaming playlists                     | v2      | #1, terms check               |
-| 9   | Optional cosmetics or one-time purchase | v3      | #2                            |
-| 10  | Private circles (friends' candles)      | v4      | #5                            |
-| 11  | Focus rooms                             | v4      | #5, #10, users and moderation |
+The order was decided on 2026-11-03 and is recorded in `progress.md`. Only #1 and #8 are scheduled. The other items are kept as specs and stay unscheduled until those two ship.
 
-Streaming sits last in v2 because it needs a decision and a terms check before any code, and that should not hold up the items before it.
+| #   | Feature                                 | Version | Status                      | Depends on                    |
+| --- | --------------------------------------- | ------- | --------------------------- | ----------------------------- |
+| 1   | Your own music files                    | v2      | Next                        | v1 music player               |
+| 2   | Unlocks (XP lights the room)            | v2      | Unscheduled                 | v1                            |
+| 3   | Goal-linked quests                      | v2      | Unscheduled                 | v1                            |
+| 4   | Calendar stats                          | v2      | Unscheduled                 | v1 daily minutes history      |
+| 5   | Accounts and sync                       | v4      | Unscheduled                 | v1 to v3 shipped, enough users, a moderation plan |
+| 6   | Study pets                              | —       | Out                         | v1 (server drops after #5)    |
+| 7   | Achievements                            | v2      | Unscheduled, after #5       | #5                            |
+| 8   | Streaming playlists                     | v2      | After #1                    | #1, terms check               |
+| 9   | Optional cosmetics or one-time purchase | v3      | Unscheduled                 | #2                            |
+| 10  | Private circles (friends' candles)      | v4      | Unscheduled                 | #5                            |
+| 11  | Focus rooms                             | v4      | Unscheduled                 | #5, #10, users and moderation |
+
+Your own music files is next, and streaming playlists follows it. Streaming still needs a terms check before any code, but it no longer waits on the other v2 items, which are unscheduled.
 
 ## v2
 
@@ -92,6 +94,8 @@ Open questions: shading steps. Whether weekly and monthly totals are shown.
 
 ### 5. Accounts and sync
 
+Deferred as of 2026-11-03 to the v4 multiplayer work, where it is the first step rather than a standalone v2 item. It is not "waiting for" rooms: #10 and #11 depend on it, so it ships before them. Nothing here is scheduled until the v4 preconditions below are met.
+
 Behavior:
 
 - Sign up and sign in with Supabase Auth. The app offers it after the first completed session. Local-only use keeps working.
@@ -106,13 +110,13 @@ Open questions: sign-in methods (email, Google). Merge rule when the device and 
 
 ### 6. Study pets
 
+Out as of 2026-11-03. Kept here only as a record of what was proposed; do not build it.
+
 Behavior:
 
 - After a completed focus session there is a random chance to receive a pet from a fixed collection. Starting list from research: pet rock, lizard, snake, hamster, bird.
 - A Pets screen shows what the user owns. Skipped or reset sessions never drop a pet, and neither do sessions below the minimum length (see Reward eligibility).
 - The drop is a pure function in `src/core` that takes a random source, so tests can fix the outcome. After accounts ship, drops are decided and stored on the server.
-
-Done when: unit tests cover drop and no-drop, owned pets survive restart, and no pet art is copied from another product.
 
 Open questions: drop chance, and whether it grows with session length. Duplicates: allowed or not. Collection only, or pets appear in the candle scene. Whether pets level up. Who makes the art.
 
@@ -158,7 +162,7 @@ Open questions: who becomes host when nobody is named. Rules for removing member
 
 ## Not planned
 
-iOS release, app blocking, flashcards, planners, notes (one competitor is called a "Notion wannabe"), ads, tracking SDKs, extra languages.
+iOS release, app blocking, flashcards, planners, notes (one competitor is called a "Notion wannabe"), ads, tracking SDKs, extra languages, study pets (out as of 2026-11-03; see the Evidence table for the request it would have met).
 
 ## Evidence
 
@@ -167,7 +171,7 @@ Source: a competitor's feature request board and a gap analysis, shared by the p
 | Request                                   | Votes | Board status | Lands in                    |
 | ----------------------------------------- | ----- | ------------ | --------------------------- |
 | Task list for daily tasks                 | 122   | none shown   | v1 Tasks                    |
-| Study pets, random pet reward             | 114   | none shown   | v2 #6                       |
+| Study pets, random pet reward             | 114   | none shown   | Out as of 2026-11-03        |
 | Daywise study time tracker and streaks    | 9     | none shown   | v1 streak and 7 days, v2 #4 |
 | Personalized end-of-session messages      | 134   | Planned      | v1 Session-end messages     |
 | Custom songs playlist                     | 342   | Active       | v2 #1, v2 #8                |
@@ -180,7 +184,7 @@ Gaps to beat, from the same research:
 | Gap | Lumiere answer | Lands in |
 | --- | --- | --- |
 | No reliable Android app with a timer that survives a locked screen | Timestamp timer and scheduled notification | v1 |
-| Progress gives nothing | XP unlocks and pets, goals | v2 #2, #3, #6 |
+| Progress gives nothing | XP unlocks and goals | v2 #2, #3 |
 | Harsh alarm at the end | Flame dims, soft chime, "Later" | v1 |
 | No live accountability among friends | Friends' candles | v4 #10 |
 | Paywalled features, feature creep | Free core, no notes or planner | principle |

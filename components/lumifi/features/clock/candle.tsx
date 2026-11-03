@@ -58,14 +58,14 @@ export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood
 
   useEffect(() => {
     const target = dimming ? 0 : lit ? 1 : paused ? 0.55 : 0;
-    flameOpacity.value = withTiming(target, {
+    flameOpacity.set(withTiming(target, {
       duration: dimming ? 900 : lit ? 220 : 700,
       easing: ReEasing.out(ReEasing.cubic),
-    });
+    }));
   }, [dimming, flameOpacity, lit, paused]);
 
-  const flameProps = useAnimatedProps(() => ({ opacity: flameOpacity.value }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: flameOpacity.value * 0.85 }));
+  const flameProps = useAnimatedProps(() => ({ opacity: flameOpacity.get() }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: flameOpacity.get() * 0.85 }));
 
   useEffect(() => {
     if (!lit || reduced) return undefined;

@@ -126,4 +126,20 @@ describe('completed sessions', () => {
     expect(undone.day.tasks).toBe(1);
     expect(undone.days['2026-11-2'].tasks).toBe(0);
   });
+
+  it('leaves today out of it when undoing a task with no known completion day', () => {
+    const tasks: Task[] = [
+      { id: 1, text: 'Done before doneOn existed', done: true, pomos: 1, doneOn: null },
+      { id: 2, text: 'Task B', done: false, pomos: 0, doneOn: null },
+    ];
+    const base: ProgressState = { ...progressAt(monday), tasks };
+
+    const afterB = toggleTask(base, 2, monday).state;
+    expect(afterB.day.tasks).toBe(1);
+
+    const undone = toggleTask(afterB, 1, monday).state;
+    expect(undone.day.tasks).toBe(1);
+    expect(Object.values(undone.days).every((day) => day.tasks >= 0)).toBe(true);
+    expect(undone.days[afterB.day.d].tasks).toBe(1);
+  });
 });

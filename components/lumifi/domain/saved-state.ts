@@ -10,6 +10,10 @@ export const LEGACY_STORAGE_KEY = 'nightlamp:state';
 
 const MODES: TimerMode[] = ['focus', 'short', 'long'];
 
+// Same ceilings the timer settings enforce, so a stored or hand-edited value
+// cannot pay out more minutes, XP or quest progress than the UI allows.
+const MAX_MINUTES: Record<TimerMode, number> = { focus: 180, short: 60, long: 90 };
+
 export interface SavedState extends ProgressState {
   auto: boolean;
   zenOpt: boolean;
@@ -62,6 +66,7 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
       days: restored.days,
       tasks,
       activeId: typeof saved.activeId === 'number' ? saved.activeId : null,
+      auto: saved.auto === true,
       musicEnd: readMusicEnd(saved.musicEnd),
       notificationsAsked: saved.notificationsAsked === true,
       session: readSession(saved.session, cfg),
@@ -83,13 +88,15 @@ function readSession(value: unknown, cfg: TimerCfg): SessionClock {
   const status = session.status === 'running' || session.status === 'paused' || session.status === 'idle'
     ? session.status
     : 'idle';
-  const remainingMs = typeof session.remainingMs === 'number' && Number.isFinite(session.remainingMs) && session.remainingMs >= 0
-    ? session.remainingMs
-    : modeDurationMs(cfg, mode);
+  const limit = MAX_MINUTES[mode] * 60000;
   // A save from before totalMs existed falls back to the configured length.
-  const totalMs = typeof session.totalMs === 'number' && Number.isFinite(session.totalMs) && session.totalMs > 0
+  const storedTotal = typeof session.totalMs === 'number' && Number.isFinite(session.totalMs) && session.totalMs > 0
     ? session.totalMs
     : modeDurationMs(cfg, mode);
+  const totalMs = Math.min(storedTotal, limit);
+  const remainingMs = typeof session.remainingMs === 'number' && Number.isFinite(session.remainingMs) && session.remainingMs >= 0
+    ? Math.min(session.remainingMs, totalMs)
+    : totalMs;
   const endAt = typeof session.endAt === 'number' && Number.isFinite(session.endAt) ? session.endAt : null;
   if (status === 'running' && endAt == null) return { mode, status: 'paused', endAt: null, remainingMs, totalMs };
   return { mode, status, endAt: status === 'running' ? endAt : null, remainingMs, totalMs };

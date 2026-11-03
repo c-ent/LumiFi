@@ -1,0 +1,79 @@
+import { calendarKey, shiftCalendarDays } from '@/src/core/calendar';
+import { createInitialState, parseSavedState } from './saved-state';
+
+describe('saved day history', () => {
+  const now = new Date(2026, 10, 2, 8).getTime();
+
+  it('starts clean when nothing is stored', () => {
+    const fresh = parseSavedState(null, now);
+    expect(fresh.xp).toBe(0);
+    expect(fresh.streak).toEqual({ n: 0, last: '' });
+    expect(fresh.day.minutes).toBe(0);
+    expect(fresh.day.sessions).toBe(0);
+    expect(fresh.tasks).toEqual([]);
+    expect(fresh.activeId).toBeNull();
+    expect(fresh.mix).toEqual({ music: 60, rain: 0, cafe: 0, fire: 0, wind: 0, clock: 0, brown: 0, forest: 0, keyboard: 0, waves: 0 });
+    expect(fresh.musicEnd).toBe('lower');
+    expect(fresh.notificationsAsked).toBe(false);
+    expect(fresh.session).toEqual({ mode: 'focus', status: 'idle', endAt: null, remainingMs: 25 * 60_000 });
+    expect(fresh.days[fresh.day.d]).toBe(fresh.day);
+    expect(createInitialState(now).xp).toBe(0);
+  });
+
+  it('keeps a running session and an empty task list', () => {
+    const raw = JSON.stringify({
+      tasks: [],
+      xp: 40,
+      musicEnd: 'fade',
+      notificationsAsked: true,
+      session: { mode: 'focus', status: 'running', endAt: now + 5_000, remainingMs: 5_000 },
+    });
+    const state = parseSavedState(raw, now);
+    expect(state.tasks).toEqual([]);
+    expect(state.xp).toBe(40);
+    expect(state.musicEnd).toBe('fade');
+    expect(state.notificationsAsked).toBe(true);
+    expect(state.session).toEqual({ mode: 'focus', status: 'running', endAt: now + 5_000, remainingMs: 5_000 });
+    expect(state.mix.clock).toBe(0);
+  });
+
+  it('keeps a saved clock level', () => {
+    const state = parseSavedState(JSON.stringify({ mix: { clock: 40, rain: 25 } }), now);
+    expect(state.mix.clock).toBe(40);
+    expect(state.mix.rain).toBe(25);
+    expect(state.mix.music).toBe(60);
+  });
+
+  it('keeps a paused remainder and ignores a running session with no deadline', () => {
+    const paused = parseSavedState(JSON.stringify({
+      session: { mode: 'short', status: 'paused', endAt: null, remainingMs: 120_000 },
+    }), now);
+    expect(paused.session).toEqual({ mode: 'short', status: 'paused', endAt: null, remainingMs: 120_000 });
+
+    const broken = parseSavedState(JSON.stringify({
+      session: { mode: 'long', status: 'running', endAt: null, remainingMs: 30_000 },
+    }), now);
+    expect(broken.session).toEqual({ mode: 'long', status: 'paused', endAt: null, remainingMs: 30_000 });
+  });
+
+  it('keeps yesterday and older days when the save is opened on a new day', () => {
+    const yesterday = calendarKey(shiftCalendarDays(now, -1));
+    const older = calendarKey(new Date(2026, 8, 1, 12).getTime());
+    const raw = JSON.stringify({
+      xp: 20,
+      streak: { n: 3, last: yesterday },
+      day: { d: yesterday, sessions: 2, minutes: 80, tasks: 1, claimed: ['q2'] },
+      days: {
+        [older]: { d: older, sessions: 1, minutes: 15, tasks: 0, claimed: [] },
+        [yesterday]: { d: yesterday, sessions: 1, minutes: 10, tasks: 0, claimed: [] },
+      },
+    });
+
+    const state = parseSavedState(raw, now);
+    expect(state.day).toMatchObject({ d: '2026-11-2', minutes: 0, sessions: 0, tasks: 0, claimed: [] });
+    expect(state.days[yesterday].minutes).toBe(80);
+    expect(state.days[older].minutes).toBe(15);
+    expect(state.xp).toBe(20);
+    expect(state.streak.n).toBe(3);
+  });
+});

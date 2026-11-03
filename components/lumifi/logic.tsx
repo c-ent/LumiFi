@@ -419,7 +419,7 @@ function LumiFiSession({
         const id = Date.now();
         setSaved((current) => (
           current
-            ? { ...current, tasks: [{ id, text: trimmed, done: false, pomos: 0 }, ...current.tasks], activeId: id }
+            ? { ...current, tasks: [{ id, text: trimmed, done: false, pomos: 0, doneOn: null }, ...current.tasks], activeId: id }
             : current
         ));
       },

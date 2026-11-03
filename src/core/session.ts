@@ -18,6 +18,7 @@ export function completeSession<T extends ProgressState>(
   state: T,
   mode: TimerMode,
   now: number,
+  sessionMinutes: number,
 ): CompletedSession<T> {
   const rolled = rollToToday(state, now);
   const messages: string[] = [];
@@ -27,7 +28,10 @@ export function completeSession<T extends ProgressState>(
     return { state: rolled, nextMode: 'focus', messages };
   }
 
-  const minutes = rolled.cfg.focus;
+  // The duration the session actually ran at, not the current focus setting. A
+  // setting changed mid-session must not inflate the recorded minutes, XP, or the
+  // minute quest, and must not shrink them either.
+  const minutes = sessionMinutes;
   const cycle = rolled.cycle + 1;
   const day: DayStats = {
     ...rolled.day,
@@ -64,11 +68,28 @@ export function toggleTask<T extends ProgressState>(state: T, id: number, now: n
   if (!task) return { state: rolled, messages: [] };
 
   const done = !task.done;
-  let tasksDone = rolled.day.tasks;
-  if (done) tasksDone += 1;
-  else if (tasksDone > 0) tasksDone -= 1;
+  const doneOn = done ? rolled.day.d : null;
+  const tasks = rolled.tasks.map((item) => (item.id === id ? { ...item, done, doneOn } : item));
 
-  const day: DayStats = { ...rolled.day, tasks: tasksDone, claimed: [...rolled.day.claimed] };
+  // Completing counts toward today. Undoing counts against the day the task was
+  // completed, so undoing a task finished on a past day cannot erase today's
+  // count. The stored history, which feeds the week chart, is adjusted too.
+  const dayKey = rolled.day.d;
+  const targetKey = doneOn ?? task.doneOn ?? dayKey;
+  const known = rolled.days[targetKey];
+  const total = known ? known.tasks : 0;
+  const nextTotal = done ? total + 1 : Math.max(0, total - 1);
+
+  let days = rolled.days;
+  if (known) days = { ...days, [targetKey]: { ...known, tasks: nextTotal } };
+  else if (nextTotal > 0) {
+    days = { ...days, [targetKey]: { d: targetKey, sessions: 0, minutes: 0, tasks: nextTotal, claimed: [] } };
+  }
+
+  const day: DayStats = targetKey === dayKey
+    ? { ...rolled.day, tasks: nextTotal, claimed: [...rolled.day.claimed] }
+    : rolled.day;
+
   const messages: string[] = [];
   const claimed = claimReachedQuests(day, rolled.xp, messages);
 
@@ -77,8 +98,8 @@ export function toggleTask<T extends ProgressState>(state: T, id: number, now: n
       ...rolled,
       xp: claimed.xp,
       day: claimed.day,
-      days: { ...rolled.days, [claimed.day.d]: claimed.day },
-      tasks: rolled.tasks.map((item) => (item.id === id ? { ...item, done } : item)),
+      days: { ...days, [claimed.day.d]: claimed.day },
+      tasks,
     },
     messages,
   };

@@ -25,10 +25,26 @@ if (Platform.OS !== 'web') {
     handleNotification: async () => ({
       shouldShowBanner: true,
       shouldShowList: true,
-      shouldPlaySound: true,
+      // The in-app chime already plays from the notification listener and the
+      // finish handler. Letting the OS sound play too overlaps two chimes, so
+      // only the background delivery, which never reaches the listener, sounds.
+      shouldPlaySound: false,
       shouldSetBadge: false,
     }),
   });
+}
+
+/**
+ * Every schedule and cancel runs in order. Without this a newer cancel can run
+ * while an older schedule is still awaiting its own cancel, and that schedule
+ * then writes the stale deadline back as a fresh alarm.
+ */
+let mutationChain: Promise<void> = Promise.resolve();
+
+function enqueueMutation(operation: () => Promise<void>): Promise<void> {
+  const next = mutationChain.then(operation);
+  mutationChain = next.catch(() => {});
+  return next;
 }
 
 export async function prepareNotificationPermission(alreadyAsked: boolean): Promise<{ granted: boolean; asked: boolean }> {
@@ -68,40 +84,44 @@ export async function prepareNotificationPermission(alreadyAsked: boolean): Prom
   }
 }
 
-export async function scheduleSessionEnd(endAt: number, mode: TimerMode): Promise<void> {
-  if (Platform.OS === 'web') return;
-  try {
-    await cancelScheduledNotificationAsync(SESSION_NOTIFICATION_ID);
-  } catch (error) {
-    reportNotificationError('Could not cancel the previous session-end notification.', error, true);
-  }
-  try {
-    await scheduleNotificationAsync({
-      identifier: SESSION_NOTIFICATION_ID,
-      content: {
-        title: 'LumiFi',
-        body: mode === 'focus' ? 'Your focus session is complete.' : 'Your break is complete.',
-        sound: SOUND,
-      },
-      trigger: {
-        type: SchedulableTriggerInputTypes.DATE,
-        date: new Date(endAt),
-        channelId: CHANNEL_ID,
-        delivery: 'alarmClock',
-      },
-    });
-  } catch (error) {
-    console.warn('Could not schedule the session-end notification.', error);
-  }
+export function scheduleSessionEnd(endAt: number, mode: TimerMode): Promise<void> {
+  if (Platform.OS === 'web') return Promise.resolve();
+  return enqueueMutation(async () => {
+    try {
+      await cancelScheduledNotificationAsync(SESSION_NOTIFICATION_ID);
+    } catch (error) {
+      reportNotificationError('Could not cancel the previous session-end notification.', error, true);
+    }
+    try {
+      await scheduleNotificationAsync({
+        identifier: SESSION_NOTIFICATION_ID,
+        content: {
+          title: 'LumiFi',
+          body: mode === 'focus' ? 'Your focus session is complete.' : 'Your break is complete.',
+          sound: SOUND,
+        },
+        trigger: {
+          type: SchedulableTriggerInputTypes.DATE,
+          date: new Date(endAt),
+          channelId: CHANNEL_ID,
+          delivery: 'alarmClock',
+        },
+      });
+    } catch (error) {
+      console.warn('Could not schedule the session-end notification.', error);
+    }
+  });
 }
 
-export async function cancelSessionEnd(): Promise<void> {
-  if (Platform.OS === 'web') return;
-  try {
-    await cancelScheduledNotificationAsync(SESSION_NOTIFICATION_ID);
-  } catch (error) {
-    reportNotificationError('Could not cancel the session-end notification.', error, true);
-  }
+export function cancelSessionEnd(): Promise<void> {
+  if (Platform.OS === 'web') return Promise.resolve();
+  return enqueueMutation(async () => {
+    try {
+      await cancelScheduledNotificationAsync(SESSION_NOTIFICATION_ID);
+    } catch (error) {
+      reportNotificationError('Could not cancel the session-end notification.', error, true);
+    }
+  });
 }
 
 function reportNotificationError(message: string, error: unknown, expectedMissing = false) {

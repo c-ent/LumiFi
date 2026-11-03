@@ -1,4 +1,4 @@
-import { idleSession, pauseSession, sessionRemaining, startSession, takeCompletedSession } from './clock';
+import { idleSession, pauseSession, sessionMinutes, sessionRemaining, startSession, takeCompletedSession } from './clock';
 import { emptyDay } from './history';
 import { ProgressState } from './types';
 
@@ -22,15 +22,27 @@ describe('session clock', () => {
   it('keeps a running session on endAt and freezes the remainder on pause', () => {
     const running = startSession(idleSession('focus', 25 * 60_000), now);
     expect(running.endAt).toBe(now + 25 * 60_000);
+    expect(running.totalMs).toBe(25 * 60_000);
     expect(sessionRemaining(running, now + 60_000)).toBe(24 * 60_000);
 
     const paused = pauseSession(running, now + 60_000);
-    expect(paused).toEqual({ mode: 'focus', status: 'paused', endAt: null, remainingMs: 24 * 60_000 });
+    expect(paused).toEqual({ mode: 'focus', status: 'paused', endAt: null, remainingMs: 24 * 60_000, totalMs: 25 * 60_000 });
     expect(sessionRemaining(paused, now + 10 * 60_000)).toBe(24 * 60_000);
 
     const resumed = startSession(paused, now + 10 * 60_000);
     expect(resumed.endAt).toBe(now + 10 * 60_000 + 24 * 60_000);
+    expect(resumed.totalMs).toBe(25 * 60_000);
     expect(sessionRemaining(resumed, now + 60_000)).toBe(24 * 60_000);
+  });
+
+  it('keeps the recorded length after the setting changes mid-session', () => {
+    const running = startSession(idleSession('focus', 25 * 60_000), now);
+    const state = { ...progressAt(now), cfg: { focus: 90, short: 5, long: 15 } };
+    const opened = takeCompletedSession(state, running, running.endAt!, false);
+
+    expect(sessionMinutes(running)).toBe(25);
+    expect(opened.state.day.minutes).toBe(25);
+    expect(opened.state.xp).toBe(50);
   });
 
   it('awards a session that ended while the app was closed and leaves the next phase ready', () => {
@@ -43,7 +55,7 @@ describe('session clock', () => {
     expect(opened.autoStarted).toBe(false);
     expect(opened.state.xp).toBe(50);
     expect(opened.state.day.d).toBe('2026-11-2');
-    expect(opened.clock).toMatchObject({ mode: 'short', status: 'idle', endAt: null, remainingMs: 5 * 60_000 });
+    expect(opened.clock).toMatchObject({ mode: 'short', status: 'idle', endAt: null, remainingMs: 5 * 60_000, totalMs: 5 * 60_000 });
   });
 
   it('starts the next phase when the session ends while the app is open and auto-start is on', () => {

@@ -15,7 +15,7 @@ describe('saved day history', () => {
     expect(fresh.mix).toEqual({ music: 60, rain: 0, cafe: 0, fire: 0, wind: 0, clock: 0, brown: 0, forest: 0, keyboard: 0, waves: 0 });
     expect(fresh.musicEnd).toBe('lower');
     expect(fresh.notificationsAsked).toBe(false);
-    expect(fresh.session).toEqual({ mode: 'focus', status: 'idle', endAt: null, remainingMs: 25 * 60_000 });
+    expect(fresh.session).toEqual({ mode: 'focus', status: 'idle', endAt: null, remainingMs: 25 * 60_000, totalMs: 25 * 60_000 });
     expect(fresh.days[fresh.day.d]).toBe(fresh.day);
     expect(createInitialState(now).xp).toBe(0);
   });
@@ -26,15 +26,22 @@ describe('saved day history', () => {
       xp: 40,
       musicEnd: 'fade',
       notificationsAsked: true,
-      session: { mode: 'focus', status: 'running', endAt: now + 5_000, remainingMs: 5_000 },
+      session: { mode: 'focus', status: 'running', endAt: now + 5_000, remainingMs: 5_000, totalMs: 25 * 60_000 },
     });
     const state = parseSavedState(raw, now);
     expect(state.tasks).toEqual([]);
     expect(state.xp).toBe(40);
     expect(state.musicEnd).toBe('fade');
     expect(state.notificationsAsked).toBe(true);
-    expect(state.session).toEqual({ mode: 'focus', status: 'running', endAt: now + 5_000, remainingMs: 5_000 });
+    expect(state.session).toEqual({ mode: 'focus', status: 'running', endAt: now + 5_000, remainingMs: 5_000, totalMs: 25 * 60_000 });
     expect(state.mix.clock).toBe(0);
+  });
+
+  it('falls back to the configured length for a save made before totalMs existed', () => {
+    const state = parseSavedState(JSON.stringify({
+      session: { mode: 'focus', status: 'running', endAt: now + 5_000, remainingMs: 5_000 },
+    }), now);
+    expect(state.session.totalMs).toBe(25 * 60_000);
   });
 
   it('keeps a saved clock level', () => {
@@ -46,14 +53,26 @@ describe('saved day history', () => {
 
   it('keeps a paused remainder and ignores a running session with no deadline', () => {
     const paused = parseSavedState(JSON.stringify({
-      session: { mode: 'short', status: 'paused', endAt: null, remainingMs: 120_000 },
+      session: { mode: 'short', status: 'paused', endAt: null, remainingMs: 120_000, totalMs: 300_000 },
     }), now);
-    expect(paused.session).toEqual({ mode: 'short', status: 'paused', endAt: null, remainingMs: 120_000 });
+    expect(paused.session).toEqual({ mode: 'short', status: 'paused', endAt: null, remainingMs: 120_000, totalMs: 300_000 });
 
     const broken = parseSavedState(JSON.stringify({
-      session: { mode: 'long', status: 'running', endAt: null, remainingMs: 30_000 },
+      session: { mode: 'long', status: 'running', endAt: null, remainingMs: 30_000, totalMs: 900_000 },
     }), now);
-    expect(broken.session).toEqual({ mode: 'long', status: 'paused', endAt: null, remainingMs: 30_000 });
+    expect(broken.session).toEqual({ mode: 'long', status: 'paused', endAt: null, remainingMs: 30_000, totalMs: 900_000 });
+  });
+
+  it('keeps a task completion day and gives an unknown one no day', () => {
+    const raw = JSON.stringify({
+      tasks: [
+        { id: 1, text: 'Done yesterday', done: true, pomos: 2, doneOn: '2026-11-1' },
+        { id: 2, text: 'Done before doneOn existed', done: true, pomos: 1 },
+      ],
+    });
+    const state = parseSavedState(raw, now);
+    expect(state.tasks[0].doneOn).toBe('2026-11-1');
+    expect(state.tasks[1].doneOn).toBeNull();
   });
 
   it('keeps yesterday and older days when the save is opened on a new day', () => {

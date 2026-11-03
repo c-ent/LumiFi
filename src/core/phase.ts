@@ -4,6 +4,10 @@ export function modeDurationMs(cfg: TimerCfg, mode: TimerMode): number {
   return cfg[mode] * 60000;
 }
 
+export function durationMinutes(totalMs: number): number {
+  return Math.max(1, Math.round(totalMs / 60000));
+}
+
 export function commitDurationMinutes(raw: string, max: number, fallback: number): number {
   const trimmed = raw.trim();
   if (!/^\d+$/.test(trimmed)) return fallback;

@@ -41,6 +41,7 @@ export function MixerBlock({ mobile = false }: { mobile?: boolean }) {
         <View key={row.key} style={styles.mixRow}>
           <Text style={styles.mixLabel}>{row.label}</Text>
           <Slider
+            accessibilityLabel={`${row.label} volume`}
             style={styles.slider}
             minimumValue={0}
             maximumValue={100}

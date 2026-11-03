@@ -9,7 +9,10 @@ export function useMusic(volume: number) {
   const player = useAudioPlayer(musicTracks[0].uri, { keepAudioSessionActive: true });
   const chime = useAudioPlayer(sessionEndChime);
   const status = useAudioPlayerStatus(player);
-  const replaced = useRef(false);
+  // Which track's source is currently loaded, so the effect does not replace a
+  // source selectTrack has already replaced. Starts at 0 because the player is
+  // created with musicTracks[0].
+  const loadedIndex = useRef(0);
   const playingRef = useRef(false);
   const fadeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -33,10 +36,8 @@ export function useMusic(volume: number) {
   }, [gain, player, volume]);
 
   useEffect(() => {
-    if (!replaced.current) {
-      replaced.current = true;
-      return;
-    }
+    if (loadedIndex.current === trackIndex) return;
+    loadedIndex.current = trackIndex;
     player.replace(musicTracks[trackIndex].uri);
   }, [player, trackIndex]);
 
@@ -69,8 +70,10 @@ export function useMusic(volume: number) {
       player.play();
       return;
     }
-    setTrackIndex(index);
+    // Replace the source here and record it, so the effect skips this index.
+    loadedIndex.current = index;
     player.replace(musicTracks[index].uri);
+    setTrackIndex(index);
     player.play();
   }, [player, trackIndex]);
 

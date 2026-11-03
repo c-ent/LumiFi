@@ -39,7 +39,7 @@ Run the build, typecheck and tests before finishing a change.
 - `components/lumifi/`: the UI, grouped by feature.
 - `src/core/`: pure logic — timer math, XP, levels, streaks, quests. No React or Expo imports.
 - `src/theme/`: color, font and radius tokens.
-- `assets/audio/`: third-party audio. Licensing is not yet complete — read `MUSIC_LICENSES.md` before adding audio.
+- `assets/audio/`: third-party audio. Read `MUSIC_LICENSES.md` before adding audio; every bundled file is covered there, and all of it is cleared.
 
 ## Documentation
 
@@ -53,4 +53,4 @@ Start with [`AGENTS.md`](AGENTS.md) for commands, conventions and boundaries. Th
 
 ## Third-party assets
 
-Music and ambient audio are third-party. All nine ambient loops are CC0, so none requires attribution. The lofi tracks are on unread "Creative Commons / Royalty-Free" terms and may need attribution, so licensing is not fully settled. Per-file licences are in [`MUSIC_LICENSES.md`](MUSIC_LICENSES.md) — read it before adding audio.
+All bundled audio is third-party and cleared for app distribution. The nine ambient loops and the two sound effects are CC0; the fourteen lofi tracks are Pixabay under the Pixabay Content License. Neither licence requires attribution or a credits screen, and both allow commercial use inside the app. Per-file licences are in [`MUSIC_LICENSES.md`](MUSIC_LICENSES.md) — read it before adding audio.

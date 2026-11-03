@@ -39,7 +39,7 @@ export function MusicBlock({ mobile = false }: { mobile?: boolean }) {
       {musicTracks.map((track, index) => {
         const selected = index === lamp.trackIndex;
         return (
-          <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`Play ${track.title} by ${track.artist}`} key={track.title} onPress={() => lamp.selectTrack(index)} style={[styles.trackBtn, { borderColor: selected ? tone.accent : colors.border, backgroundColor: colors.bgCard }]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`Play ${track.title} by ${track.artist}`} key={`${track.title} - ${track.artist}`} onPress={() => lamp.selectTrack(index)} style={[styles.trackBtn, { borderColor: selected ? tone.accent : colors.border, backgroundColor: colors.bgCard }]}>
             <Text style={styles.taskText}>{track.title}</Text>
             <Text style={styles.meta}>{track.artist}</Text>
           </Pressable>

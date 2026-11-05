@@ -4,18 +4,22 @@ Read this when changing data flow, storage, auth, or folder boundaries. Only wha
 
 ## Folder boundaries
 - `app/`: Expo Router routes only. Thin files that render a screen from `components/lumifi`.
-- `src/core/`: pure logic (deadline math, phase cycle, XP, levels, streaks, quests). No React, React Native, Expo or Supabase imports.
+- `src/core/`: pure logic (deadline math, phase cycle, XP, levels, streaks, quests, own-track playlist math, streaming-link parsing). No React, React Native, Expo or Supabase imports.
 - `src/theme/`: shared color, font and radius tokens. No React. Screens read these instead of hardcoding colors.
 - `src/data/`: the only place that talks to Supabase.
 - `assets/audio/`: licensed tracks only, listed in `MUSIC_LICENSES.md`.
 
 ### `components/lumifi/` is grouped by feature
-- Root: `lumifi-screen.tsx` (the public entry `app/` imports), `logic.tsx` (the provider and context), `theme.ts` (scene and mood palettes, `PRESETS`, `formatTime`, and a re-export barrel for `src/theme/tokens` and five `src/core` modules).
+- Root: `lumifi-screen.tsx` (the public entry `app/` imports), `logic.tsx` (the provider and context), `theme.ts` (scene and mood palettes, `PRESETS`, `formatTime`, and a re-export barrel for `src/theme/tokens` and six `src/core` modules).
 - `screens/`: `mobile.tsx`, `tablet.tsx`, `desktop.tsx`. The device shells. Arrangement only, no business rules. Each is a thin composition of the feature panels.
 - `features/`: one folder per product concept. `layout.ts`, `tone.ts`, `background/`, `clock/`, `timer/`, `tasks/`, `audio/`, `progression/`, `settings/`. A feature owns its own components; device differences are a `mobile` prop (or the shell), not a separate folder.
 - `shared/`: `icons.tsx`, `panel-heading.tsx`, `panel-styles.ts`. Cross-layout UI. `panel-styles.ts` is the one `StyleSheet` the feature panels share.
 - `hooks/`: `use-ambient`, `use-background-audio`, `use-music`, `use-session-clock`. Kept together rather than scattered per feature.
-- `domain/`: `saved-state.ts`, `session.ts`, `notifications.ts`, `storage.ts`. Non-UI: persistence, scheduling, and pure re-exports.
+- `domain/`: `saved-state.ts`, `session.ts`, `notifications.ts`, `storage.ts`, `own-music.ts`. Non-UI: persistence, scheduling, file picking and copying, and pure re-exports.
+
+### session.ts is the reward path
+
+`completeSession` in `src/core/session.ts` is the one path for a finished focus. It pays 2 XP per minute, adds the minutes, and, when the session is at least `SESSION_REWARD_MINUTES` (10) from `src/core/xp.ts`, counts one session and updates the streak. Quest payouts stay in `quests.ts`. No component computes XP. Goals were removed on 2026-11-04.
 
 ### Layout switching is dimension-driven
 `features/layout.ts` holds the only breakpoint logic (`PHONE_MAX_WIDTH` 600, `TABLET_MAX_WIDTH` 840, `layoutForWidth`, `layoutForWindow`). It is **not** in `theme.ts`.
@@ -23,10 +27,11 @@ Read this when changing data flow, storage, auth, or folder boundaries. Only wha
 The check is dimensions, never device model: an iPad in portrait (shorter side 768-834) gets the tablet layout, and an iPad Pro in landscape (shorter side 1024) gets the desktop scene because 1024 is past 840. So "tablet" is a width band, not "iPad". Android is the only verified target; iOS is untested.
 
 ## Storage model
-- Device (AsyncStorage through Zustand persist): tasks, settings, XP, streak, daily quest progress, the current session. Local-first, so the app works with no account.
+- Device (AsyncStorage through Zustand persist): tasks, settings, XP, streak, daily quest progress, goals, the current session. Local-first, so the app works with no account.
 - Supabase Postgres (v2, planned): profile with XP, level and streak; tasks; completed focus sessions; quest claims; later pets owned and goals. Every row belongs to one user.
-- Daily minutes: keep one total per day on the device without pruning, so the v2 calendar has history.
-- Audio files: bundled in `assets/audio` for v1. Do not store audio in database rows. Streaming is an open question.
+- Goals: stored on the device with the rest of the progress, one row per goal with its counters, its `done` and `paid` flags, and the `goalId` that links a task to it. A goal is credited from a completed focus session in `src/core`, never from a component, so a client still cannot invent a goal payout.
+- Daily minutes: keep one total per day on the device without pruning, so the calendar has history. The month grid reads that history through `monthGrid` and stores nothing of its own; only the displayed month and the tapped day live in the panel's state.
+- Audio files: bundled in `assets/audio` for v1. The user's own files are copied into the app's private document folder (`Paths.document/own-tracks`) and only their id, title and `file://` URI are stored in AsyncStorage. A streaming link stores the public page URL and the service name in the same save. The audio stays in that service's player. Do not store audio in database rows, and do not copy a stream into a file.
 
 ## Auth and access
 - Authentication: Supabase Auth, optional. Session in AsyncStorage (evaluate `expo-secure-store` before release). Token auto refresh follows app state.

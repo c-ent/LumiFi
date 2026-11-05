@@ -1,16 +1,31 @@
-import { colors } from '@/src/theme/tokens';
+import { colors, fonts } from '@/src/theme/tokens';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useLumiFi } from '@/components/lumifi/logic';
 import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
+import { progressWide as wide } from '@/components/lumifi/features/progression/wide-styles';
 
-export function StatGrid() {
+export function StatGrid({ wide: desk = false }: { wide?: boolean }) {
   const { day, xp } = useLumiFi();
   const items = [
     { value: String(day.minutes), label: 'min today' },
-    { value: String(day.sessions), label: 'sessions' },
+    { value: String(day.sessions), label: desk ? 'sessions today' : 'sessions' },
     { value: String(xp), label: 'total XP' },
   ];
+
+  if (desk) {
+    return (
+      <View style={deskStyles.row}>
+        {items.map((item) => (
+          <View key={item.label} style={deskStyles.stat}>
+            <Text style={[deskStyles.value, wide.tabular]}>{item.value}</Text>
+            <Text style={deskStyles.label}>{item.label}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.stats}>
       {items.map((item) => (
@@ -22,3 +37,32 @@ export function StatGrid() {
     </View>
   );
 }
+
+const deskStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  stat: {
+    flex: 1,
+    paddingTop: 14,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.09)',
+  },
+  value: {
+    color: colors.textPrimary,
+    fontFamily: fonts.timeMedium,
+    fontSize: 28,
+    lineHeight: 31,
+  },
+  label: {
+    color: colors.textMuted,
+    fontFamily: fonts.body,
+    fontSize: 12,
+    marginTop: 2,
+  },
+});

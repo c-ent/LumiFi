@@ -1,4 +1,5 @@
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
+import { glassPanel } from '@/components/lumifi/shared/panel-styles';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -50,10 +51,8 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: colors.bgSurface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...rounded(radius.md),
+    ...glassPanel,
+    ...rounded(radius.sheet),
     paddingHorizontal: 22,
     paddingVertical: 22,
   },

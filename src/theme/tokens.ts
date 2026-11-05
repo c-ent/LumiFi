@@ -5,8 +5,10 @@ export const colors = {
   bgBase: '#0E0A17',
   bgMid: '#1D1328',
   bgGlow: '#35201F',
-  bgSurface: 'rgba(20, 15, 28, 0.9)',
+  bgSurface: 'rgba(24, 14, 20, 0.93)',
+  bgSurfaceSolid: '#140F1C',
   bgCard: 'rgba(255, 255, 255, 0.06)',
+  bgInset: 'rgba(0, 0, 0, 0.28)',
   textPrimary: '#F8F1E8',
   textMuted: 'rgba(248, 241, 232, 0.62)',
   textInverse: '#1D1205',
@@ -18,6 +20,25 @@ export const colors = {
   success: '#62D0C0',
   error: '#FF8F8F',
 } as const;
+
+/** Badge colors for a saved streaming link. They name the service, not the theme. */
+export const streamMark = {
+  spotify: '#7BE8B0',
+  youtube: '#FF9F9F',
+  'youtube-music': '#FF9F9F',
+  'apple-music': '#F5A3C7',
+} as const;
+
+/** `#RRGGBB` at an alpha. Theme accents stay hex, and panels need a wash of them. */
+export function fade(hex: string, alpha: number): string {
+  const raw = hex.replace('#', '');
+  const full = raw.length === 3 ? raw.split('').map((part) => part + part).join('') : raw;
+  const value = Number.parseInt(full, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
 
 export const fonts = {
   body: 'Figtree_400Regular',

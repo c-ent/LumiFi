@@ -9,7 +9,7 @@ export function PanelHeading({ title, onClose }: { title: string; onClose: () =>
     <View style={styles.head}>
       <Text style={styles.panelTitle}>{title}</Text>
       <Pressable accessibilityRole="button" accessibilityLabel={`Close ${title}`} onPress={onClose} style={styles.roundSm}>
-        <CloseIcon color={colors.textPrimary} />
+        <CloseIcon color={colors.textPrimary} size={18} />
       </Pressable>
     </View>
   );

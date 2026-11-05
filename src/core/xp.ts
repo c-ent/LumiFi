@@ -1,5 +1,12 @@
 export const XP_PER_FOCUS_MINUTE = 2;
 
+/** A shorter focus still pays minute XP. It does not count as a session or keep the streak. */
+export const SESSION_REWARD_MINUTES = 10;
+
+export function countsAsRewardSession(minutes: number): boolean {
+  return minutes >= SESSION_REWARD_MINUTES;
+}
+
 export const LEVEL_NAMES = ['Novice', 'Apprentice', 'Lamplighter', 'Scholar', 'Sage', 'Archmage'];
 
 export function focusSessionXp(minutes: number): number {

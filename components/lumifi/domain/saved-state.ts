@@ -1,7 +1,10 @@
 import { idleSession, SessionClock } from '@/src/core/clock';
 import { emptyDay, restoreDayHistory } from '@/src/core/history';
+import { OwnTrack, parseOwnTracks } from '@/src/core/own-tracks';
+import { parseStreamLinks, StreamLink } from '@/src/core/stream-links';
 import { modeDurationMs } from '@/src/core/phase';
 import { MusicEnd } from '@/src/core/session-end';
+import { parseDueDate } from '@/src/core/tasks';
 import type { DayHistory, DayStats, ProgressState, Task, TimerCfg, TimerMode } from '@/src/core/types';
 import { MixLevels, MoodId, SceneId } from '@/components/lumifi/theme';
 
@@ -26,6 +29,12 @@ export interface SavedState extends ProgressState {
   mood: MoodId;
   mix: MixLevels;
   musicEnd: MusicEnd;
+  /** Repeat the current track instead of advancing to the next one. */
+  musicLoop: boolean;
+  /** The user's own picked files. Device-local URIs only, never uploaded. */
+  ownTracks: OwnTrack[];
+  /** Public streaming links. The page URL and the service name, never audio. */
+  streamLinks: StreamLink[];
   notificationsAsked: boolean;
   session: SessionClock;
 }
@@ -48,6 +57,9 @@ export function createInitialState(now = Date.now()): SavedState {
     cycle: 0,
     mix: { music: 60, rain: 0, cafe: 0, fire: 0, wind: 0, clock: 0, brown: 0, forest: 0, keyboard: 0, waves: 0 },
     musicEnd: 'lower',
+    musicLoop: false,
+    ownTracks: [],
+    streamLinks: [],
     notificationsAsked: false,
     session: idleSession('focus', modeDurationMs(cfg, 'focus')),
   };
@@ -57,23 +69,30 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
   const fresh = createInitialState(now);
   if (!raw) return fresh;
   try {
-    const saved = JSON.parse(raw) as Partial<SavedState>;
+    const parsed = JSON.parse(raw) as Partial<SavedState> & { goals?: unknown };
+    const { goals: _droppedGoals, ...saved } = parsed;
     const restored = restoreDayHistory(readHistory(saved.days), isDayStats(saved.day) ? saved.day : null, now);
     const cfg = readCfg(saved.cfg);
     const tasks = readTasks(saved.tasks) ?? fresh.tasks;
+    const xp = readXp(saved.xp);
+    const storedActive = typeof saved.activeId === 'number' ? saved.activeId : null;
+    const activeTask = tasks.find((task) => task.id === storedActive);
     return {
       ...fresh,
       ...saved,
       cfg,
-      xp: readXp(saved.xp),
+      xp,
       mix: { ...fresh.mix, ...saved.mix },
+      ownTracks: parseOwnTracks(saved.ownTracks),
+      streamLinks: parseStreamLinks(saved.streamLinks),
       streak: { ...fresh.streak, ...saved.streak },
       day: restored.day,
       days: restored.days,
       tasks,
-      activeId: typeof saved.activeId === 'number' ? saved.activeId : null,
+      activeId: activeTask?.parentId != null ? null : storedActive,
       auto: saved.auto === true,
       musicEnd: readMusicEnd(saved.musicEnd),
+      musicLoop: saved.musicLoop === true,
       notificationsAsked: saved.notificationsAsked === true,
       session: readSession(saved.session, cfg),
     };
@@ -131,16 +150,38 @@ function readSession(value: unknown, cfg: TimerCfg): SessionClock {
 function readTasks(value: unknown): Task[] | null {
   if (!Array.isArray(value)) return null;
   const tasks: Task[] = [];
+  const ids = new Set<number>();
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
     const task = item as Partial<Task>;
     if (typeof task.id !== 'number' || typeof task.text !== 'string' || typeof task.done !== 'boolean' || typeof task.pomos !== 'number') continue;
+    if (ids.has(task.id)) continue;
+    ids.add(task.id);
     // A save from before doneOn existed has no completion day to fall back on,
     // so only a task already marked done keeps an unknown day.
     const doneOn = typeof task.doneOn === 'string' ? task.doneOn : null;
-    tasks.push({ id: task.id, text: task.text, done: task.done, pomos: task.pomos, doneOn });
+    const parentId = typeof task.parentId === 'number' ? task.parentId : null;
+    const date = typeof task.date === 'string' ? parseDueDate(task.date) : null;
+    tasks.push({
+      id: task.id,
+      text: task.text,
+      done: task.done,
+      pomos: task.pomos,
+      doneOn,
+      parentId,
+      date,
+      open: task.open === true,
+    });
   }
-  return tasks;
+  const parents = new Set(tasks.filter((task) => task.parentId == null).map((task) => task.id));
+  return tasks.map((task) => {
+    // A subtask whose task is missing becomes a task, so the title is not dropped.
+    // A subtask does not keep a due date or an open list of its own.
+    if (task.parentId == null || !parents.has(task.parentId)) {
+      return task.parentId == null ? task : { ...task, parentId: null };
+    }
+    return { ...task, date: null, open: false };
+  });
 }
 
 function isDayStats(value: unknown): value is DayStats {

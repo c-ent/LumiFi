@@ -2,7 +2,7 @@ import { DayStats } from './types';
 import { grantXp } from './xp';
 
 export const QUESTS = [
-  { id: 'q1', text: 'Finish 4 focus sessions', goal: 4, key: 'sessions' as const, reward: 40 },
+  { id: 'q1', text: 'Finish 4 sessions of 10 minutes', goal: 4, key: 'sessions' as const, reward: 40 },
   { id: 'q2', text: 'Study for 60 minutes', goal: 60, key: 'minutes' as const, reward: 50 },
   { id: 'q3', text: 'Complete 1 task', goal: 1, key: 'tasks' as const, reward: 30 },
 ];

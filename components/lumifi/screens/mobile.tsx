@@ -11,6 +11,7 @@ import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
+import { useKeyboardInset } from '@/components/lumifi/hooks/use-keyboard-inset';
 import { useLumiFi } from '@/components/lumifi/logic';
 import { formatTime, MODE_LABEL, TimerMode } from '@/components/lumifi/theme';
 import { FillGradient } from '@/components/lumifi/features/background/fill-gradient';
@@ -19,12 +20,15 @@ import { Candle } from '@/components/lumifi/features/clock/candle';
 import { LevelCard } from '@/components/lumifi/features/progression/level-card';
 import { QuestList } from '@/components/lumifi/features/progression/quest-list';
 import { StatGrid } from '@/components/lumifi/features/progression/stat-grid';
+import { MonthCalendar } from '@/components/lumifi/features/progression/month-calendar';
 import { WeekChart } from '@/components/lumifi/features/progression/week-chart';
 import { MoodPicker } from '@/components/lumifi/features/settings/mood-picker';
 import { TimerSettings } from '@/components/lumifi/features/settings/timer-settings';
-import { TaskPanel } from '@/components/lumifi/features/tasks/task-panel';
+import { TaskList } from '@/components/lumifi/features/tasks/task-list';
+import { FocusLine } from '@/components/lumifi/features/tasks/focus-line';
 import { MixerBlock } from '@/components/lumifi/features/audio/mixer-block';
 import { MusicBlock } from '@/components/lumifi/features/audio/music-block';
+import { openStreamEmbed, StreamStage, streamCardHeight } from '@/components/lumifi/features/audio/stream-stage';
 import { SessionEndCard } from '@/components/lumifi/features/timer/session-end-card';
 import { BarsIcon, ClockIcon, FlameIcon, MusicIcon, ResetIcon, SkipIcon, StarIcon, TaskIcon, TimerIcon } from '@/components/lumifi/shared/icons';
 
@@ -34,6 +38,7 @@ export function MobileLumiFi() {
   const lamp = useLumiFi();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  const keyboard = useKeyboardInset();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<SheetTab>('tasks');
   const [zen, setZen] = useState(false);
@@ -41,7 +46,13 @@ export function MobileLumiFi() {
   const sheetOffset = useSharedValue(0);
   const mood = lamp.moodTheme;
   const collapsed = 214 + insets.bottom;
-  const expanded = Math.min(height * 0.84, 760);
+  const embed = openStreamEmbed(lamp.streamLinks, lamp.activeStreamId);
+  const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
+  const playerTop = insets.top + 72;
+  const fittedSheet = height - playerTop - playerReserve - 8;
+  const expanded = playerReserve > 0
+    ? Math.min(height * 0.84, 760, Math.max(collapsed, fittedSheet))
+    : Math.min(height * 0.84, 760);
 
   const poke = useCallback(() => {
     lastAct.current = Date.now();
@@ -72,7 +83,7 @@ export function MobileLumiFi() {
       : 'Resume';
   const phase = lamp.mode === 'focus' ? `Focus · ${(lamp.cycle % 4) + 1} of 4` : MODE_LABEL[lamp.mode];
   const taskLine = lamp.mode === 'focus'
-    ? (lamp.activeTask?.text ?? 'Choose what you are working on')
+    ? (lamp.activeTask?.text ?? 'Pick a task to focus on')
     : 'Stretch, sip some water, look away';
   const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
   const questOpen = lamp.day.sessions < 4 || lamp.day.minutes < 60 || lamp.day.tasks < 1;
@@ -107,7 +118,7 @@ export function MobileLumiFi() {
           </View>
         </Pressable>
         <View style={styles.pills}>
-          <View style={styles.pill}><FlameIcon size={14} color={colors.textPrimary} /><Text style={styles.pillText}>{lamp.streak}</Text></View>
+          <View style={styles.pill}><FlameIcon size={14} color={colors.error} /><Text style={styles.pillText}>{lamp.streak}</Text></View>
           <View style={styles.pill}><ClockIcon size={14} color={colors.textPrimary} /><Text style={styles.pillText}>{lamp.day.minutes}m</Text></View>
         </View>
       </View>
@@ -116,7 +127,7 @@ export function MobileLumiFi() {
         <Pressable accessibilityRole="button" accessibilityLabel="Close panel" onPress={() => { poke(); setOpen(false); }} style={styles.backdrop} />
       ) : null}
 
-      <View style={[styles.stage, { paddingBottom: collapsed + 8 }]}>
+      <View style={[styles.stage, { paddingBottom: collapsed + 8, paddingTop: playerReserve }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={startLabel} style={styles.candleBtn} onPress={lamp.toggle}>
           <Candle
             progress={lamp.progress}
@@ -132,9 +143,13 @@ export function MobileLumiFi() {
         </Pressable>
         <Text style={styles.time}>{formatTime(lamp.remaining)}</Text>
         <Text style={styles.phase}>{phase}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Open tasks" onPress={() => openTab('tasks')} style={{ opacity: zen ? 0 : 1 }}>
-          <Text style={[styles.taskLine, lamp.mode === 'focus' && lamp.activeTask ? styles.taskOn : null]}>{taskLine}</Text>
-        </Pressable>
+        <FocusLine
+          mode={lamp.mode === 'focus' ? (lamp.activeTask ? 'task' : 'empty') : 'break'}
+          text={taskLine}
+          accent={mood.accent}
+          zen={zen}
+          onPress={lamp.mode === 'focus' ? () => openTab('tasks') : undefined}
+        />
         <View style={styles.pips}>
           {[0, 1, 2, 3].map((index) => (
             <View key={index} style={styles.miniCandle}>
@@ -145,7 +160,9 @@ export function MobileLumiFi() {
         </View>
       </View>
 
-      <Reanimated.View style={[styles.sheet, { height: expanded }, sheetStyle]}>
+      <StreamStage style={[styles.stream, { top: playerTop }]} />
+
+      <Reanimated.View style={[styles.sheet, { height: expanded, bottom: keyboard }, sheetStyle]}>
         <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Collapse controls' : 'Expand controls'} style={styles.grab} onPress={() => { poke(); setOpen((value) => !value); }}>
           <View style={styles.grabBar} />
         </Pressable>
@@ -168,17 +185,21 @@ export function MobileLumiFi() {
         </View>
         <View style={[styles.dock, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
           <DockItem label="Tasks" active={open && tab === 'tasks'} color={mood.accent} onPress={() => openTab('tasks')}><TaskIcon size={20} /></DockItem>
-          <DockItem label="Sounds" active={open && tab === 'sounds'} color={mood.accent} dot={lamp.musicPlaying} onPress={() => openTab('sounds')}><MusicIcon size={20} /></DockItem>
+          <DockItem label="Sounds" active={open && tab === 'sounds'} color={mood.accent} dot={lamp.musicPlaying || lamp.activeStreamId != null} onPress={() => openTab('sounds')}><MusicIcon size={20} /></DockItem>
           <DockItem label="Quests" active={open && tab === 'quests'} color={mood.accent} dot={questOpen} onPress={() => openTab('quests')}><StarIcon size={20} /></DockItem>
           <DockItem label="Stats" active={open && tab === 'stats'} color={mood.accent} onPress={() => openTab('stats')}><BarsIcon size={20} /></DockItem>
           <DockItem label="Timer" active={open && tab === 'timer'} color={mood.accent} onPress={() => openTab('timer')}><TimerIcon size={20} /></DockItem>
         </View>
         {open ? (
-          <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
-            {tab === 'tasks' ? <TaskPanel mobile /> : null}
+          <ScrollView
+            style={styles.body}
+            contentContainerStyle={styles.bodyContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {tab === 'tasks' ? <TaskList mobile /> : null}
             {tab === 'sounds' ? <View><MoodPicker /><MusicBlock mobile /><MixerBlock mobile /></View> : null}
             {tab === 'quests' ? <QuestList mobile /> : null}
-            {tab === 'stats' ? <View><LevelCard mobile /><StatGrid /><WeekChart mobile /></View> : null}
+            {tab === 'stats' ? <View><LevelCard mobile /><StatGrid /><WeekChart mobile /><MonthCalendar mobile /></View> : null}
             {tab === 'timer' ? <TimerSettings mobile /> : null}
           </ScrollView>
         ) : null}
@@ -210,7 +231,7 @@ function LevelRing({ progress, color, level }: { progress: number; color: string
   const circ = 2 * Math.PI * ringRadius;
   return (
     <View style={styles.ringWrap}>
-      <Svg width={46} height={46} viewBox="0 0 44 44">
+      <Svg width={46} height={46} viewBox="0 0 44 44" style={styles.ringSpin}>
         <Circle cx="22" cy="22" r={ringRadius} fill="none" stroke={colors.border} strokeWidth={3} />
         <Circle
           cx="22"
@@ -222,8 +243,6 @@ function LevelRing({ progress, color, level }: { progress: number; color: string
           strokeLinecap="round"
           strokeDasharray={`${circ}`}
           strokeDashoffset={circ * (1 - progress)}
-          rotation={-90}
-          origin="22, 22"
         />
       </Svg>
       <Text style={styles.ringLevel}>{level}</Text>
@@ -301,6 +320,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemibold,
     fontSize: 13,
   },
+  ringSpin: {
+    transform: [{ rotate: '-90deg' }],
+  },
   ringWrap: {
     width: 46,
     height: 46,
@@ -312,6 +334,12 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: fonts.timeMedium,
     fontSize: 18,
+  },
+  stream: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 7,
   },
   stage: {
     flex: 1,
@@ -336,18 +364,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     marginTop: 4,
-  },
-  taskLine: {
-    color: colors.textMuted,
-    fontFamily: fonts.body,
-    fontSize: 14,
-    textAlign: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  taskOn: {
-    color: colors.textPrimary,
-    fontFamily: fonts.bodyMedium,
   },
   pips: {
     flexDirection: 'row',

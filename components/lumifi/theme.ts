@@ -5,6 +5,8 @@ import { moods, type MoodId } from '@/src/theme/tokens';
 
 export type { DayStats, Task, TimerCfg, TimerMode };
 export type { MoodId };
+export type { MonthCell, MonthGrid, MonthRef, MonthShade } from '@/src/core/month-calendar';
+export { monthGrid, monthRef, monthShade, shiftMonth } from '@/src/core/month-calendar';
 export { LEVEL_NAMES, QUESTS, levelInfo };
 export { breakWax, colors, fonts, radius, rounded } from '@/src/theme/tokens';
 
@@ -63,10 +65,21 @@ export const SCENES: SceneTheme[] = [
   { id: 'ember', name: 'Ember', b1: '#160c0e', b2: '#471a1c', b3: '#a1442a', o1: '#ff9a56', o2: '#ffd27a', o3: '#ff7a6b', accent: '#ff9a56' },
 ];
 
+// Wax, dish and glow are candle illustration colors, kept here so the room art
+// reads from `MOODS` alone.
 const candleArt = {
-  amber: { glow: 'rgba(255, 170, 70, 0.45)', wax: '#F4E7D2', waxS: '#CFBB9B', melt: '#E9C98F', dish: '#2B2240', dishHi: '#3C3058' },
-  moon: { glow: 'rgba(120, 160, 255, 0.45)', wax: '#E6ECF8', waxS: '#B7C3DB', melt: '#C9D8F2', dish: '#1F2745', dishHi: '#2D3A66' },
-  spirit: { glow: 'rgba(90, 230, 160, 0.4)', wax: '#E3F3E9', waxS: '#B3CFBC', melt: '#C8E8D3', dish: '#1A3326', dishHi: '#274B38' },
+  amber: {
+    glow: 'rgba(255, 170, 70, 0.45)', wax: '#F4E7D2', waxS: '#CFBB9B', melt: '#E9C98F',
+    dish: '#2B2240', dishHi: '#3C3058',
+  },
+  moon: {
+    glow: 'rgba(120, 160, 255, 0.45)', wax: '#E6ECF8', waxS: '#B7C3DB', melt: '#C9D8F2',
+    dish: '#1F2745', dishHi: '#2D3A66',
+  },
+  spirit: {
+    glow: 'rgba(90, 230, 160, 0.4)', wax: '#E3F3E9', waxS: '#B3CFBC', melt: '#C8E8D3',
+    dish: '#1A3326', dishHi: '#274B38',
+  },
 } as const;
 
 const moodNames: Record<MoodId, string> = { amber: 'Amber', moon: 'Moonlit', spirit: 'Spirit' };

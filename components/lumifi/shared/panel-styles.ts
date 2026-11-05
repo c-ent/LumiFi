@@ -1,5 +1,15 @@
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet, type ViewStyle } from 'react-native';
+
+// The desktop panels, the session card, and the stream card share this glass.
+// The blur is web-only; native keeps the same translucent fill.
+export const glassPanel: ViewStyle = {
+  backgroundColor: colors.bgSurface,
+  borderWidth: 1,
+  borderColor: colors.border,
+  boxShadow: '0 30px 80px rgba(0, 0, 0, 0.5)',
+  ...(Platform.OS === 'web' ? { backdropFilter: 'blur(18px)' } : null),
+};
 
 // The panels were one file with one StyleSheet. They are split by feature now,
 // but the style keys are still shared, so the sheet stays in one place.
@@ -79,6 +89,16 @@ export const panelStyles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
     fontSize: 12,
   },
+  // Icon-only twin of `mini`, at the 44pt touch target the pill is too short for.
+  iconMini: {
+    width: 44,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...rounded(radius.pill),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   note: {
     color: colors.textMuted,
     fontFamily: fonts.body,
@@ -139,9 +159,11 @@ export const panelStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   roundSm: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.bgCard,
     alignItems: 'center',
     justifyContent: 'center',
@@ -158,6 +180,55 @@ export const panelStyles = StyleSheet.create({
     paddingHorizontal: 14,
     justifyContent: 'center',
     marginBottom: 6,
+  },
+  trackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  trackGrow: {
+    flex: 1,
+  },
+  trackRemove: {
+    width: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  streamColumn: {
+    flex: 1,
+    minHeight: 0,
+  },
+  streamLinks: {
+    flex: 1,
+    minHeight: 0,
+  },
+  streamLinksContent: {
+    paddingBottom: 4,
+  },
+  streamFrame: {
+    width: '100%',
+    marginTop: 8,
+    marginBottom: 8,
+    overflow: 'hidden',
+    backgroundColor: colors.bgCard,
+    ...rounded(radius.sm),
+  },
+  streamFlush: {
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  streamWeb: {
+    flex: 1,
+    backgroundColor: colors.bgCard,
+  },
+  streamPaused: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
   },
   mixRow: {
     flexDirection: 'row',
@@ -268,6 +339,35 @@ export const panelStyles = StyleSheet.create({
   quest: {
     marginBottom: 14,
   },
+  goalActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  goalLinkRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
+  goalChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...rounded(radius.pill),
+    minHeight: 30,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalChipOn: {
+    backgroundColor: colors.bgCard,
+  },
+  errorText: {
+    color: colors.error,
+    fontFamily: fonts.body,
+    fontSize: 12,
+    marginTop: 8,
+  },
   reward: {
     fontFamily: fonts.bodySemibold,
     fontSize: 13,
@@ -295,6 +395,92 @@ export const panelStyles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
     fontSize: 12,
   },
+  monthHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  monthLabel: {
+    flex: 1,
+    textAlign: 'center',
+    color: colors.textPrimary,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 14,
+  },
+  monthNav: {
+    minWidth: 44,
+    minHeight: 34,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...rounded(radius.pill),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthNavText: {
+    color: colors.textPrimary,
+    fontFamily: fonts.body,
+    fontSize: 16,
+  },
+  monthNavOff: {
+    opacity: 0.35,
+  },
+  monthDayName: {
+    flex: 1,
+    textAlign: 'center',
+    color: colors.textMuted,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 11,
+  },
+  monthGrid: {
+    gap: 4,
+    marginTop: 4,
+  },
+  monthWeek: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  monthCell: {
+    flex: 1,
+    aspectRatio: 1,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    ...rounded(8),
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  monthCellOut: {
+    opacity: 0.3,
+  },
+  monthCellFuture: {
+    opacity: 0.35,
+  },
+  monthDay: {
+    color: colors.textPrimary,
+    fontFamily: fonts.body,
+    fontSize: 12,
+  },
+  monthDaySelected: {
+    fontFamily: fonts.bodySemibold,
+  },
+  monthDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+  },
+  monthTotal: {
+    color: colors.textPrimary,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+    marginTop: 12,
+  },
+  monthDetail: {
+    color: colors.textPrimary,
+    fontFamily: fonts.body,
+    fontSize: 13,
+    marginTop: 6,
+  },
   presetRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -309,6 +495,9 @@ export const panelStyles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sourceTab: {
+    flex: 1,
   },
   fields: {
     flexDirection: 'row',
@@ -337,11 +526,11 @@ export const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 22,
   },
   panelTitle: {
     color: colors.textPrimary,
-    fontFamily: fonts.timeLight,
-    fontSize: 22,
+    fontFamily: fonts.timeMedium,
+    fontSize: 26,
   },
 });

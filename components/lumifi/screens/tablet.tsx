@@ -2,16 +2,20 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
+import { useKeyboardInset } from '@/components/lumifi/hooks/use-keyboard-inset';
 import { useLumiFi } from '@/components/lumifi/logic';
 import { formatTime, MODE_LABEL, TimerMode } from '@/components/lumifi/theme';
 import { FillGradient } from '@/components/lumifi/features/background/fill-gradient';
 import { RainOverlay } from '@/components/lumifi/features/background/rain';
 import { Candle } from '@/components/lumifi/features/clock/candle';
+import { MonthCalendar } from '@/components/lumifi/features/progression/month-calendar';
 import { QuestList } from '@/components/lumifi/features/progression/quest-list';
 import { MoodPicker } from '@/components/lumifi/features/settings/mood-picker';
-import { TaskPanel } from '@/components/lumifi/features/tasks/task-panel';
+import { TaskList } from '@/components/lumifi/features/tasks/task-list';
+import { FocusLine } from '@/components/lumifi/features/tasks/focus-line';
 import { MixerBlock } from '@/components/lumifi/features/audio/mixer-block';
 import { MusicBlock } from '@/components/lumifi/features/audio/music-block';
+import { openStreamEmbed, StreamStage, streamCardHeight } from '@/components/lumifi/features/audio/stream-stage';
 import { SessionEndCard } from '@/components/lumifi/features/timer/session-end-card';
 import { ClockIcon, FlameIcon, ResetIcon, SkipIcon } from '@/components/lumifi/shared/icons';
 
@@ -19,6 +23,7 @@ export function TabletLumiFi() {
   const lamp = useLumiFi();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const keyboard = useKeyboardInset();
   const [zen, setZen] = useState(false);
   const lastAct = useRef(0);
   const mood = lamp.moodTheme;
@@ -38,6 +43,9 @@ export function TabletLumiFi() {
     return () => clearInterval(id);
   }, [lamp.mode, lamp.running, lamp.zenOpt]);
 
+  const embed = openStreamEmbed(lamp.streamLinks, lamp.activeStreamId);
+  const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
+
   const idle = lamp.status === 'idle';
   const startLabel = lamp.running
     ? 'Pause'
@@ -46,7 +54,7 @@ export function TabletLumiFi() {
       : 'Resume';
   const phase = lamp.mode === 'focus' ? `Focus · ${(lamp.cycle % 4) + 1} of 4` : MODE_LABEL[lamp.mode];
   const taskLine = lamp.mode === 'focus'
-    ? (lamp.activeTask?.text ?? 'Choose what you are working on')
+    ? (lamp.activeTask?.text ?? 'Pick a task to focus on')
     : 'Stretch, sip some water, look away';
   const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
 
@@ -63,14 +71,18 @@ export function TabletLumiFi() {
       <RainOverlay amount={lamp.mix.rain} />
 
       <View style={[styles.split, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <ScrollView style={styles.stage} contentContainerStyle={styles.stageContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.stage}
+          contentContainerStyle={[styles.stageContent, playerReserve > 0 ? { paddingTop: playerReserve } : null]}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={[styles.top, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
             <View>
               <Text style={styles.levelName}>{lamp.levelName}</Text>
               <Text style={styles.levelXp}>Level {lamp.level} · {lamp.xpInLevel} / {lamp.xpNeeded} XP</Text>
             </View>
             <View style={styles.pills}>
-              <View style={styles.pill}><FlameIcon size={14} color={colors.textPrimary} /><Text style={styles.pillText}>{lamp.streak}</Text></View>
+              <View style={styles.pill}><FlameIcon size={14} color={colors.error} /><Text style={styles.pillText}>{lamp.streak}</Text></View>
               <View style={styles.pill}><ClockIcon size={14} color={colors.textPrimary} /><Text style={styles.pillText}>{lamp.day.minutes}m</Text></View>
             </View>
           </View>
@@ -90,7 +102,12 @@ export function TabletLumiFi() {
           </Pressable>
           <Text style={[styles.time, { fontSize: timeSize }]}>{formatTime(lamp.remaining)}</Text>
           <Text style={styles.phase}>{phase}</Text>
-          <Text style={[styles.taskLine, lamp.mode === 'focus' && lamp.activeTask ? styles.taskOn : null, { opacity: zen ? 0 : 1 }]}>{taskLine}</Text>
+          <FocusLine
+            mode={lamp.mode === 'focus' ? (lamp.activeTask ? 'task' : 'empty') : 'break'}
+            text={taskLine}
+            accent={mood.accent}
+            zen={zen}
+          />
           <View style={styles.pips}>
             {[0, 1, 2, 3].map((index) => (
               <View key={index} style={styles.miniCandle}>
@@ -121,17 +138,21 @@ export function TabletLumiFi() {
         <ScrollView
           style={[styles.side, { opacity: zen ? 0 : 1 }]}
           pointerEvents={zen ? 'none' : 'auto'}
-          contentContainerStyle={styles.sideContent}
+          contentContainerStyle={[styles.sideContent, keyboard > 0 ? { paddingBottom: keyboard + 28 } : null]}
+          keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.kicker}>Tasks</Text>
-          <TaskPanel mobile />
+          <TaskList mobile />
           <Text style={styles.kicker}>Sounds</Text>
           <MoodPicker />
           <MusicBlock mobile />
           <MixerBlock mobile />
           <QuestList mobile />
+          <MonthCalendar mobile />
         </ScrollView>
       </View>
+
+      <StreamStage style={[styles.stream, { top: insets.top + 8, width: Math.min(420, width * 0.48) }]} />
 
       {lamp.ending ? (
         <SessionEndCard
@@ -158,6 +179,11 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     overflow: 'hidden',
+  },
+  stream: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 4,
   },
   split: {
     flex: 1,
@@ -227,18 +253,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     textAlign: 'center',
     marginTop: 4,
-  },
-  taskLine: {
-    color: colors.textMuted,
-    fontFamily: fonts.body,
-    fontSize: 14,
-    textAlign: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  taskOn: {
-    color: colors.textPrimary,
-    fontFamily: fonts.bodyMedium,
   },
   pips: {
     flexDirection: 'row',

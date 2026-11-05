@@ -1,3 +1,12 @@
+language: "en-US"
 reviews:
+  profile: "chill"
+  # Enable automatic reviews for both main and dev branches
+  target_branches:
+    - "main"
+    - "master"
+    - "dev"
+
+  # Exclude specific files/directories from being reviewed
   path_filters:
     - "!.agents/**"

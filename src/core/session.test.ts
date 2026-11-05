@@ -1,7 +1,11 @@
 import { calendarKey } from './calendar';
 import { emptyDay } from './history';
-import { completeSession, toggleTask } from './session';
+import { addSubtask, completeSession, removeTask, toggleTask } from './session';
 import { ProgressState, Task } from './types';
+
+function task(patch: Partial<Task> & Pick<Task, 'id' | 'text'>): Task {
+  return { done: false, pomos: 0, doneOn: null, parentId: null, date: null, open: false, ...patch };
+}
 
 function progressAt(now: number, focus = 25): ProgressState {
   const day = emptyDay(now);
@@ -11,7 +15,7 @@ function progressAt(now: number, focus = 25): ProgressState {
     streak: { n: 0, last: '' },
     day,
     days: { [day.d]: day },
-    tasks: [{ id: 1, text: 'Read chapter 5', done: false, pomos: 0, doneOn: null }],
+    tasks: [task({ id: 1, text: 'Read chapter 5' })],
     activeId: 1,
     cycle: 0,
   };
@@ -53,6 +57,45 @@ describe('completed sessions', () => {
     expect(result.state.xp).toBe(50);
     expect(result.state.day.claimed).toEqual([]);
     expect(result.messages[0]).toBe('+50 XP for 25 focused minutes');
+  });
+
+  it('pays minute XP for a session under 10 minutes without a session count or a streak', () => {
+    const state = progressAt(monday);
+    const short = completeSession(state, 'focus', monday, 9);
+
+    expect(short.state.xp).toBe(18);
+    expect(short.state.day.minutes).toBe(9);
+    expect(short.state.day.sessions).toBe(0);
+    expect(short.state.day.claimed).toEqual([]);
+    expect(short.state.streak).toEqual(state.streak);
+    expect(short.messages).toEqual(['+18 XP for 9 focused minutes']);
+
+    const counted = completeSession(short.state, 'focus', monday, 10);
+    expect(counted.state.xp).toBe(38);
+    expect(counted.state.day.minutes).toBe(19);
+    expect(counted.state.day.sessions).toBe(1);
+    expect(counted.state.streak).toEqual({ n: 1, last: '2026-11-2' });
+  });
+
+  it('lets short minutes fill the hour quest and keeps the session quest for 10-minute sessions', () => {
+    let state = progressAt(monday);
+    for (let index = 0; index < 6; index += 1) state = completeSession(state, 'focus', monday, 9).state;
+
+    expect(state.day.minutes).toBe(54);
+    expect(state.day.sessions).toBe(0);
+    expect(state.xp).toBe(108);
+    expect(state.streak).toEqual({ n: 0, last: '' });
+
+    state = completeSession(state, 'focus', monday, 6).state;
+    expect(state.day.minutes).toBe(60);
+    expect(state.day.sessions).toBe(0);
+    expect(state.day.claimed).toEqual(['q2']);
+    expect(state.xp).toBe(108 + 12 + 50);
+    expect(state.streak).toEqual({ n: 0, last: '' });
+
+    const nextDay = completeSession(state, 'focus', tuesdayMorning, 9).state;
+    expect(nextDay.day.d).toBe('2026-11-3');
+    expect(nextDay.streak).toEqual({ n: 0, last: '' });
   });
 
   it('awards nothing for a break', () => {
@@ -108,8 +151,8 @@ describe('completed sessions', () => {
 
   it('does not let undoing an earlier task erase another day’s count', () => {
     const tasks: Task[] = [
-      { id: 1, text: 'Task A', done: false, pomos: 0, doneOn: null },
-      { id: 2, text: 'Task B', done: false, pomos: 0, doneOn: null },
+      task({ id: 1, text: 'Task A' }),
+      task({ id: 2, text: 'Task B' }),
     ];
     const base: ProgressState = { ...progressAt(monday), tasks };
 
@@ -129,8 +172,8 @@ describe('completed sessions', () => {
 
   it('leaves today out of it when undoing a task with no known completion day', () => {
     const tasks: Task[] = [
-      { id: 1, text: 'Done before doneOn existed', done: true, pomos: 1, doneOn: null },
-      { id: 2, text: 'Task B', done: false, pomos: 0, doneOn: null },
+      task({ id: 1, text: 'Done before doneOn existed', done: true, pomos: 1, doneOn: null }),
+      task({ id: 2, text: 'Task B' }),
     ];
     const base: ProgressState = { ...progressAt(monday), tasks };
 
@@ -141,5 +184,81 @@ describe('completed sessions', () => {
     expect(undone.day.tasks).toBe(1);
     expect(Object.values(undone.days).every((day) => day.tasks >= 0)).toBe(true);
     expect(undone.days[afterB.day.d].tasks).toBe(1);
+  });
+});
+
+describe('subtasks and the daily task count', () => {
+  const monday = new Date(2026, 10, 2, 21).getTime();
+
+  it('counts a task once when it is checked with its subtasks', () => {
+    const base: ProgressState = {
+      ...progressAt(monday),
+      tasks: [
+        task({ id: 1, text: 'Finish SQL course' }),
+        task({ id: 2, text: 'Practice joins', parentId: 1 }),
+        task({ id: 3, text: 'Window functions', parentId: 1 }),
+      ],
+    };
+    const done = toggleTask(base, 1, monday);
+    expect(done.state.day.tasks).toBe(1);
+    expect(done.state.tasks.every((item) => item.done)).toBe(true);
+    expect(done.state.activeId).toBeNull();
+    expect(done.state.xp).toBe(30);
+  });
+
+  it('counts the task once when the last subtask finishes it', () => {
+    const base: ProgressState = {
+      ...progressAt(monday),
+      activeId: null,
+      tasks: [
+        task({ id: 1, text: 'Finish SQL course' }),
+        task({ id: 2, text: 'Practice joins', parentId: 1, done: true }),
+        task({ id: 3, text: 'Window functions', parentId: 1 }),
+      ],
+    };
+    const done = toggleTask(base, 3, monday).state;
+    expect(done.day.tasks).toBe(1);
+    expect(done.tasks.find((item) => item.id === 1)?.done).toBe(true);
+    expect(done.xp).toBe(30);
+  });
+
+  it('undoes the task when a subtask is unchecked or added back', () => {
+    const finished = toggleTask({
+      ...progressAt(monday),
+      tasks: [
+        task({ id: 1, text: 'Finish SQL course' }),
+        task({ id: 2, text: 'Practice joins', parentId: 1 }),
+      ],
+    }, 1, monday).state;
+    expect(finished.day.tasks).toBe(1);
+
+    const opened = toggleTask(finished, 2, monday).state;
+    expect(opened.day.tasks).toBe(0);
+    expect(opened.tasks.find((item) => item.id === 1)?.done).toBe(false);
+
+    const again = toggleTask(opened, 1, monday).state;
+    const reopened = addSubtask(again, 1, 'Indexes', monday).state;
+    expect(reopened.day.tasks).toBe(0);
+    expect(reopened.tasks.find((item) => item.id === 1)?.done).toBe(false);
+  });
+
+  it('undoes a deleted finished task and does not count a deleted subtask', () => {
+    const finished = toggleTask(progressAt(monday), 1, monday).state;
+    const removed = removeTask(finished, 1, monday).state;
+    expect(removed.tasks).toEqual([]);
+    expect(removed.day.tasks).toBe(0);
+    expect(removed.activeId).toBeNull();
+
+    const withSub: ProgressState = {
+      ...progressAt(monday),
+      activeId: null,
+      tasks: [
+        task({ id: 1, text: 'Finish SQL course' }),
+        task({ id: 2, text: 'Practice joins', parentId: 1 }),
+      ],
+    };
+    const dropped = removeTask(withSub, 2, monday).state;
+    expect(dropped.day.tasks).toBe(0);
+    expect(dropped.tasks).toEqual([withSub.tasks[0]]);
   });
 });

@@ -143,9 +143,6 @@ export function DesktopLumiFi() {
     <View style={[styles.root, { backgroundColor: theme.b1 }]} onTouchStart={poke}>
       <SceneBackground />
       <RainOverlay amount={lamp.mix.rain} />
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${lamp.progress * 100}%` }]} />
-      </View>
 
       <View style={[styles.top, { paddingTop: insets.top + 14, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
         <View style={styles.brand}>
@@ -328,20 +325,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     overflow: 'hidden',
-  },
-  progressTrack: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: colors.border,
-    zIndex: 5,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.textPrimary,
-    opacity: 0.7,
   },
   top: {
     position: 'absolute',

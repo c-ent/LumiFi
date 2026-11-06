@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
+import { glassPanel } from '@/components/lumifi/shared/panel-styles';
+import { useFullscreen } from '@/components/lumifi/hooks/use-fullscreen';
 import { useLumiFi } from '@/components/lumifi/logic';
 import { formatTime, MODE_LABEL, TimerMode } from '@/components/lumifi/theme';
 import { RainOverlay } from '@/components/lumifi/features/background/rain';
@@ -17,16 +19,19 @@ import { SceneBackground } from '@/components/lumifi/features/background/scene-b
 import { LevelCard } from '@/components/lumifi/features/progression/level-card';
 import { QuestList } from '@/components/lumifi/features/progression/quest-list';
 import { StatGrid } from '@/components/lumifi/features/progression/stat-grid';
+import { MonthCalendar } from '@/components/lumifi/features/progression/month-calendar';
 import { WeekChart } from '@/components/lumifi/features/progression/week-chart';
 import { ScenePicker } from '@/components/lumifi/features/settings/scene-picker';
 import { TimerSettings } from '@/components/lumifi/features/settings/timer-settings';
-import { TaskPanel } from '@/components/lumifi/features/tasks/task-panel';
+import { TaskList } from '@/components/lumifi/features/tasks/task-list';
+import { FocusLine } from '@/components/lumifi/features/tasks/focus-line';
 import { MixerBlock } from '@/components/lumifi/features/audio/mixer-block';
 import { MusicBlock } from '@/components/lumifi/features/audio/music-block';
+import { StreamStage } from '@/components/lumifi/features/audio/stream-stage';
 import { SessionEndCard } from '@/components/lumifi/features/timer/session-end-card';
+import { LogoMark } from '@/components/lumifi/shared/logo';
 import { PanelHeading } from '@/components/lumifi/shared/panel-heading';
 import {
-  BarsIcon,
   ClockIcon,
   FlameIcon,
   FullscreenIcon,
@@ -36,10 +41,23 @@ import {
   ResetIcon,
   SceneIcon,
   SkipIcon,
+  StarIcon,
   TaskIcon,
 } from '@/components/lumifi/shared/icons';
 
-type PanelId = 'music' | 'mixer' | 'scenes' | 'tasks' | 'progress' | 'settings';
+type PanelId = 'music' | 'mixer' | 'scenes' | 'tasks' | 'progress' | 'quests' | 'settings';
+
+// A narrow card opens under the dock button that opened it: the left group holds music
+// through quests, the right group holds timer settings and full screen.
+const PANEL_SIDE: Record<PanelId, 'left' | 'right'> = {
+  music: 'left',
+  mixer: 'left',
+  scenes: 'left',
+  tasks: 'left',
+  progress: 'left',
+  quests: 'left',
+  settings: 'right',
+};
 
 const PANEL_TITLE: Record<PanelId, string> = {
   music: 'Music',
@@ -47,15 +65,19 @@ const PANEL_TITLE: Record<PanelId, string> = {
   scenes: 'Scenes',
   tasks: 'Tasks',
   progress: 'Progress',
+  quests: 'Quests',
   settings: 'Timer settings',
 };
 
 export function DesktopLumiFi() {
   const lamp = useLumiFi();
   const insets = useSafeAreaInsets();
+  const fullscreen = useFullscreen();
   const { width, height } = useWindowDimensions();
   const [panel, setPanel] = useState<PanelId | null>(null);
   const [zen, setZen] = useState(false);
+  const embedSlotRef = useRef<React.ComponentRef<typeof View>>(null);
+  const [embedFrame, setEmbedFrame] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const lastAct = useRef(0);
   const theme = lamp.sceneTheme;
   const timeSize = Math.min(width * 0.23, height * 0.36, 280);
@@ -90,12 +112,32 @@ export function DesktopLumiFi() {
     setPanel((current) => (current === id ? null : id));
   };
 
+  const placeEmbed = useCallback(() => {
+    embedSlotRef.current?.measureInWindow((x, y, width, height) => {
+      const frame = { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
+      if (frame.width < 2 || frame.height < 2) return;
+      setEmbedFrame((prev) => (
+        prev && prev.x === frame.x && prev.y === frame.y && prev.width === frame.width && prev.height === frame.height
+          ? prev
+          : frame
+      ));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (panel !== 'music') return undefined;
+    const id = requestAnimationFrame(() => placeEmbed());
+    return () => cancelAnimationFrame(id);
+  }, [height, panel, placeEmbed, width]);
+
   const taskLine = lamp.mode === 'focus'
-    ? (lamp.activeTask?.text ?? 'Choose what you are working on')
+    ? (lamp.activeTask?.text ?? 'Pick a task to focus on')
     : 'Stretch, drink some water, look away from the screen';
   const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
   const startLabel = lamp.running ? 'Pause' : lamp.status === 'paused' ? 'Resume' : 'Start';
   const questOpen = lamp.day.sessions < 4 || lamp.day.minutes < 60 || lamp.day.tasks < 1;
+  const musicRoom = height - insets.top - insets.bottom - 104;
+  const musicHeight = Math.min(620, Math.max(0, musicRoom));
 
   return (
     <View style={[styles.root, { backgroundColor: theme.b1 }]} onTouchStart={poke}>
@@ -107,12 +149,14 @@ export function DesktopLumiFi() {
 
       <View style={[styles.top, { paddingTop: insets.top + 14, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
         <View style={styles.brand}>
-          <View style={[styles.brandDot, { backgroundColor: theme.accent, boxShadow: `0 0 14px ${theme.accent}` }]} />
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <LogoMark size={26} />
+          </View>
           <Text style={styles.brandText}>LumiFi</Text>
         </View>
         <View style={styles.pills}>
           <Pressable style={styles.pill} onPress={() => togglePanel('progress')}>
-            <FlameIcon size={15} color={colors.textPrimary} />
+            <FlameIcon size={15} color={colors.error} />
             <Text style={styles.pillText}>{lamp.streak}</Text>
           </Pressable>
           <Pressable style={styles.pill} onPress={() => togglePanel('progress')}>
@@ -140,9 +184,13 @@ export function DesktopLumiFi() {
           })}
         </View>
         <Text style={[styles.time, { fontSize: timeSize }]}>{formatTime(lamp.remaining)}</Text>
-        <Pressable onPress={() => togglePanel('tasks')} style={{ opacity: zen ? 0 : 1 }} pointerEvents={zen ? 'none' : 'auto'}>
-          <Text style={[styles.taskLine, lamp.mode === 'focus' && lamp.activeTask ? styles.taskLineOn : null]}>{taskLine}</Text>
-        </Pressable>
+        <FocusLine
+          mode={lamp.mode === 'focus' ? (lamp.activeTask ? 'task' : 'empty') : 'break'}
+          text={taskLine}
+          accent={theme.accent}
+          zen={zen}
+          onPress={lamp.mode === 'focus' ? () => togglePanel('tasks') : undefined}
+        />
         <View style={styles.pips}>
           {[0, 1, 2, 3].map((index) => (
             <View key={index} style={[styles.pip, index < pipsLit && styles.pipOn]} />
@@ -157,38 +205,68 @@ export function DesktopLumiFi() {
 
       <View style={[styles.dock, { paddingBottom: insets.bottom + 14, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
         <View style={styles.dockGroup}>
-          <DockButton label="Music" active={panel === 'music'} dot={lamp.musicPlaying} onPress={() => togglePanel('music')}><MusicIcon /></DockButton>
+          <DockButton label="Music" active={panel === 'music'} dot={lamp.musicPlaying || lamp.activeStreamId != null} onPress={() => togglePanel('music')}><MusicIcon /></DockButton>
           <DockButton label="Ambient mixer" active={panel === 'mixer'} onPress={() => togglePanel('mixer')}><MixerIcon /></DockButton>
           <DockButton label="Scenes" active={panel === 'scenes'} onPress={() => togglePanel('scenes')}><SceneIcon /></DockButton>
           <DockButton label="Tasks" active={panel === 'tasks'} onPress={() => togglePanel('tasks')}><TaskIcon /></DockButton>
-          <DockButton label="Progress" active={panel === 'progress'} dot={questOpen} onPress={() => togglePanel('progress')}><BarsIcon /></DockButton>
+          <DockButton label="Quests" active={panel === 'quests'} dot={questOpen} onPress={() => togglePanel('quests')}><StarIcon /></DockButton>
         </View>
         <View style={styles.dockGroup}>
           <DockButton label="Timer settings" active={panel === 'settings'} onPress={() => togglePanel('settings')}><GearIcon /></DockButton>
-          <DockButton label="Full screen" active={false} onPress={toggleFullscreen}><FullscreenIcon /></DockButton>
+          {fullscreen.supported ? (
+            <DockButton label="Full screen" active={fullscreen.active} onPress={fullscreen.toggle}><FullscreenIcon /></DockButton>
+          ) : null}
         </View>
       </View>
+
+      <StreamStage
+        plain={panel === 'music' && embedFrame != null}
+        inert={panel === 'music' && embedFrame == null}
+        style={
+          panel === 'music' && embedFrame
+            ? [styles.embedFloat, { top: embedFrame.y, left: embedFrame.x, width: embedFrame.width, height: embedFrame.height }]
+            : [styles.stream, panel === 'music' ? { bottom: insets.bottom + 72, opacity: 0 } : { bottom: insets.bottom + 72 }]
+        }
+      />
 
       {panel ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Close panel" onPress={() => setPanel(null)} style={styles.backdrop} />
       ) : null}
 
-      {panel ? (
-        <View style={[styles.panel, { bottom: insets.bottom + 72 }]}>
+      {panel === 'music' ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.wideWrap, styles.progressWrap, { top: insets.top + 20, bottom: insets.bottom + 84 }]}
+        >
+          <View style={[styles.progressScroll, styles.musicScroll, { height: musicHeight }]}>
+            <View style={[styles.progressCard, styles.musicCard]}>
+              <PanelHeading title={PANEL_TITLE.music} onClose={() => setPanel(null)} />
+              <MusicBlock wide embedSlotRef={embedSlotRef} onEmbedLayout={placeEmbed} />
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {panel === 'progress' || panel === 'quests' || panel === 'tasks' ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.wideWrap, styles.progressWrap, { top: insets.top + 20, bottom: insets.bottom + 84 }]}
+        >
+          <View style={[styles.progressScroll, panel === 'quests' && styles.questsScroll, panel === 'tasks' && styles.tasksScroll]}>
+            <View style={styles.progressCard}>
+              <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
+              {panel === 'progress' ? <ProgressBoard /> : panel === 'quests' ? <QuestsBoard /> : <TaskList />}
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {panel && panel !== 'music' && panel !== 'progress' && panel !== 'quests' && panel !== 'tasks' ? (
+        <View style={[styles.panel, styles[PANEL_SIDE[panel] === 'right' ? 'panelRight' : 'panelLeft'], { bottom: insets.bottom + 72 }]}>
           <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
           <ScrollView style={styles.panelBody} contentContainerStyle={styles.panelContent}>
-            {panel === 'tasks' ? <TaskPanel /> : null}
-            {panel === 'music' ? <MusicBlock /> : null}
             {panel === 'mixer' ? <MixerBlock /> : null}
             {panel === 'scenes' ? <ScenePicker /> : null}
-            {panel === 'progress' ? (
-              <View>
-                <LevelCard />
-                <StatGrid />
-                <QuestList />
-                <WeekChart />
-              </View>
-            ) : null}
             {panel === 'settings' ? <TimerSettings /> : null}
           </ScrollView>
         </View>
@@ -215,6 +293,25 @@ export function DesktopLumiFi() {
   );
 }
 
+function ProgressBoard() {
+  return (
+    <View style={styles.board}>
+      <View style={[styles.boardCol, styles.boardWide]}>
+        <LevelCard wide />
+        <StatGrid wide />
+        <WeekChart wide />
+      </View>
+      <View style={styles.boardCol}>
+        <MonthCalendar wide />
+      </View>
+    </View>
+  );
+}
+
+function QuestsBoard() {
+  return <QuestList wide />;
+}
+
 function DockButton({ children, active, dot, onPress, label }: { children: React.ReactNode; active: boolean; dot?: boolean; onPress: () => void; label: string }) {
   const { sceneTheme } = useLumiFi();
   return (
@@ -225,16 +322,6 @@ function DockButton({ children, active, dot, onPress, label }: { children: React
       {dot ? <View style={[styles.dot, { backgroundColor: sceneTheme.accent }]} /> : null}
     </Pressable>
   );
-}
-
-function toggleFullscreen() {
-  if (Platform.OS !== 'web') return;
-  const root = document.documentElement;
-  if (document.fullscreenElement) {
-    void document.exitFullscreen().catch((error) => console.warn('Could not exit fullscreen mode.', error));
-  } else if (root.requestFullscreen) {
-    void root.requestFullscreen().catch((error) => console.warn('Could not enter fullscreen mode.', error));
-  }
 }
 
 const styles = StyleSheet.create({
@@ -271,11 +358,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  brandDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
   },
   brandText: {
     color: colors.textPrimary,
@@ -353,18 +435,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.time,
     marginVertical: 18,
     fontVariant: ['tabular-nums'],
-  },
-  taskLine: {
-    color: colors.textMuted,
-    fontFamily: fonts.body,
-    fontSize: 15,
-    textAlign: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  taskLineOn: {
-    color: colors.textPrimary,
-    fontFamily: fonts.bodyMedium,
   },
   pips: {
     flexDirection: 'row',
@@ -447,22 +517,102 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
   },
+  stream: {
+    position: 'absolute',
+    right: 16,
+    width: 390,
+    maxWidth: '92%',
+    zIndex: 7,
+  },
+  embedFloat: {
+    position: 'absolute',
+    zIndex: 9,
+  },
+  wideWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 8,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  musicScroll: {
+    maxWidth: 1120,
+    overflow: 'hidden',
+  },
+  musicCard: {
+    flex: 1,
+    height: '100%',
+    minHeight: 0,
+    overflow: 'hidden',
+    paddingTop: 24,
+    paddingHorizontal: 28,
+    paddingBottom: 24,
+  },
+  progressWrap: {
+    justifyContent: 'center',
+  },
+  // Caps at the space above the dock and scrolls only when the content is taller.
+  progressScroll: {
+    width: '100%',
+    maxWidth: 1160,
+    maxHeight: '100%',
+    minHeight: 0,
+    flexGrow: 0,
+    flexShrink: 1,
+    overflow: 'auto' as 'scroll',
+  },
+  // Daily quests are one column, so the card stays narrower than Progress.
+  questsScroll: {
+    maxWidth: 560,
+  },
+  // One column, the width of the task list.
+  tasksScroll: {
+    maxWidth: 580,
+  },
+  progressCard: {
+    width: '100%',
+    ...glassPanel,
+    ...rounded(radius.sheet),
+    paddingTop: 30,
+    paddingHorizontal: 34,
+    paddingBottom: 30,
+  },
+  board: {
+    flexDirection: 'row',
+    gap: 24,
+    alignItems: 'flex-start',
+  },
+  boardCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 18,
+  },
+  // The column holding the chart takes the extra width. The calendar needs less.
+  boardWide: {
+    flex: 1.35,
+  },
   backdrop: {
     ...StyleSheet.absoluteFill,
     zIndex: 5,
   },
   panel: {
     position: 'absolute',
-    left: 16,
     width: 390,
     maxWidth: '92%',
     maxHeight: '70%',
     zIndex: 8,
-    backgroundColor: colors.bgSurface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...rounded(radius.md),
-    padding: 16,
+    ...glassPanel,
+    ...rounded(radius.sheet),
+    paddingTop: 22,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  panelLeft: {
+    left: 16,
+  },
+  panelRight: {
+    right: 16,
   },
   panelBody: {
     flexGrow: 0,

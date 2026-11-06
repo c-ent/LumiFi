@@ -2,8 +2,9 @@ import { rollToToday } from './history';
 import { modeAfterComplete } from './phase';
 import { claimReachedQuests } from './quests';
 import { streakAfterFocus } from './streak';
-import { DayStats, ProgressState, TimerMode } from './types';
-import { focusSessionXp, grantXp } from './xp';
+import { appendSubtask, dropTask, flipTask } from './tasks';
+import { DayHistory, DayStats, ProgressState, Task, TimerMode } from './types';
+import { countsAsRewardSession, focusSessionXp, grantXp } from './xp';
 
 export interface SessionStep<T> {
   state: T;
@@ -30,12 +31,15 @@ export function completeSession<T extends ProgressState>(
 
   // The duration the session actually ran at, not the current focus setting. A
   // setting changed mid-session must not inflate the recorded minutes, XP, or the
-  // minute quest, and must not shrink them either.
+  // minute quest, and must not shrink them either. A session under 10 minutes
+  // still pays its minute XP and adds those minutes. It does not count toward
+  // the four-session quest or the streak.
   const minutes = sessionMinutes;
+  const rewardSession = countsAsRewardSession(minutes);
   const cycle = rolled.cycle + 1;
   const day: DayStats = {
     ...rolled.day,
-    sessions: rolled.day.sessions + 1,
+    sessions: rolled.day.sessions + (rewardSession ? 1 : 0),
     minutes: rolled.day.minutes + minutes,
     claimed: [...rolled.day.claimed],
   };
@@ -54,7 +58,7 @@ export function completeSession<T extends ProgressState>(
       xp,
       day: nextDay,
       days: { ...rolled.days, [nextDay.d]: nextDay },
-      streak: streakAfterFocus(rolled.streak, now),
+      streak: rewardSession ? streakAfterFocus(rolled.streak, now) : rolled.streak,
       tasks,
     },
     nextMode: modeAfterComplete('focus', cycle),
@@ -62,46 +66,78 @@ export function completeSession<T extends ProgressState>(
   };
 }
 
+// Only a top-level task changes the daily task count. Subtasks move that task
+// between done and not done, and the count follows the task, once.
+function applyTaskCount<T extends ProgressState>(
+  state: T,
+  task: Task,
+  done: boolean,
+  messages: string[],
+): T {
+  const dayKey = state.day.d;
+  const targetKey = done ? dayKey : task.doneOn;
+  let day: DayStats = state.day;
+  let days: DayHistory = state.days;
+  if (targetKey === dayKey) {
+    const nextTotal = done ? state.day.tasks + 1 : Math.max(0, state.day.tasks - 1);
+    day = { ...state.day, tasks: nextTotal, claimed: [...state.day.claimed] };
+    const known = state.days[dayKey] ?? day;
+    days = { ...state.days, [dayKey]: { ...known, tasks: nextTotal } };
+  } else if (targetKey != null) {
+    const known = state.days[targetKey];
+    if (known) days = { ...state.days, [targetKey]: { ...known, tasks: Math.max(0, known.tasks - 1) } };
+  }
+  const claimed = claimReachedQuests(day, state.xp, messages);
+  return {
+    ...state,
+    xp: claimed.xp,
+    day: claimed.day,
+    days: { ...days, [claimed.day.d]: claimed.day },
+  };
+}
+
 export function toggleTask<T extends ProgressState>(state: T, id: number, now: number): SessionStep<T> {
   const rolled = rollToToday(state, now);
-  const task = rolled.tasks.find((item) => item.id === id);
-  if (!task) return { state: rolled, messages: [] };
+  const flipped = flipTask(rolled.tasks, id, rolled.day.d);
+  if (!flipped.counted && flipped.tasks === rolled.tasks) return { state: rolled, messages: [] };
 
-  const done = !task.done;
-  const doneOn = done ? rolled.day.d : null;
-  const tasks = rolled.tasks.map((item) => (item.id === id ? { ...item, done, doneOn } : item));
-
+  let activeId = rolled.activeId;
+  if (flipped.clearActiveId != null && activeId === flipped.clearActiveId) activeId = null;
+  let next: T = { ...rolled, tasks: flipped.tasks, activeId };
+  const messages: string[] = [];
   // Completing counts toward today. Undoing counts against the day the task was
   // completed, so undoing a task finished on a past day cannot erase today's
-  // count. The stored history, which feeds the week chart, is adjusted too.
-  // A completion with no known day (a save from before doneOn existed) carries
-  // no day to count for or against, so neither today's nor any past count moves.
-  const dayKey = rolled.day.d;
-  const targetKey = done ? dayKey : task.doneOn;
+  // count. A subtask does not count on its own: the task counts once, including
+  // when the last subtask finishes it.
+  if (flipped.counted) next = applyTaskCount(next, flipped.counted.task, flipped.counted.done, messages);
+  return { state: next, messages };
+}
 
-  let day: DayStats = rolled.day;
-  let days = rolled.days;
-  if (targetKey === dayKey) {
-    const nextTotal = done ? rolled.day.tasks + 1 : Math.max(0, rolled.day.tasks - 1);
-    day = { ...rolled.day, tasks: nextTotal, claimed: [...rolled.day.claimed] };
-    const known = rolled.days[dayKey] ?? day;
-    days = { ...rolled.days, [dayKey]: { ...known, tasks: nextTotal } };
-  } else if (targetKey != null) {
-    const known = rolled.days[targetKey];
-    if (known) days = { ...rolled.days, [targetKey]: { ...known, tasks: Math.max(0, known.tasks - 1) } };
-  }
-
+export function addSubtask<T extends ProgressState>(
+  state: T,
+  parentId: number,
+  text: string,
+  now: number,
+): SessionStep<T> {
+  const rolled = rollToToday(state, now);
+  const inserted = appendSubtask(rolled.tasks, parentId, text, now);
+  if (!inserted) return { state: rolled, messages: [] };
+  let next: T = { ...rolled, tasks: inserted.tasks };
   const messages: string[] = [];
-  const claimed = claimReachedQuests(day, rolled.xp, messages);
+  if (inserted.reopened) next = applyTaskCount(next, inserted.reopened, false, messages);
+  return { state: next, messages };
+}
 
-  return {
-    state: {
-      ...rolled,
-      xp: claimed.xp,
-      day: claimed.day,
-      days: { ...days, [claimed.day.d]: claimed.day },
-      tasks,
-    },
-    messages,
-  };
+export function removeTask<T extends ProgressState>(state: T, id: number, now: number): SessionStep<T> {
+  const rolled = rollToToday(state, now);
+  const dropped = dropTask(rolled.tasks, id, rolled.day.d);
+  if (dropped.removedIds.length === 0) return { state: rolled, messages: [] };
+  let activeId = rolled.activeId;
+  if (activeId != null && dropped.removedIds.includes(activeId)) activeId = null;
+  if (dropped.parentChange?.done && activeId === dropped.parentChange.before.id) activeId = null;
+  let next: T = { ...rolled, tasks: dropped.tasks, activeId };
+  const messages: string[] = [];
+  if (dropped.removedDone) next = applyTaskCount(next, dropped.removedDone, false, messages);
+  if (dropped.parentChange) next = applyTaskCount(next, dropped.parentChange.before, dropped.parentChange.done, messages);
+  return { state: next, messages };
 }

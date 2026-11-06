@@ -1,4 +1,4 @@
-import { breakWax, colors, fonts, moods, radius } from './tokens';
+import { breakWax, colors, fade, fonts, moods, radius, streamMark } from './tokens';
 
 describe('theme tokens', () => {
   it('uses the Amber mood as the default page, flame and accent colors', () => {
@@ -14,8 +14,9 @@ describe('theme tokens', () => {
   });
 
   it('keeps the shared chrome colors from the UI spec', () => {
-    expect(colors.bgSurface).toBe('rgba(20, 15, 28, 0.9)');
+    expect(colors.bgSurface).toBe('rgba(24, 14, 20, 0.93)');
     expect(colors.bgCard).toBe('rgba(255, 255, 255, 0.06)');
+    expect(colors.bgInset).toBe('rgba(0, 0, 0, 0.28)');
     expect(colors.textPrimary).toBe('#F8F1E8');
     expect(colors.textMuted).toBe('rgba(248, 241, 232, 0.62)');
     expect(colors.textInverse).toBe('#1D1205');
@@ -55,6 +56,14 @@ describe('theme tokens', () => {
       timeLight: 'Outfit_300Light',
       timeMedium: 'Outfit_500Medium',
     });
+  });
+
+  it('washes a hex accent and keeps a mark for each streaming service', () => {
+    expect(fade('#FFB454', 0.14)).toBe('rgba(255, 180, 84, 0.14)');
+    expect(fade('#fff', 0.5)).toBe('rgba(255, 255, 255, 0.5)');
+    expect(streamMark.spotify).toBe('#7BE8B0');
+    expect(streamMark.youtube).toBe(streamMark['youtube-music']);
+    expect(streamMark['apple-music']).toBe('#F5A3C7');
   });
 
   it('uses one cooler wax for break candles', () => {

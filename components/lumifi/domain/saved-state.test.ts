@@ -14,6 +14,7 @@ describe('saved day history', () => {
     expect(fresh.activeId).toBeNull();
     expect(fresh.mix).toEqual({ music: 60, rain: 0, cafe: 0, fire: 0, wind: 0, clock: 0, brown: 0, forest: 0, keyboard: 0, waves: 0 });
     expect(fresh.musicEnd).toBe('lower');
+    expect(fresh.musicLoop).toBe(false);
     expect(fresh.notificationsAsked).toBe(false);
     expect(fresh.session).toEqual({ mode: 'focus', status: 'idle', endAt: null, remainingMs: 25 * 60_000, totalMs: 25 * 60_000 });
     expect(fresh.days[fresh.day.d]).toBe(fresh.day);
@@ -37,6 +38,13 @@ describe('saved day history', () => {
     expect(state.mix.clock).toBe(0);
   });
 
+  it('keeps the repeat setting, and defaults it off', () => {
+    expect(parseSavedState(null, now).musicLoop).toBe(false);
+    expect(parseSavedState(JSON.stringify({ musicLoop: true }), now).musicLoop).toBe(true);
+    // A hand-edited save with a non-boolean falls back to off.
+    expect(parseSavedState(JSON.stringify({ musicLoop: 'yes' }), now).musicLoop).toBe(false);
+  });
+
   it('falls back to the configured length for a save made before totalMs existed', () => {
     const state = parseSavedState(JSON.stringify({
       session: { mode: 'focus', status: 'running', endAt: now + 5_000, remainingMs: 5_000 },
@@ -49,6 +57,51 @@ describe('saved day history', () => {
     expect(state.mix.clock).toBe(40);
     expect(state.mix.rain).toBe(25);
     expect(state.mix.music).toBe(60);
+  });
+
+  it('starts with no own tracks and keeps a valid saved list', () => {
+    expect(parseSavedState(null, now).ownTracks).toEqual([]);
+
+    const state = parseSavedState(JSON.stringify({
+      ownTracks: [
+        { id: 'a', title: 'My Song', uri: 'file:///own/a.mp3' },
+        { id: 'b', title: 'Second', uri: 'file:///own/b.mp3' },
+      ],
+    }), now);
+    expect(state.ownTracks).toEqual([
+      { id: 'a', title: 'My Song', uri: 'file:///own/a.mp3' },
+      { id: 'b', title: 'Second', uri: 'file:///own/b.mp3' },
+    ]);
+  });
+
+  it('drops a malformed own-track entry without losing the rest', () => {
+    const state = parseSavedState(JSON.stringify({
+      ownTracks: [
+        { id: 'a', title: 'Good', uri: 'file:///own/a.mp3' },
+        { title: 'No id', uri: 'file:///own/x.mp3' },
+        { id: 'c', title: 'No uri' },
+        null,
+      ],
+    }), now);
+    expect(state.ownTracks).toEqual([
+      { id: 'a', title: 'Good', uri: 'file:///own/a.mp3' },
+    ]);
+  });
+
+  it('keeps a public streaming link and drops one that is not', () => {
+    expect(parseSavedState(null, now).streamLinks).toEqual([]);
+    const state = parseSavedState(JSON.stringify({
+      streamLinks: [
+        { url: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=drop' },
+        { url: 'https://example.com/playlist/1' },
+        { url: 'https://music.youtube.com/playlist?list=PLrAXtmRdnEQy6nuLMHjMZOz59Oq8xJbZt' },
+        null,
+      ],
+    }), now);
+    expect(state.streamLinks.map((link) => link.id)).toEqual([
+      'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M',
+      'youtube-music:playlist:PLrAXtmRdnEQy6nuLMHjMZOz59Oq8xJbZt',
+    ]);
   });
 
   it('only accepts a boolean auto-start flag', () => {
@@ -122,6 +175,37 @@ describe('saved day history', () => {
     const state = parseSavedState(raw, now);
     expect(state.tasks[0].doneOn).toBe('2026-11-1');
     expect(state.tasks[1].doneOn).toBeNull();
+  });
+
+  it('loads an older task as a task, and drops a stored goal', () => {
+    const state = parseSavedState(JSON.stringify({
+      tasks: [{ id: 1, text: 'Before subtasks', done: false, pomos: 2, doneOn: null }],
+      goals: [{ id: 'g1', title: 'Chapter 5', date: '2026-12-01', target: null, minutes: 25, sessions: 1, done: false, paid: false }],
+    }), now);
+    expect(state.tasks[0]).toMatchObject({ parentId: null, date: null, open: false });
+    expect(state).not.toHaveProperty('goals');
+
+    const linked = parseSavedState(JSON.stringify({
+      tasks: [{ id: 1, text: 'Linked', done: false, pomos: 0, doneOn: null, goalId: 'g1' }],
+    }), now);
+    expect(linked.tasks[0]).toMatchObject({ text: 'Linked', parentId: null, date: null });
+  });
+
+  it('keeps a subtask under its task and a real due date', () => {
+    const state = parseSavedState(JSON.stringify({
+      tasks: [
+        { id: 1, text: 'Finish SQL course', done: false, pomos: 0, doneOn: null, date: '2026-11-13', open: true },
+        { id: 2, text: 'Practice joins', done: true, pomos: 0, doneOn: null, parentId: 1, date: '2026-11-01', open: true },
+        { id: 3, text: 'Orphan step', done: false, pomos: 0, doneOn: null, parentId: 9 },
+        { id: 4, text: 'Bad day', done: false, pomos: 0, doneOn: null, date: '2026-02-31' },
+      ],
+      activeId: 2,
+    }), now);
+    expect(state.tasks[0]).toMatchObject({ date: '2026-11-13', open: true, parentId: null });
+    expect(state.tasks[1]).toMatchObject({ parentId: 1, date: null, open: false });
+    expect(state.tasks[2]).toMatchObject({ text: 'Orphan step', parentId: null });
+    expect(state.tasks[3].date).toBeNull();
+    expect(state.activeId).toBeNull();
   });
 
   it('keeps yesterday and older days when the save is opened on a new day', () => {

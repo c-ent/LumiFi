@@ -21,14 +21,14 @@ export function TaskPanel({ mobile = false }: { mobile?: boolean }) {
           placeholderTextColor={colors.textMuted}
           style={[styles.input, { borderColor: colors.border, backgroundColor: colors.bgCard }]}
           onSubmitEditing={() => {
-            addTask(draft);
+            addTask(draft, null);
             setDraft('');
           }}
         />
         <Pressable
           style={[styles.solidBtn, { backgroundColor: tone.solid }]}
           onPress={() => {
-            addTask(draft);
+            addTask(draft, null);
             setDraft('');
           }}
         >

@@ -1,3 +1,13 @@
+language: "en-US"
 reviews:
+  profile: "chill"
+  # Review pull requests into dev as well as the default branch.
+  auto_review:
+    base_branches:
+      - "main"
+      - "master"
+      - "dev"
+
+  # Exclude specific files/directories from being reviewed
   path_filters:
     - "!.agents/**"

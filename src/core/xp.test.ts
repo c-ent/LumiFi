@@ -1,10 +1,16 @@
-import { focusSessionXp, grantXp, levelInfo } from './xp';
+import { SESSION_REWARD_MINUTES, countsAsRewardSession, focusSessionXp, grantXp, levelInfo } from './xp';
 
 describe('XP and levels', () => {
   it('awards 2 XP per completed focus minute', () => {
     expect(focusSessionXp(1)).toBe(2);
     expect(focusSessionXp(25)).toBe(50);
     expect(focusSessionXp(60)).toBe(120);
+  });
+
+  it('counts a session toward the streak and the session quest from 10 minutes', () => {
+    expect(SESSION_REWARD_MINUTES).toBe(10);
+    expect(countsAsRewardSession(9)).toBe(false);
+    expect(countsAsRewardSession(10)).toBe(true);
   });
 
   it('uses the exact level thresholds and caps the name at Archmage', () => {

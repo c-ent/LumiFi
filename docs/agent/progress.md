@@ -122,3 +122,5 @@ None. #1, #3, #4, and #8 have shipped. #2 (Unlocks) was removed by the owner on 
 - Before production: a Play closed test with 12 testers for 14 consecutive days (personal accounts created after 13 November 2023), and a release build. SDK 58 minifies with R8, so a debug build is not enough.
 
 ## Session notes
+
+- 2026-11-06 (Agent Merge): Resolved merge conflicts against `main` for PR #3. Kept branch implementations where duplicate add/add files conflicted, accepted non-conflicting additions from `main`, and fixed `TaskPanel` calls to `addTask(text, date)` by passing `null` for date so typecheck passes.

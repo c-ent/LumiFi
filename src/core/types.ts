@@ -13,6 +13,12 @@ export interface Task {
   pomos: number;
   /** The day the task was completed, so an undo can hit the day it counted toward. */
   doneOn: string | null;
+  /** Null on a task. A subtask points at that task. */
+  parentId: number | null;
+  /** An optional local due date, `YYYY-MM-DD`. Subtasks have none. */
+  date: string | null;
+  /** The subtask list is open. Only a task uses this. */
+  open: boolean;
 }
 
 export interface DayStats {

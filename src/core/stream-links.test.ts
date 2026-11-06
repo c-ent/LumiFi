@@ -132,6 +132,9 @@ describe('playback and navigation', () => {
     expect(decideStreamNavigation('spotify:playlist:37i9dQZF1DXcBWIGoYBM5M', 'spotify')).toBe('external');
     expect(decideStreamNavigation('intent://open#Intent;package=com.spotify.music;end', 'spotify')).toBe('external');
     expect(decideStreamNavigation('intent://open#Intent;package=com.other.app;end', 'spotify')).toBe('block');
+    expect(decideStreamNavigation('intent://open#Intent;package=com.other.app;scheme=spotify;end', 'spotify')).toBe('block');
+    expect(decideStreamNavigation('intent://open#Intent;package=com.spotify.music;component=com.other.app/.Main;end', 'spotify')).toBe('block');
+    expect(decideStreamNavigation('intent://open#Intent;scheme=spotify;end', 'spotify')).toBe('external');
     expect(sameStreamDocument(playback.embedUrl, `${playback.embedUrl}&autoplay=1`)).toBe(true);
   });
 

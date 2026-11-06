@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LEGACY_STORAGE_KEY, STORAGE_KEY } from './saved-state';
-import { loadLumiFiState } from './storage';
+import { loadLumiFiState, saveLumiFiState } from './storage';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -60,5 +60,36 @@ describe('loading saved state', () => {
     const state = await loadLumiFiState();
     expect(state.xp).toBe(0);
     expect(state.streak).toEqual({ n: 0, last: '' });
+  });
+
+  it('does not write defaults over stored progress when the first read fails', async () => {
+    await AsyncStorage.setItem(STORAGE_KEY, progress);
+    jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const state = await loadLumiFiState();
+    await saveLumiFiState({ ...state, xp: 5 });
+
+    expect(JSON.parse((await AsyncStorage.getItem(STORAGE_KEY)) as string).xp).toBe(40);
+  });
+
+  it('does not write defaults over the legacy save when the read fails', async () => {
+    await AsyncStorage.setItem(LEGACY_STORAGE_KEY, progress);
+    jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const state = await loadLumiFiState();
+    await saveLumiFiState({ ...state, xp: 5 });
+
+    expect(await AsyncStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(await AsyncStorage.getItem(LEGACY_STORAGE_KEY)).toBe(progress);
+  });
+
+  it('saves again once a later read succeeds', async () => {
+    jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('storage unavailable'));
+    await loadLumiFiState();
+
+    const state = await loadLumiFiState();
+    await saveLumiFiState({ ...state, xp: 7 });
+
+    expect(JSON.parse((await AsyncStorage.getItem(STORAGE_KEY)) as string).xp).toBe(7);
   });
 });

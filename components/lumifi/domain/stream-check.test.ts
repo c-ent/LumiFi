@@ -35,4 +35,22 @@ describe('checkStreamLink', () => {
     const link = linkFrom('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
     await expect(checkStreamLink(link)).resolves.toBe('unknown');
   });
+
+  it('gives the request a deadline, so a stalled service cannot hang the Add button', async () => {
+    jest.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    globalThis.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
+      signal = init.signal ?? undefined;
+      // Never settles on its own: only the deadline ends this request.
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    });
+    const link = linkFrom('https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M');
+    const result = checkStreamLink(link);
+    await jest.advanceTimersByTimeAsync(10_000);
+    await expect(result).resolves.toBe('unknown');
+    expect(signal?.aborted).toBe(true);
+    jest.useRealTimers();
+  });
 });

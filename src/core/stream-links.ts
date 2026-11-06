@@ -64,11 +64,18 @@ const HOST_SUFFIXES: Record<StreamService, readonly string[]> = {
   'apple-music': ['apple.com', 'mzstatic.com', 'cdn-apple.com'],
 };
 
-const INTENT_TOKENS: Record<StreamService, readonly string[]> = {
-  spotify: ['com.spotify.music', 'scheme=spotify'],
-  youtube: ['com.google.android.youtube', 'scheme=vnd.youtube', 'scheme=youtube'],
-  'youtube-music': ['com.google.android.apps.youtube.music', 'scheme=youtubemusic'],
-  'apple-music': ['com.apple.android.music', 'scheme=music', 'scheme=itmss'],
+const INTENT_PACKAGES: Record<StreamService, readonly string[]> = {
+  spotify: ['com.spotify.music'],
+  youtube: ['com.google.android.youtube'],
+  'youtube-music': ['com.google.android.apps.youtube.music'],
+  'apple-music': ['com.apple.android.music'],
+};
+
+const INTENT_SCHEMES: Record<StreamService, readonly string[]> = {
+  spotify: ['spotify'],
+  youtube: ['vnd.youtube', 'youtube'],
+  'youtube-music': ['youtubemusic'],
+  'apple-music': ['music', 'itmss'],
 };
 
 export function streamServiceName(service: StreamService): string {
@@ -168,10 +175,7 @@ export function decideStreamNavigation(url: string, service: StreamService): Str
   if (!trimmed) return 'block';
   if (/^about:(blank|srcdoc)$/i.test(trimmed)) return 'allow';
   if (isExternalScheme(trimmed, service)) return 'external';
-  if (/^intent:/i.test(trimmed)) {
-    const haystack = trimmed.toLowerCase();
-    return INTENT_TOKENS[service].some((token) => haystack.includes(token)) ? 'external' : 'block';
-  }
+  if (/^intent:/i.test(trimmed)) return decideIntentNavigation(trimmed, service);
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
@@ -398,6 +402,72 @@ function appleEmbedUrl(page: string): string {
   const url = new URL(page);
   url.hostname = 'embed.music.apple.com';
   return url.toString();
+}
+
+/**
+ * An Android intent is only ever `external`, so it must be the service's own
+ * app. Fields are read one by one rather than searched, because a substring
+ * match would accept `package=com.other.app` next to a planted `scheme`.
+ */
+function decideIntentNavigation(url: string, service: StreamService): StreamNavigation {
+  const fields = readIntentFields(url);
+  if (fields === null || fields.component) return 'block';
+  const packages = fields.values('package');
+  const schemes = fields.values('scheme');
+  if (packages.length) {
+    const allowed = INTENT_PACKAGES[service];
+    return packages.every((name) => allowed.includes(name)) ? 'external' : 'block';
+  }
+  if (schemes.length) return schemes.every((name) => INTENT_SCHEMES[service].includes(name)) ? 'external' : 'block';
+  return 'block';
+}
+
+interface IntentFields {
+  component: boolean;
+  values: (key: string) => string[];
+}
+
+/**
+ * Android writes the fragment as `Intent;key=value;key=value;end`, separated by
+ * `;` with an optional `S.` on typed extras. Parsing those fields one by one
+ * rather than searching the string is the point: a substring match would accept
+ * `package=com.other.app` next to a planted `scheme=spotify`. Nothing is read
+ * past the `end` terminator, so a later field cannot be smuggled in.
+ */
+function readIntentFields(url: string): IntentFields | null {
+  const hash = url.indexOf('#');
+  if (hash < 0) return null;
+  const segments = url.slice(hash + 1).split(';');
+  if (segments[0]?.toLowerCase() !== 'intent') return null;
+  let component = false;
+  const groups = new Map<string, string[]>();
+  for (const segment of segments.slice(1)) {
+    const split = segment.indexOf('=');
+    if (split < 0) {
+      if (segment.toLowerCase() === 'end') break;
+      continue;
+    }
+    const name = segment.slice(0, split).replace(/^S\./, '').toLowerCase();
+    const value = decodeField(segment.slice(split + 1));
+    if (name === 'component') {
+      component = true;
+      continue;
+    }
+    if (name !== 'package' && name !== 'scheme') continue;
+    if (!value) continue;
+    const group = groups.get(name);
+    if (group) group.push(value);
+    else groups.set(name, [value]);
+  }
+  return { component, values: (key) => groups.get(key) ?? [] };
+}
+
+function decodeField(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return '';
+  }
 }
 
 function isExternalScheme(url: string, service: StreamService): boolean {

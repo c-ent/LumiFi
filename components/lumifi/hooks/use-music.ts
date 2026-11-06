@@ -32,10 +32,17 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
   const loadedKey = useRef<string | null>(playlist[0]?.key ?? null);
   const playingRef = useRef(false);
   const fadeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The web preload effect reads these from the ref rather than its deps, so a
+  // volume drag does not re-run it and rebuild the media element on every tick.
+  const levelRef = useRef({ volume, gain, loop });
 
   useEffect(() => {
     playingRef.current = status.playing;
   }, [status.playing]);
+
+  useEffect(() => {
+    levelRef.current = { volume, gain, loop };
+  }, [gain, loop, volume]);
 
   // A file can disappear outside the app (deleted, or a reclaimed copy). The
   // check is synchronous and native, so it is cached per URI and invalidated
@@ -109,6 +116,10 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
   // it only happens on an untouched player, so a track already playing or
   // part-way through is left alone. Native players stream progressively on
   // their own, so this is web only.
+  //
+  // The deps are `entry` and `player` alone. A drag on the volume slider used
+  // to re-run this effect on every tick and call `replace` again, which builds
+  // a fresh media element and refetches the track on each step of the drag.
   useEffect(() => {
     if (Platform.OS !== 'web' || !entry) return undefined;
     let cancelled = false;
@@ -118,13 +129,14 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
       player.replace(entry.uri);
       // A fresh element starts at full volume with loop unset, so both have to
       // be reapplied here rather than by the effects above, which already ran.
-      player.volume = Math.max(0, Math.min(1, volume * gain));
-      player.loop = loop;
+      const { volume: latestVolume, gain: latestGain, loop: latestLoop } = levelRef.current;
+      player.volume = Math.max(0, Math.min(1, latestVolume * latestGain));
+      player.loop = latestLoop;
     });
     return () => {
       cancelled = true;
     };
-  }, [entry, gain, loop, player, volume]);
+  }, [entry, player]);
 
   const nextTrack = useCallback(() => stepTo(1), [stepTo]);
   const prevTrack = useCallback(() => stepTo(-1), [stepTo]);

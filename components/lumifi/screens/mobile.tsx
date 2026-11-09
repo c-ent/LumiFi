@@ -13,7 +13,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import { useKeyboardInset } from '@/components/lumifi/hooks/use-keyboard-inset';
 import { useLumiFi } from '@/components/lumifi/logic';
-import { formatTime, MODE_LABEL, TimerMode } from '@/components/lumifi/theme';
+import { formatTime, hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/lumifi/theme';
 import { FillGradient } from '@/components/lumifi/features/background/fill-gradient';
 import { RainOverlay } from '@/components/lumifi/features/background/rain';
 import { Candle } from '@/components/lumifi/features/clock/candle';
@@ -71,9 +71,12 @@ export function MobileLumiFi() {
   const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
   const playerTop = insets.top + 72;
   const fittedSheet = height - playerTop - playerReserve - 8;
+  // The sheet rises above the keyboard, so its open height is also capped to the
+  // space between the status bar and the keyboard.
+  const available = Math.max(collapsed, height - keyboard - insets.top - 8);
   const expanded = playerReserve > 0
-    ? Math.min(height * 0.84, 760, Math.max(collapsed, fittedSheet))
-    : Math.min(height * 0.84, 760);
+    ? Math.min(height * 0.84, 760, available, Math.max(collapsed, fittedSheet))
+    : Math.min(height * 0.84, 760, available);
 
   // Any touch counts as activity: record the time and bring the UI back.
   const poke = useCallback(() => {
@@ -114,8 +117,8 @@ export function MobileLumiFi() {
     : 'Stretch, sip some water, look away';
   // How many of the four little candles under the timer are lit.
   const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
-  // Dot on the Quests tab while any daily quest is unfinished (goals: 4 sessions, 60 min, 1 task).
-  const questOpen = lamp.day.sessions < 4 || lamp.day.minutes < 60 || lamp.day.tasks < 1;
+  // Dot on the Quests tab while any daily quest is unclaimed.
+  const questOpen = hasOpenQuests(lamp.day);
 
   // Tapping the active tab closes the sheet; any other tab switches to it and opens.
   const openTab = (next: SheetTab) => {

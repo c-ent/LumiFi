@@ -723,12 +723,13 @@ function LumiFiSession({
         });
       },
       removeOwnTrack: (id) => {
-        setSaved((current) => {
-          if (!current) return current;
-          const track = current.ownTracks.find((item) => item.id === id);
-          if (track) deleteOwnTrackFile(track.uri);
-          return { ...current, ownTracks: current.ownTracks.filter((item) => item.id !== id) };
-        });
+        // Delete the file once, here, not inside the updater: React may run an
+        // updater twice, and a file-system call is a side effect.
+        const track = savedRef.current.ownTracks.find((item) => item.id === id);
+        if (track) deleteOwnTrackFile(track.id);
+        setSaved((current) => (
+          current ? { ...current, ownTracks: current.ownTracks.filter((item) => item.id !== id) } : current
+        ));
       },
       // Validate a pasted link, check it isn't private, and save it. Returns a
       // string code the UI turns into a message. Re-reads `savedRef` after the

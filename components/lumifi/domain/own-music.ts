@@ -99,22 +99,42 @@ async function copyIntoFolder(
   }
 }
 
-/** Deletes a track's file. A file already gone is not an error. */
-export function deleteOwnTrackFile(uri: string): void {
-  if (!ownTracksSupported()) return;
+/**
+ * The file for a saved track, rebuilt from its id. The stored `uri` is an
+ * absolute path that can go stale (iOS changes the app container path on
+ * update), so the id, which is the file's name, is the source of truth. An id
+ * is data read back from storage, so only a plain file name is accepted: no
+ * separators, no `.` or `..`. Returns null on web or for an unsafe id.
+ */
+function ownTrackFile(id: string): File | null {
+  if (!ownTracksSupported()) return null;
+  if (!/^[A-Za-z0-9._-]+$/.test(id) || id === '.' || id === '..') return null;
+  return new File(new Directory(Paths.document, FOLDER), id);
+}
+
+/** The current URI for a saved track's file, or null when it cannot be built. */
+export function ownTrackUri(id: string): string | null {
   try {
-    const file = new File(uri);
-    if (file.exists) file.delete();
+    return ownTrackFile(id)?.uri ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Deletes a track's file by id. A file already gone is not an error. */
+export function deleteOwnTrackFile(id: string): void {
+  try {
+    const file = ownTrackFile(id);
+    if (file?.exists) file.delete();
   } catch {
     // A hand-edited or already-removed path: nothing to delete.
   }
 }
 
-/** Whether the file behind a saved entry still exists. */
-export function ownTrackExists(uri: string): boolean {
-  if (!ownTracksSupported()) return false;
+/** Whether the file behind a saved track id still exists. */
+export function ownTrackExists(id: string): boolean {
   try {
-    return new File(uri).exists;
+    return ownTrackFile(id)?.exists ?? false;
   } catch {
     return false;
   }

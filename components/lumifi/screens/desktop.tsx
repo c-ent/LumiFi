@@ -137,7 +137,7 @@ export function DesktopLumiFi() {
   const startLabel = lamp.running ? 'Pause' : lamp.status === 'paused' ? 'Resume' : 'Start';
   const questOpen = lamp.day.sessions < 4 || lamp.day.minutes < 60 || lamp.day.tasks < 1;
   const musicRoom = height - insets.top - insets.bottom - 104;
-  const musicHeight = Math.min(620, Math.max(0, musicRoom));
+  const musicHeight = Math.min(720, Math.max(0, musicRoom));
 
   return (
     <View style={[styles.root, { backgroundColor: theme.b1 }]} onTouchStart={poke}>
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
   // Caps at the space above the dock and scrolls only when the content is taller.
   progressScroll: {
     width: '100%',
-    maxWidth: 1160,
+    maxWidth: 900,
     maxHeight: '100%',
     minHeight: 0,
     flexGrow: 0,
@@ -547,29 +547,29 @@ const styles = StyleSheet.create({
   },
   // Daily quests are one column, so the card stays narrower than Progress.
   questsScroll: {
-    maxWidth: 560,
+    maxWidth: 450,
   },
   // One column, the width of the task list.
   tasksScroll: {
-    maxWidth: 580,
+    maxWidth: 470,
   },
   progressCard: {
     width: '100%',
     ...glassPanel,
     ...rounded(radius.sheet),
-    paddingTop: 30,
-    paddingHorizontal: 34,
-    paddingBottom: 30,
+    paddingTop: 18,
+    paddingHorizontal: 22,
+    paddingBottom: 18,
   },
   board: {
     flexDirection: 'row',
-    gap: 24,
+    gap: 14,
     alignItems: 'flex-start',
   },
   boardCol: {
     flex: 1,
     minWidth: 0,
-    gap: 18,
+    gap: 11,
   },
   // The column holding the chart takes the extra width. The calendar needs less.
   boardWide: {

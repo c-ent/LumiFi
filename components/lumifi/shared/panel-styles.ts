@@ -11,8 +11,7 @@ export const glassPanel: ViewStyle = {
   ...(Platform.OS === 'web' ? { backdropFilter: 'blur(18px)' } : null),
 };
 
-// The panels were one file with one StyleSheet. They are split by feature now,
-// but the style keys are still shared, so the sheet stays in one place.
+// Screens and feature files share these keys, so the sheet stays in one place.
 export const panelStyles = StyleSheet.create({
   addRow: {
     flexDirection: 'row',
@@ -526,11 +525,11 @@ export const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 22,
+    marginBottom: 18,
   },
   panelTitle: {
     color: colors.textPrimary,
     fontFamily: fonts.timeMedium,
-    fontSize: 26,
+    fontSize: 22,
   },
 });

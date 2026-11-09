@@ -737,8 +737,10 @@ function LumiFiSession({
         if (!parsed.ok) return parsed.reason;
         // One saved link at a time: a new link replaces the old one.
         const isSaved = (links: StreamLink[]) => links.length === 1 && links[0].id === parsed.link.id;
-        if (isSaved(savedRef.current.streamLinks)) return 'duplicate';
+        // Count this submission before the duplicate check, so re-submitting the
+        // saved link also supersedes any older check still in flight.
         const requestId = ++streamRequest.current;
+        if (isSaved(savedRef.current.streamLinks)) return 'duplicate';
         const visibility = await checkStreamLink(parsed.link);
         // A newer submission started while this check ran: drop this result.
         if (requestId !== streamRequest.current) return 'stale';

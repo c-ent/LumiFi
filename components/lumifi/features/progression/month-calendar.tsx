@@ -27,13 +27,16 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
   // Today starts picked, so the panel opens on a day's numbers instead of the
   // "tap a day" hint. Stepping to another month finds no cell for that key and
   // falls back to the hint.
-  const [selected, setSelected] = useState<string | null>(() => calendarKey(now));
+  // Only a user's pick is stored; with none, the selection follows `now`, so it
+  // stays on today if the provider updates the clock or the day rolls over.
+  const [picked, setPicked] = useState<string | null>(null);
+  const selected = picked ?? calendarKey(now);
   // A quiet day's line is drawn once per view and redrawn on every tap, so the
   // detail line is not the same sentence every time an empty day is picked.
   const [quiet, setQuiet] = useState(() => quietDayLine(Math.random));
 
   const pick = (key: string) => {
-    setSelected(key);
+    setPicked(key);
     setQuiet(quietDayLine(Math.random));
   };
 

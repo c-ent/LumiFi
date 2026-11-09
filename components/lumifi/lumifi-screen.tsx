@@ -45,7 +45,7 @@ export function LumiFiScreen() {
   });
   // useWindowDimensions re-renders on resize and device rotation.
   const { width, height } = useWindowDimensions();
-  const layout =layoutForWindow(width, height, Platform.OS === 'web' ? 'web' : 'native');
+  const layout = layoutForWindow(width, height, Platform.OS === 'web' ? 'web' : 'native');
 
   if (!isClient) {
     return <View style={{ flex: 1, backgroundColor: colors.bgBase }} />;

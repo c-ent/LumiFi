@@ -118,7 +118,7 @@ interface LumiFiContextValue {
   removeOwnTrack: (id: string) => void;
   streamLinks: StreamLink[];
   activeStreamId: string | null;
-  addStreamLink: (raw: string) => Promise<'added' | 'empty' | 'unsupported' | 'private' | 'duplicate'>;
+  addStreamLink: (raw: string) => Promise<'added' | 'empty' | 'unsupported' | 'private' | 'duplicate' | 'stale'>;
   removeStreamLink: (id: string) => void;
   openStream: (id: string) => void;
   closeStream: () => void;
@@ -243,6 +243,8 @@ function LumiFiSession({
   const chimeAt = useRef(0);
   const activeStreamIdRef = useRef<string | null>(null);
   const heldForEmbed = useRef(false);
+  // Counts addStreamLink submissions so only the latest one may save.
+  const streamRequest = useRef(0);
   const resumeWhenActive = useRef(false);
   const leftForStream = useRef(false);
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
@@ -719,7 +721,9 @@ function LumiFiSession({
       removeOwnTrack: (id) => {
         // Delete the file once, here, not inside the updater: React may run an
         // updater twice, and a file-system call is a side effect.
-        const track = savedRef.current.ownTracks.find((item) => item.id === id);
+        // Read the rendered state the remove button came from; `savedRef` is only
+        // synced in an effect and can lag a render behind.
+        const track = saved.ownTracks.find((item) => item.id === id);
         if (track) deleteOwnTrackFile(track.id);
         setSaved((current) => (
           current ? { ...current, ownTracks: current.ownTracks.filter((item) => item.id !== id) } : current
@@ -734,7 +738,10 @@ function LumiFiSession({
         // One saved link at a time: a new link replaces the old one.
         const isSaved = (links: StreamLink[]) => links.length === 1 && links[0].id === parsed.link.id;
         if (isSaved(savedRef.current.streamLinks)) return 'duplicate';
+        const requestId = ++streamRequest.current;
         const visibility = await checkStreamLink(parsed.link);
+        // A newer submission started while this check ran: drop this result.
+        if (requestId !== streamRequest.current) return 'stale';
         if (visibility === 'private') return 'private';
         const current = savedRef.current;
         if (isSaved(current.streamLinks)) return 'duplicate';

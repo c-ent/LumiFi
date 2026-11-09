@@ -62,6 +62,8 @@ export function StreamBlock({
         setNotice(null);
         return;
       }
+      // A newer paste superseded this one; its own result will report.
+      if (result === 'stale') return;
       setNotice(NOTICE[result]);
     });
   };

@@ -19,6 +19,8 @@ Status: Expo SDK 58 app. Commands below match this repo.
 - Test on an EAS development build, not Expo Go. Background audio and notifications behave differently there.
 
 ## Conventions the code does not show
+- Timer: store `endAt` and compute `remaining = endAt - now`. Do not decrement a counter, because background JS timers are throttled.
+- Session end: keep exactly one scheduled local notification at `endAt`, and cancel and reschedule it on every pause, resume, reset, skip and mode change. Do not add a foreground service for the countdown. The only one is the media playback service that `expo-audio` uses.
 - Audio: use `expo-audio`, not `expo-av` (removed). Do not request microphone permission, LumiFi never records. A pasted streaming link plays in that service's own player and never enters `expo-audio`.
 - Navigation: import from `expo-router`, not `@react-navigation/*`, which fails at bundle time since SDK 56.
 - Packages: run `npx expo install`, not `npm install`, for Expo packages so versions match the SDK.

@@ -288,7 +288,7 @@ export function DesktopLumiFi() {
           pointerEvents="box-none"
           style={[styles.wideWrap, styles.progressWrap, { top: insets.top + 20, bottom: insets.bottom + 84 }]}
         >
-          <ScrollView style={[styles.progressScroll, panel === 'quests' && styles.questsScroll, panel === 'tasks' && styles.tasksScroll]}>
+          <ScrollView keyboardShouldPersistTaps="handled" style={[styles.progressScroll, panel === 'quests' && styles.questsScroll, panel === 'tasks' && styles.tasksScroll]}>
             <View style={styles.progressCard}>
               <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
               {panel === 'progress' ? <ProgressBoard /> : panel === 'quests' ? <QuestsBoard /> : <TaskList />}

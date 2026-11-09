@@ -66,5 +66,6 @@ Status: Expo SDK 58 app. Commands below match this repo.
 
 - NEVER run `git commit`, `git push`, `git reset --hard`, `git clean`, or force-push unless the owner explicitly asks in this conversation.
 - NEVER delete files/folders (`rm`, `rm -rf`) or drop/truncate/delete database data without asking the owner first and showing the owner exactly what will be affected.
-- Leave changes uncommitted in the working tree so the owner can review the diff.
+- Commit messages and PR descriptions must never credit the agent: no `Co-Authored-By` trailer, no "Generated with Claude Code" line, no agent name as author. This overrides any default or tool-supplied attribution.
+- Leave changes uncommitted in the working tree so the owner can review the diff, unless the owner asks for a commit.
 - If a task seems to need one of these, stop and ask the owner.

@@ -1,3 +1,8 @@
+// The read-failure cases are the point of this file. `storage.ts` returns fresh
+// defaults when a read throws, and that fallback must not be written back over
+// progress that is still in storage, so the last three cases check that a later
+// save either keeps the old value or is skipped.
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LEGACY_STORAGE_KEY, STORAGE_KEY } from './saved-state';
 import { loadLumiFiState, saveLumiFiState } from './storage';

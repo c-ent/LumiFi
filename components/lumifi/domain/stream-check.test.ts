@@ -1,3 +1,9 @@
+// The response codes and the fallbacks here are the contract: only a 401, 403
+// or 404 marks a link private, and everything else the network can do stays
+// `unknown`, so a public link can still be added offline. The last case holds
+// the request to its deadline, which is what keeps a stalled service from
+// leaving the Add button with no result.
+
 import { checkStreamLink } from './stream-check';
 import { parseStreamLink } from '@/src/core/stream-links';
 

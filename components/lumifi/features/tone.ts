@@ -1,9 +1,13 @@
 import { colors } from '@/src/theme/tokens';
 import { useLumiFi } from '../logic';
 
+// The three colors a button/panel needs to match the current layout's theme.
 export interface Tone {
+  /** Highlight color: active icons, progress bars, outlines. */
   accent: string;
+  /** Text/icon color to use ON TOP of a filled accent background. */
   ink: string;
+  /** Fill for primary buttons. */
   solid: string;
 }
 

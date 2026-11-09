@@ -19,14 +19,22 @@ import { openStreamEmbed, StreamStage, streamCardHeight } from '@/components/lum
 import { SessionEndCard } from '@/components/lumifi/features/timer/session-end-card';
 import { ClockIcon, FlameIcon, ResetIcon, SkipIcon } from '@/components/lumifi/shared/icons';
 
+/**
+ * The tablet layout (window 600-840px wide): a split screen. Left half is the
+ * candle and timer; right half is a scrolling column with tasks, sounds and
+ * quests, so nothing needs a bottom sheet. Same building blocks and the same
+ * "mood" colors as the phone (mobile.tsx), just arranged side by side.
+ */
 export function TabletLumiFi() {
   const lamp = useLumiFi();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const keyboard = useKeyboardInset();
+  // Zen mode, as on the phone: hide the UI after 4s without a touch during focus.
   const [zen, setZen] = useState(false);
   const lastAct = useRef(0);
   const mood = lamp.moodTheme;
+  // Timer digits scale with the window, clamped to 48..72px.
   const timeSize = Math.min(72, Math.max(48, width * 0.08));
 
   const poke = useCallback(() => {
@@ -43,6 +51,7 @@ export function TabletLumiFi() {
     return () => clearInterval(id);
   }, [lamp.mode, lamp.running, lamp.zenOpt]);
 
+  // Room to leave at the top of the left column for a playing stream embed.
   const embed = openStreamEmbed(lamp.streamLinks, lamp.activeStreamId);
   const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
 
@@ -70,7 +79,9 @@ export function TabletLumiFi() {
       />
       <RainOverlay amount={lamp.mix.rain} />
 
+      {/* Two columns side by side (flexDirection: 'row'). */}
       <View style={[styles.split, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        {/* Left: level, candle, time, mode tabs and start/reset/skip. */}
         <ScrollView
           style={styles.stage}
           contentContainerStyle={[styles.stageContent, playerReserve > 0 ? { paddingTop: playerReserve } : null]}
@@ -102,6 +113,8 @@ export function TabletLumiFi() {
           </Pressable>
           <Text style={[styles.time, { fontSize: timeSize }]}>{formatTime(lamp.remaining)}</Text>
           <Text style={styles.phase}>{phase}</Text>
+          {/* No onPress here: the task list is already visible in the right
+              column, so the chip is a plain label on tablet. */}
           <FocusLine
             mode={lamp.mode === 'focus' ? (lamp.activeTask ? 'task' : 'empty') : 'break'}
             text={taskLine}
@@ -135,6 +148,8 @@ export function TabletLumiFi() {
           </View>
         </ScrollView>
 
+        {/* Right: everything the phone keeps in its bottom sheet, stacked.
+            Extra bottom padding lifts the content above the on-screen keyboard. */}
         <ScrollView
           style={[styles.side, { opacity: zen ? 0 : 1 }]}
           pointerEvents={zen ? 'none' : 'auto'}
@@ -152,6 +167,7 @@ export function TabletLumiFi() {
         </ScrollView>
       </View>
 
+      {/* Floating stream player over the left column. */}
       <StreamStage style={[styles.stream, { top: insets.top + 8, width: Math.min(420, width * 0.48) }]} />
 
       {lamp.ending ? (

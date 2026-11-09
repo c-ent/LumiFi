@@ -6,14 +6,31 @@ import { useLumiFi } from '@/components/lumifi/logic';
 import { useTone } from '@/components/lumifi/features/tone';
 import { CalendarIcon, ChevronIcon, CloseIcon, PencilIcon, TargetIcon, TrashIcon } from '@/components/lumifi/shared/icons';
 
+/**
+ * The task list: add a task (with an optional due date), check it off, press the
+ * title or the target icon to focus it, edit, delete, and open its subtasks.
+ *
+ * This file only DISPLAYS tasks and sends actions to the context
+ * (`lamp.addTask`, `lamp.toggleTask`, ...). The rules (checking the last
+ * subtask checks the parent, only the parent counts for the daily quest, ...)
+ * live in src/core/tasks.ts. Its UI-only state is: the draft text/date, which
+ * row is being edited, and the subtask drafts.
+ */
+
+// Date shown on a task, in the user's own locale ("Nov 9, 2026").
 const dueFormatter = new Intl.DateTimeFormat(undefined, {
   month: 'short',
   day: 'numeric',
   year: 'numeric',
 });
 
+// hitSlop grows the tappable area of small icon buttons past their drawn size,
+// so they're easier to hit with a thumb without changing the layout.
 const iconSlop = { top: 10, bottom: 10, left: 6, right: 6 };
 
+// Web only: style for the invisible <input type="date">. React Native has no
+// date picker, so on web we keep a real (hidden) browser date input and open it
+// from our own button. `colorScheme: 'dark'` makes the popup dark.
 const hiddenDate: React.CSSProperties = {
   position: 'absolute',
   left: 0,
@@ -27,11 +44,16 @@ const hiddenDate: React.CSSProperties = {
   colorScheme: 'dark',
 };
 
+// "2026-11-09" -> "Nov 9, 2026". Built from parts (not `new Date(iso)`) because
+// parsing an ISO date string treats it as UTC midnight, which can show the
+// previous day in timezones behind UTC.
 function formatDue(iso: string): string {
   const [year, month, day] = iso.split('-').map(Number);
   return dueFormatter.format(new Date(year, month - 1, day));
 }
 
+// Open the browser's date popup. `showPicker()` is the modern way; older
+// browsers fall back to focus + click.
 function openPicker(input: HTMLInputElement | null) {
   if (!input) return;
   try {
@@ -46,6 +68,8 @@ function openPicker(input: HTMLInputElement | null) {
   input.click();
 }
 
+// Color of a due date: dim placeholder when empty, orange when overdue on a task
+// row, otherwise muted (row) or accent (the add form).
 function dateColor(value: string, overdue: boolean, accent: string, compact: boolean): string {
   if (!value) return fade(colors.textPrimary, 0.45);
   if (compact && overdue) return colors.flame2;
@@ -53,6 +77,10 @@ function dateColor(value: string, overdue: boolean, accent: string, compact: boo
   return accent;
 }
 
+// The due-date field. Two different implementations, because the platforms
+// differ: web gets a calendar button over a hidden native date input; Android/iOS
+// get a plain text field where the user types YYYY-MM-DD.
+// `compact` is the small version used inside a task row.
 function DueControl({
   value,
   onChange,
@@ -69,6 +97,8 @@ function DueControl({
   overdue?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // Native only: while typing we show the half-typed `draft`, and only send it
+  // up (onChange) when editing ends, so a partial date is never saved.
   const [draft, setDraft] = useState(value);
   const [focused, setFocused] = useState(false);
   const shown = value && parseDueDate(value) ? formatDue(value) : '';
@@ -111,6 +141,8 @@ function DueControl({
           <CalendarIcon size={compact ? 14 : 16} color={fade(colors.textPrimary, 0.45)} />
         )}
       </Pressable>
+      {/* The real date input: invisible and not focusable by Tab. The button
+          above opens it with openPicker(). */}
       <input
         ref={inputRef}
         type="date"
@@ -124,6 +156,8 @@ function DueControl({
   );
 }
 
+// A hand-drawn checkbox (React Native has none). The tick is a View with two
+// borders rotated 45deg. `small` is the subtask size.
 function CheckBox({ on, accent, label, small = false, onPress }: {
   on: boolean;
   accent: string;
@@ -171,6 +205,7 @@ function FocusButton({ on, accent, label, onPress }: {
   );
 }
 
+// A small icon-only button (edit, delete). `label` is what screen readers say.
 function IconButton({ label, onPress, children }: {
   label: string;
   onPress: () => void;
@@ -192,15 +227,20 @@ function IconButton({ label, onPress, children }: {
 export function TaskList({ mobile = false }: { mobile?: boolean }) {
   const lamp = useLumiFi();
   const tone = useTone(mobile);
-  const [text, setText] = useState('');
-  const [date, setDate] = useState('');
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [subDraft, setSubDraft] = useState<Record<number, string>>({});
-  const [focusSub, setFocusSub] = useState<number | null>(null);
+  const [text, setText] = useState(''); // new-task title being typed
+  const [date, setDate] = useState(''); // new-task due date being chosen
+  const [editingId, setEditingId] = useState<number | null>(null); // row in edit mode
+  const [subDraft, setSubDraft] = useState<Record<number, string>>({}); // per-task subtask draft
+  const [focusSub, setFocusSub] = useState<number | null>(null); // which subtask field to autofocus
+  // Refs, not state: the edit field's value changes on every keystroke and we
+  // don't want a re-render for each one. They also give blur/Enter handlers the
+  // latest value and let `commitEdit` ignore a second event for the same edit.
   const editingRef = useRef<number | null>(null);
   const editValue = useRef('');
   const accent = tone.accent;
+  // Tasks and subtasks are one flat list; subtasks point at a parent by `parentId`.
   const parents = lamp.tasks.filter((task) => task.parentId == null);
+  // Open tasks first, finished ones sink to the bottom.
   const ordered = parents.filter((task) => !task.done).concat(parents.filter((task) => task.done));
   const hasOpen = parents.some((task) => !task.done);
 
@@ -210,6 +250,9 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
     setEditingId(id);
   }
 
+  // Finish an edit. Pressing Enter fires both onSubmitEditing and onBlur, so the
+  // `editingRef` check makes sure only the first one counts. Escape calls this
+  // with keep=false to cancel without saving.
   function commitEdit(id: number, value: string, keep: boolean) {
     if (editingRef.current !== id) return;
     editingRef.current = null;
@@ -266,7 +309,9 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
           {ordered.map((task) => {
             const subs = lamp.tasks.filter((item) => item.parentId === task.id);
             const doneCount = subs.filter((item) => item.done).length;
+            // Overdue only changes the date's color. It never affects rewards.
             const overdue = isOverdue(task.date, lamp.now);
+            // "Active" = the task the timer's sessions count toward.
             const active = lamp.activeTask?.id === task.id && !task.done;
             return (
               <View
@@ -283,6 +328,8 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                     label={task.done ? `Mark ${task.text} not done` : `Mark ${task.text} done`}
                     onPress={() => lamp.toggleTask(task.id)}
                   />
+                  {/* Title: a text field while editing, otherwise a button that
+                      focuses/unfocuses the task. */}
                   {editingId === task.id ? (
                     <TextInput
                       defaultValue={task.text}
@@ -321,6 +368,8 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                       label={task.date ? `Change due date for ${task.text}` : `Add a due date to ${task.text}`}
                     />
                   )}
+                  {/* Subtask toggle: "+ Sub" when there are none, "2/3" when there are.
+                      Opening it also asks the new-subtask field to take focus. */}
                   <Pressable
                     accessibilityRole="button"
                     accessibilityState={{ expanded: task.open }}
@@ -356,6 +405,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                     <TrashIcon size={14} color={fade(colors.textPrimary, 0.45)} />
                   </IconButton>
                 </View>
+                {/* Expanded subtasks, with their own add field. */}
                 {task.open ? (
                   <View style={styles.subs}>
                     {subs.map((sub) => (

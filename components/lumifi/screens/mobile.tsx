@@ -32,20 +32,41 @@ import { openStreamEmbed, StreamStage, streamCardHeight } from '@/components/lum
 import { SessionEndCard } from '@/components/lumifi/features/timer/session-end-card';
 import { BarsIcon, ClockIcon, FlameIcon, MusicIcon, ResetIcon, SkipIcon, StarIcon, TaskIcon, TimerIcon } from '@/components/lumifi/shared/icons';
 
+/**
+ * The phone layout (window under 600px wide): a big candle, the time, and a
+ * bottom sheet that slides up with the controls.
+ *
+ * Layers, back to front: rain, gradient background, top bar (level + streak),
+ * the candle stage, the floating stream player, the bottom sheet, then the
+ * session-end card and toast on top. `lamp` is the app context (logic.tsx).
+ *
+ * The tablet (tablet.tsx) and desktop (desktop.tsx) screens follow the same
+ * recipe with a different arrangement; phone/tablet use "moods", desktop
+ * uses "scenes".
+ */
+
+// The sheet shows one tab at a time.
 type SheetTab = 'tasks' | 'sounds' | 'quests' | 'stats' | 'timer';
 
 export function MobileLumiFi() {
   const lamp = useLumiFi();
+  // Safe-area insets = the notch / status bar / home-indicator sizes in px.
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  // How far the on-screen keyboard covers the bottom, so the sheet can rise above it.
   const keyboard = useKeyboardInset();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); // sheet expanded?
   const [tab, setTab] = useState<SheetTab>('tasks');
+  // "Zen": while focusing, the UI fades away after 4s of no touches.
   const [zen, setZen] = useState(false);
-  const lastAct = useRef(0);
+  const lastAct = useRef(0); // timestamp of the last touch
+  // Reanimated shared value driving the sheet's slide (runs on the UI thread).
   const sheetOffset = useSharedValue(0);
   const mood = lamp.moodTheme;
+  // The sheet is always fully built at `expanded` height and slid down by
+  // (expanded - collapsed) px, so only the top `collapsed` px peek out.
   const collapsed = 214 + insets.bottom;
+  // A playing stream embed needs room at the top; shrink the stage and sheet to fit.
   const embed = openStreamEmbed(lamp.streamLinks, lamp.activeStreamId);
   const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
   const playerTop = insets.top + 72;
@@ -54,15 +75,19 @@ export function MobileLumiFi() {
     ? Math.min(height * 0.84, 760, Math.max(collapsed, fittedSheet))
     : Math.min(height * 0.84, 760);
 
+  // Any touch counts as activity: record the time and bring the UI back.
   const poke = useCallback(() => {
     lastAct.current = Date.now();
     setZen(false);
   }, []);
 
+  // Slide the sheet up/down whenever it opens, closes or resizes.
   useEffect(() => {
     sheetOffset.set(withTiming(open ? 0 : expanded - collapsed, { duration: 380 }));
   }, [collapsed, expanded, open, sheetOffset]);
 
+  // Zen timer: check 2.5x a second whether to hide the UI. It only hides during
+  // a running focus session, with the setting on and the sheet closed.
   useEffect(() => {
     lastAct.current = Date.now();
     const id = setInterval(() => {
@@ -75,19 +100,24 @@ export function MobileLumiFi() {
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: sheetOffset.get() }],
   }));
+  // idle = nothing started; "paused" is not idle (it has time already spent).
   const idle = lamp.status === 'idle';
   const startLabel = lamp.running
     ? 'Pause'
     : idle
       ? (lamp.mode === 'focus' ? 'Light the candle' : 'Start break')
       : 'Resume';
+  // "Focus · 2 of 4": every 4th focus session leads to a long break.
   const phase = lamp.mode === 'focus' ? `Focus · ${(lamp.cycle % 4) + 1} of 4` : MODE_LABEL[lamp.mode];
   const taskLine = lamp.mode === 'focus'
     ? (lamp.activeTask?.text ?? 'Pick a task to focus on')
     : 'Stretch, sip some water, look away';
+  // How many of the four little candles under the timer are lit.
   const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
+  // Dot on the Quests tab while any daily quest is unfinished (goals: 4 sessions, 60 min, 1 task).
   const questOpen = lamp.day.sessions < 4 || lamp.day.minutes < 60 || lamp.day.tasks < 1;
 
+  // Tapping the active tab closes the sheet; any other tab switches to it and opens.
   const openTab = (next: SheetTab) => {
     poke();
     if (open && tab === next) setOpen(false);
@@ -98,6 +128,7 @@ export function MobileLumiFi() {
   };
 
   return (
+    // onTouchStart fires for every touch anywhere, which is how zen mode notices activity.
     <View style={[styles.root, { backgroundColor: mood.bgBase }]} onTouchStart={poke}>
       <RainOverlay amount={lamp.mix.rain} />
       <FillGradient
@@ -109,6 +140,9 @@ export function MobileLumiFi() {
         ]}
       />
 
+      {/* Top bar: level ring (opens Stats) and streak / minutes-today pills.
+          Hidden elements also get pointerEvents="none" so invisible buttons
+          can't be tapped by accident. */}
       <View style={[styles.top, { paddingTop: insets.top + 12, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
         <Pressable accessibilityRole="button" accessibilityLabel="Open stats" style={styles.levelBtn} onPress={() => openTab('stats')}>
           <LevelRing progress={lamp.xpInLevel / lamp.xpNeeded} color={mood.accent} level={lamp.level} />
@@ -123,10 +157,13 @@ export function MobileLumiFi() {
         </View>
       </View>
 
+      {/* While the sheet is open, tapping the dimmed area behind it closes it. */}
       {open ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Close panel" onPress={() => { poke(); setOpen(false); }} style={styles.backdrop} />
       ) : null}
 
+      {/* Stage: the candle IS the start/pause button. Bottom padding keeps it
+          clear of the collapsed sheet. */}
       <View style={[styles.stage, { paddingBottom: collapsed + 8, paddingTop: playerReserve }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={startLabel} style={styles.candleBtn} onPress={lamp.toggle}>
           <Candle
@@ -150,6 +187,7 @@ export function MobileLumiFi() {
           zen={zen}
           onPress={lamp.mode === 'focus' ? () => openTab('tasks') : undefined}
         />
+        {/* Four mini candles = progress through the 4-session cycle. */}
         <View style={styles.pips}>
           {[0, 1, 2, 3].map((index) => (
             <View key={index} style={styles.miniCandle}>
@@ -160,8 +198,12 @@ export function MobileLumiFi() {
         </View>
       </View>
 
+      {/* Playing Spotify/YouTube/Apple Music embed floats near the top. It lives
+          here (not inside a tab) so closing the sheet doesn't stop the stream. */}
       <StreamStage style={[styles.stream, { top: playerTop }]} />
 
+      {/* Bottom sheet: grab handle, mode tabs, start/reset/skip, dock, and the
+          scrollable tab body. Slid by `sheetStyle`; lifted by `keyboard`. */}
       <Reanimated.View style={[styles.sheet, { height: expanded, bottom: keyboard }, sheetStyle]}>
         <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Collapse controls' : 'Expand controls'} style={styles.grab} onPress={() => { poke(); setOpen((value) => !value); }}>
           <View style={styles.grabBar} />
@@ -194,6 +236,8 @@ export function MobileLumiFi() {
           <ScrollView
             style={styles.body}
             contentContainerStyle={styles.bodyContent}
+            // "handled": a tap on a button while the keyboard is open works on the
+            // first tap, instead of only dismissing the keyboard.
             keyboardShouldPersistTaps="handled"
           >
             {tab === 'tasks' ? <TaskList mobile /> : null}
@@ -205,6 +249,7 @@ export function MobileLumiFi() {
         ) : null}
       </Reanimated.View>
 
+      {/* Gentle end-of-session card, and a short toast for XP / quest messages. */}
       {lamp.ending ? (
         <SessionEndCard
           title={lamp.ending.title}
@@ -226,6 +271,8 @@ export function MobileLumiFi() {
   );
 }
 
+// Small circular XP progress ring with the level number in the middle. Same SVG
+// dash-offset trick as LevelCard; rotated -90deg (ringSpin) to start at the top.
 function LevelRing({ progress, color, level }: { progress: number; color: string; level: number }) {
   const ringRadius = 19;
   const circ = 2 * Math.PI * ringRadius;
@@ -250,6 +297,9 @@ function LevelRing({ progress, color, level }: { progress: number; color: string
   );
 }
 
+// One tab button in the sheet's dock. It recolors the icon passed as `children`
+// (cloneElement injects a `color` prop) so active/inactive state needs no extra
+// icon variants. `dot` draws a small "something here" marker.
 function DockItem({ children, label, active, color, dot, onPress }: { children: React.ReactNode; label: string; active: boolean; color: string; dot?: boolean; onPress: () => void }) {
   return (
     <Pressable

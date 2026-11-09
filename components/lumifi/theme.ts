@@ -1,3 +1,9 @@
+/**
+ * The one import point for components. It re-exports types, colors and a few
+ * core helpers, and defines the screen themes (SCENES for desktop, MOODS for
+ * phone), timer presets and the time formatter. Components import from here
+ * so they never reach into `src/core` directly.
+ */
 import { QUESTS } from '@/src/core/quests';
 import type { DayStats, Task, TimerCfg, TimerMode } from '@/src/core/types';
 import { LEVEL_NAMES, levelInfo } from '@/src/core/xp';
@@ -12,6 +18,7 @@ export { breakWax, colors, fonts, radius, rounded } from '@/src/theme/tokens';
 
 export type SceneId = 'dusk' | 'midnight' | 'forest' | 'ember';
 
+// Volume sliders, each 0..100 (saved as-is; divided by 100 for the players).
 export interface MixLevels {
   music: number;
   rain: number;
@@ -25,6 +32,8 @@ export interface MixLevels {
   waves: number;
 }
 
+// Desktop scene colors: b1-b3 are the three gradient stops (top to bottom),
+// o1-o3 the three drifting orbs, accent the highlight color for the UI.
 export interface SceneTheme {
   id: SceneId;
   name: string;
@@ -37,6 +46,8 @@ export interface SceneTheme {
   accent: string;
 }
 
+// Phone mood colors: background, three flame stops, glow, and the candle art
+// (wax, dish). Moods only change colors, never layout.
 export interface MoodTheme {
   id: MoodId;
   name: string;
@@ -84,13 +95,15 @@ const candleArt = {
 
 const moodNames: Record<MoodId, string> = { amber: 'Amber', moon: 'Moonlit', spirit: 'Spirit' };
 
-export const MOODS: MoodTheme[] = (Object.keys(moods) as MoodId[]).map((id) => ({
+// Merge the base mood tokens with the candle art into the full mood objects.
+export const MOODS: MoodTheme[] =(Object.keys(moods) as MoodId[]).map((id) => ({
   id,
   name: moodNames[id],
   ...moods[id],
   ...candleArt[id],
 }));
 
+// Timer presets in minutes: focus / short break / long break.
 export const PRESETS: TimerCfg[] = [
   { focus: 25, short: 5, long: 15 },
   { focus: 50, short: 10, long: 20 },
@@ -103,6 +116,8 @@ export const MODE_LABEL: Record<TimerMode, string> = {
   long: 'Long break',
 };
 
+// Milliseconds -> "MM:SS". Rounds UP so the display never shows 00:00 while
+// there is still a fraction of a second left.
 export function formatTime(ms: number) {
   const total = Math.max(0, Math.ceil(ms / 1000));
   const minutes = Math.floor(total / 60);

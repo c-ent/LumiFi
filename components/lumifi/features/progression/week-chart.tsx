@@ -7,14 +7,22 @@ import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { useTone } from '@/components/lumifi/features/tone';
 import { progressWide as wide } from '@/components/lumifi/features/progression/wide-styles';
 
+/**
+ * "Last 7 days" bar chart of focus minutes, drawn with plain Views (no chart
+ * library): each bar is a View whose height is proportional to the minutes.
+ * The last bar is today and gets the accent color.
+ */
 export function WeekChart({ mobile = false, wide: desk = false }: { mobile?: boolean; wide?: boolean }) {
   const { days, now } = useLumiFi();
   const tone = useTone(mobile);
+  // Oldest -> newest, including days with 0 minutes, so there are always 7 bars.
   const history = recentDayMinutes(days, now, 7);
+  // Scale to at least 120 min so one short day doesn't fill the whole chart.
   const max = Math.max(120, ...history.map((entry) => entry.minutes));
   const columns = history.map((entry, index) => {
     const label = new Date(entry.at).toLocaleDateString('en', { weekday: 'short' });
     const today = index === history.length - 1;
+    // Minimum 4px so an empty day still shows as a stub, not nothing.
     const height = Math.max(4, (entry.minutes / max) * (desk ? 68 : 86));
     return { entry, label, today, height };
   });

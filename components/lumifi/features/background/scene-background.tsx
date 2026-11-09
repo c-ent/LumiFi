@@ -7,16 +7,27 @@ import { useAnimatedValue } from '@/components/lumifi/hooks/use-animated-value';
 import { useReducedMotion } from '@/components/lumifi/hooks/use-reduced-motion';
 import { useLumiFi } from '@/components/lumifi/logic';
 
+/**
+ * The full-screen backdrop of the desktop scene: a diagonal gradient, three
+ * blurred orbs that drift slowly, a soft pulsing "core" and a dark shade on
+ * top so the UI stays readable. Colors come from the selected scene theme.
+ *
+ * It is purely decorative, so the whole thing ignores touches.
+ */
 export function SceneBackground() {
   const { sceneTheme } = useLumiFi();
+  // Three drift loops with different lengths so the orbs never move in sync.
   const driftA = useLoop(38000);
   const driftB = useLoop(46000);
   const driftC = useLoop(30000);
+  // 0..1 value for the core's breathing. Only moves during a focus session.
   const breathe = useAnimatedValue(0);
   const reduced = useReducedMotion();
   const { running, mode } = useLumiFi();
+  // Measured pixel size, used to draw the SVG gradient (see fill-gradient.tsx).
   const { size, onLayout } = useFillSize();
 
+  // Breathing only while a focus session runs: the scene "pulses" with you.
   useEffect(() => {
     if (!(running && mode === 'focus')) {
       breathe.setValue(0);
@@ -38,7 +49,10 @@ export function SceneBackground() {
   }, [breathe, mode, reduced, running]);
 
   return (
+    // collapsable={false}: on Android, RN may flatten a View that only lays out
+    // children, which would remove the native view `onLayout` needs.
     <View collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout}>
+      {/* Wait for a real size before drawing, otherwise the gradient is 0x0. */}
       {size.width > 0 && size.height > 0 ? (
         <Svg width={size.width} height={size.height}>
           <Defs>
@@ -68,6 +82,8 @@ export function SceneBackground() {
   );
 }
 
+// A back-and-forth loop (0 -> 1 -> 0) turned into an x/y offset in px.
+// Each orb gets its own duration, so the drift looks organic.
 function useLoop(duration: number) {
   const value = useAnimatedValue(0);
   const reduced = useReducedMotion();

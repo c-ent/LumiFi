@@ -7,6 +7,17 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
+/**
+ * The local music player: one `expo-audio` player that walks a playlist of
+ * bundled lofi tracks plus the user's own files.
+ *
+ * Streaming links (Spotify/YouTube/...) never go through here; they play in
+ * that service's own player. See stream-stage.tsx.
+ *
+ * `volume` is the user's slider (0..1). `gain` is a separate multiplier used
+ * only by the session-end "lower" / "fade out" behavior, so the slider value
+ * itself never changes.
+ */
 export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
   // Bundled tracks stay in front, own files after them. `musicTracks` is a
   // module constant, so the playlist only changes when the own list does.

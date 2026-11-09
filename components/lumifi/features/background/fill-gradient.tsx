@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import Svg, { Defs, Rect, Stop, LinearGradient as SvgGradient } from 'react-native-svg';
 
+/**
+ * A gradient that fills its parent. React Native has no CSS `linear-gradient`,
+ * so the gradient is an SVG rectangle sized to the parent's measured pixels.
+ */
+
+// One color stop: `offset` is "0".."1" along the gradient.
 type StopColor = { offset: string; color: string };
 
 // Percentage sizes on react-native-svg stay at the first measurement after a
@@ -15,6 +21,7 @@ export function useFillSize() {
   return { size, onLayout };
 }
 
+// `x2`/`y2` set the gradient direction: default is top to bottom.
 export function FillGradient({ id, stops, x2 = '0', y2 = '1' }: { id: string; stops: StopColor[]; x2?: string; y2?: string }) {
   const { size, onLayout } = useFillSize();
   return (

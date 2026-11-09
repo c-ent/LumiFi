@@ -3,6 +3,15 @@ import React, { createElement, useEffect, useState } from 'react';
 import { AppState, Linking, Pressable, Text, View } from 'react-native';
 import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 
+/**
+ * The web version of the streaming player: a plain <iframe> of the service's
+ * embed page. Metro picks this `.web.tsx` file instead of stream-player.tsx on
+ * web, so callers just import `StreamPlayer` and get the right one. Keep the
+ * props in sync with the native file.
+ */
+
+// Permissions the iframe may use. Autoplay and encrypted-media are needed for
+// the services' players to actually play audio.
 const IFRAME_ALLOW = 'autoplay *; clipboard-write; encrypted-media *; fullscreen *; picture-in-picture *';
 
 export function StreamPlayer({
@@ -20,6 +29,8 @@ export function StreamPlayer({
 }) {
   const [active, setActive] = useState(AppState.currentState === 'active');
   const name = streamServiceName(service);
+  // Some services stay mounted while the tab is hidden so playback continues;
+  // the rest are removed when the page is hidden (matches the native behavior).
   const shown = keepsWebPlaybackWhenHidden(service) || active;
 
   useEffect(() => {
@@ -32,6 +43,7 @@ export function StreamPlayer({
   return (
     <View style={[styles.streamFrame, flush ? styles.streamFlush : null, { height }]}>
       {shown ? (
+        // React Native has no <iframe> component, so build the DOM element directly.
         createElement('iframe', {
           src: embedUrl,
           title: `${name} player`,

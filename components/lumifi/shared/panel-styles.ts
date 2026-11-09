@@ -12,6 +12,11 @@ export const glassPanel: ViewStyle = {
 };
 
 // Screens and feature files share these keys, so the sheet stays in one place.
+// This is the app's "shared CSS file": buttons, inputs, rows, bars, the
+// calendar cells and so on. React Native has no stylesheet cascade or CSS
+// classes, so a style is shared by importing it (usually as `styles`) and
+// putting it in a component's `style` prop. Names are grouped roughly by
+// feature (task*, mix*, month*, stream*).
 export const panelStyles = StyleSheet.create({
   addRow: {
     flexDirection: 'row',

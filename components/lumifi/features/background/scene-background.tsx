@@ -7,6 +7,11 @@ import { useAnimatedValue } from '@/components/lumifi/hooks/use-animated-value';
 import { useReducedMotion } from '@/components/lumifi/hooks/use-reduced-motion';
 import { useLumiFi } from '@/components/lumifi/logic';
 
+const CYCLE_MS = 7000;
+// One breath is (1 - cos) / 2 over the phase: 0 -> 1 -> 0, eased at both ends.
+const PHASE_IN = Array.from({ length: 33 }, (_, i) => i / 32);
+const PHASE_OUT = PHASE_IN.map((p) => (1 - Math.cos(p * 2 * Math.PI)) / 2);
+
 /**
  * The full-screen backdrop of the desktop scene: a diagonal gradient, three
  * blurred orbs that drift slowly, a soft pulsing "core" and a dark shade on
@@ -21,32 +26,51 @@ export function SceneBackground() {
   const driftB = useLoop(46000);
   const driftC = useLoop(30000);
   // 0..1 value for the core's breathing. Only moves during a focus session.
-  const breathe = useAnimatedValue(0);
+  // `phase` is the position in one breath (0..1, linear); `breathe` is the
+  // eased size derived from it, so pausing can store and resume a plain phase.
+  const phase = useAnimatedValue(0);
+  const breathe = phase.interpolate({ inputRange: PHASE_IN, outputRange: PHASE_OUT });
   const reduced = useReducedMotion();
-  const { running, mode } = useLumiFi();
+  const { running } = useLumiFi();
   // Measured pixel size, used to draw the SVG gradient (see fill-gradient.tsx).
   const { size, onLayout } = useFillSize();
 
-  // Breathing only while a focus session runs: the scene "pulses" with you.
+  // Breathing while any session runs (focus or break): the scene "pulses" with you.
   useEffect(() => {
-    if (!(running && mode === 'focus')) {
-      breathe.setValue(0);
-      return undefined;
-    }
+    // Paused or idle: do nothing, so the previous run's cleanup leaves the core frozen
+    // at its current size instead of snapping back. Resume continues from there.
+    if (!running) return undefined;
     if (reduced) {
       // Stop mid-breathe so the core stays lit without pulsing.
-      breathe.setValue(0.5);
+      phase.setValue(0.25);
       return undefined;
     }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathe, { toValue: 1, duration: 3500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(breathe, { toValue: 0, duration: 3500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [breathe, mode, reduced, running]);
+    // Finish the current cycle from wherever the phase was left, then loop whole
+    // cycles. The first leg is shortened by how far along it already is.
+    let cancelled = false;
+    let current: Animated.CompositeAnimation | null = null;
+    const runCycle = (from: number) => {
+      phase.setValue(from);
+      current = Animated.timing(phase, {
+        toValue: 1,
+        duration: CYCLE_MS * (1 - from),
+        easing: Easing.linear,
+        useNativeDriver: true,
+      });
+      current.start(({ finished }) => {
+        if (finished && !cancelled) runCycle(0);
+      });
+    };
+    // Read the value as of now (a native-driven value can lag behind in JS).
+    phase.stopAnimation((value) => {
+      if (!cancelled) runCycle(value >= 1 ? 0 : value);
+    });
+    return () => {
+      cancelled = true;
+      // stopAnimation syncs the native value back, so the next resume starts here.
+      phase.stopAnimation();
+    };
+  }, [phase, reduced, running]);
 
   return (
     // collapsable={false}: on Android, RN may flatten a View that only lays out

@@ -6,7 +6,7 @@ import { moods, type MoodId } from '@/src/theme/tokens';
 export type { DayStats, Task, TimerCfg, TimerMode };
 export type { MoodId };
 export type { MonthCell, MonthGrid, MonthRef, MonthShade } from '@/src/core/month-calendar';
-export { monthGrid, monthRef, monthShade, shiftMonth } from '@/src/core/month-calendar';
+export { monthGrid, monthRef, monthShade, quietDayLine, shiftMonth } from '@/src/core/month-calendar';
 export { LEVEL_NAMES, QUESTS, levelInfo };
 export { breakWax, colors, fonts, radius, rounded } from '@/src/theme/tokens';
 

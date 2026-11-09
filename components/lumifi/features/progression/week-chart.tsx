@@ -15,7 +15,7 @@ export function WeekChart({ mobile = false, wide: desk = false }: { mobile?: boo
   const columns = history.map((entry, index) => {
     const label = new Date(entry.at).toLocaleDateString('en', { weekday: 'short' });
     const today = index === history.length - 1;
-    const height = Math.max(4, (entry.minutes / max) * (desk ? 96 : 86));
+    const height = Math.max(4, (entry.minutes / max) * (desk ? 68 : 86));
     return { entry, label, today, height };
   });
 
@@ -55,26 +55,26 @@ export function WeekChart({ mobile = false, wide: desk = false }: { mobile?: boo
 
 const deskStyles = StyleSheet.create({
   week: {
-    height: 150,
+    height: 110,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
+    gap: 7,
   },
   col: {
     flex: 1,
     height: '100%',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 6,
+    gap: 4,
   },
   count: {
     color: colors.textMuted,
     fontFamily: fonts.body,
-    fontSize: 12,
+    fontSize: 11,
   },
   bar: {
     width: '100%',
-    maxWidth: 34,
+    maxWidth: 30,
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
     borderBottomLeftRadius: 4,
@@ -83,6 +83,6 @@ const deskStyles = StyleSheet.create({
   day: {
     color: colors.textMuted,
     fontFamily: fonts.body,
-    fontSize: 12,
+    fontSize: 11,
   },
 });

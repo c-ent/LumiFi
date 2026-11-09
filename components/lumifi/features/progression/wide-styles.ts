@@ -4,7 +4,7 @@ import { StyleSheet } from 'react-native';
 // Shared chrome for the desktop Progress card. Phone and tablet keep panel-styles.
 export const progressWide = StyleSheet.create({
   card: {
-    padding: 20,
+    padding: 14,
     ...rounded(radius.lg),
     backgroundColor: colors.bgCard,
     borderWidth: 1,
@@ -12,9 +12,9 @@ export const progressWide = StyleSheet.create({
   },
   label: {
     marginTop: 0,
-    marginBottom: 14,
-    fontSize: 12,
-    letterSpacing: 1.2,
+    marginBottom: 10,
+    fontSize: 11,
+    letterSpacing: 1.1,
   },
   hint: {
     marginTop: 0,

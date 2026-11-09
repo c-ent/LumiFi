@@ -1,4 +1,5 @@
-import { colors, fade, fonts, radius, streamMark } from '@/src/theme/tokens';
+import { colors, fade, radius } from '@/src/theme/tokens';
+import { StreamServiceMark } from '@/components/lumifi/shared/stream-marks';
 import { parseStreamLink, playbackFor, streamServiceName } from '@/src/core/stream-links';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -11,7 +12,6 @@ const NOTICE = {
   empty: 'Paste a public Spotify, YouTube, YouTube Music, or Apple Music link.',
   unsupported: 'Paste a public Spotify, YouTube, YouTube Music, or Apple Music link.',
   private: 'That link is private or unavailable.',
-  full: 'The list is full. Remove one to add another.',
 } as const;
 
 export function StreamBlock({
@@ -74,7 +74,9 @@ export function StreamBlock({
         >
           {wide ? (
             <>
-              <Text style={[wideStyles.badge, { color: streamMark[link.service] }]}>{service}</Text>
+              <View style={wideStyles.badge} accessibilityLabel={service}>
+                <StreamServiceMark service={link.service} size={22} />
+              </View>
               <Text style={styles.taskText} numberOfLines={1}>{link.title}</Text>
             </>
           ) : (
@@ -170,13 +172,9 @@ const wideStyles = StyleSheet.create({
   },
   badge: {
     flexShrink: 0,
-    overflow: 'hidden',
-    paddingVertical: 3,
-    paddingHorizontal: 9,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    fontFamily: fonts.bodySemibold,
-    fontSize: 11,
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   remove: {
     marginBottom: 0,

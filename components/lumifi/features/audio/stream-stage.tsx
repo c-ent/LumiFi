@@ -1,10 +1,11 @@
-import { compactEmbedHeight, playbackFor, streamServiceName, type StreamLink } from '@/src/core/stream-links';
+import { playbackFor, streamServiceName, type StreamLink } from '@/src/core/stream-links';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { StreamPlayer } from '@/components/lumifi/features/audio/stream-player';
 import { useLumiFi } from '@/components/lumifi/logic';
 import { glassPanel, panelStyles } from '@/components/lumifi/shared/panel-styles';
+import { StreamServiceMark } from '@/components/lumifi/shared/stream-marks';
 
 const CARD_CHROME = 72;
 
@@ -23,21 +24,15 @@ export function streamCardHeight(embedHeight: number) {
 export function StreamStage({ style, plain = false, inert = false }: { style?: StyleProp<ViewStyle>; plain?: boolean; inert?: boolean }) {
   const { streamLinks, activeStreamId, closeStream } = useLumiFi();
   const open = openStreamEmbed(streamLinks, activeStreamId);
-  const [minimizedId, setMinimizedId] = useState<string | null>(null);
   const [fitted, setFitted] = useState(0);
   if (!open) return null;
   const name = streamServiceName(open.link.service);
-  const minimized = !plain && minimizedId === open.link.id;
-  const height = plain && fitted > 0
-    ? fitted
-    : minimized
-      ? compactEmbedHeight(open.link)
-      : open.playback.height;
+  const height = plain && fitted > 0 ? fitted : open.playback.height;
 
   return (
     <View style={[styles.anchor, plain ? styles.plainAnchor : null, style]} pointerEvents={inert ? 'none' : 'box-none'}>
       <View
-        style={[styles.card, plain ? styles.plain : minimized ? styles.chip : styles.full]}
+        style={[styles.card, plain ? styles.plain : styles.full]}
         onLayout={plain ? (event) => {
           const next = Math.round(event.nativeEvent.layout.height);
           setFitted((prev) => (prev === next ? prev : next));
@@ -45,39 +40,18 @@ export function StreamStage({ style, plain = false, inert = false }: { style?: S
       >
         {plain ? null : (
           <View style={styles.head}>
-            {minimized ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Show ${name} player`}
-                onPress={() => setMinimizedId(null)}
-                style={styles.identity}
-              >
-                <Text style={styles.mark}>{name}</Text>
-                <Text style={styles.title} numberOfLines={1}>{open.link.title}</Text>
-              </Pressable>
-            ) : (
-              <View style={styles.identity}>
-                <Text style={styles.mark}>{name}</Text>
-                <Text style={styles.title} numberOfLines={1}>{open.link.title}</Text>
-              </View>
-            )}
-            {minimized ? null : (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Minimize ${name} player`}
-                onPress={() => setMinimizedId(open.link.id)}
-                style={panelStyles.mini}
-              >
-                <Text style={panelStyles.miniText}>Minimize</Text>
-              </Pressable>
-            )}
+            <StreamServiceMark service={open.link.service} />
+            <View style={styles.identity}>
+              <Text style={styles.mark}>{name}</Text>
+              <Text style={styles.title} numberOfLines={1}>{open.link.title}</Text>
+            </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Close ${name} player`}
+              accessibilityLabel={`End ${name} stream`}
               onPress={closeStream}
               style={panelStyles.mini}
             >
-              <Text style={panelStyles.miniText}>Close</Text>
+              <Text style={panelStyles.miniText}>End stream</Text>
             </Pressable>
           </View>
         )}
@@ -105,10 +79,6 @@ const styles = StyleSheet.create({
   full: {
     width: '100%',
   },
-  chip: {
-    width: 280,
-    maxWidth: '100%',
-  },
   plainAnchor: {
     width: '100%',
     height: '100%',
@@ -129,6 +99,7 @@ const styles = StyleSheet.create({
   },
   identity: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   mark: {

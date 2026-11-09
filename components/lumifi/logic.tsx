@@ -1,7 +1,7 @@
 import { calendarKey } from '@/src/core/calendar';
 import { idleSession, pauseSession, startSession, takeCompletedSession } from '@/src/core/clock';
 import type { OwnTrack, PlaylistEntry } from '@/src/core/own-tracks';
-import { MAX_STREAM_LINKS, parseStreamLink, playbackFor, StreamLink } from '@/src/core/stream-links';
+import { parseStreamLink, playbackFor, StreamLink } from '@/src/core/stream-links';
 import { modeAfterSkip, modeDurationMs } from '@/src/core/phase';
 import { focusEndLine, MusicEnd } from '@/src/core/session-end';
 import { streakCount } from '@/src/core/streak';
@@ -94,7 +94,7 @@ interface LumiFiContextValue {
   removeOwnTrack: (id: string) => void;
   streamLinks: StreamLink[];
   activeStreamId: string | null;
-  addStreamLink: (raw: string) => Promise<'added' | 'empty' | 'unsupported' | 'private' | 'duplicate' | 'full'>;
+  addStreamLink: (raw: string) => Promise<'added' | 'empty' | 'unsupported' | 'private' | 'duplicate'>;
   removeStreamLink: (id: string) => void;
   openStream: (id: string) => void;
   closeStream: () => void;
@@ -632,14 +632,14 @@ function LumiFiSession({
       addStreamLink: async (raw) => {
         const parsed = parseStreamLink(raw);
         if (!parsed.ok) return parsed.reason;
-        if (savedRef.current.streamLinks.some((item) => item.id === parsed.link.id)) return 'duplicate';
-        if (savedRef.current.streamLinks.length >= MAX_STREAM_LINKS) return 'full';
+        // One saved link at a time: a new link replaces the old one.
+        const isSaved = (links: StreamLink[]) => links.length === 1 && links[0].id === parsed.link.id;
+        if (isSaved(savedRef.current.streamLinks)) return 'duplicate';
         const visibility = await checkStreamLink(parsed.link);
         if (visibility === 'private') return 'private';
         const current = savedRef.current;
-        if (current.streamLinks.some((item) => item.id === parsed.link.id)) return 'duplicate';
-        if (current.streamLinks.length >= MAX_STREAM_LINKS) return 'full';
-        commit({ ...current, streamLinks: [...current.streamLinks, parsed.link] });
+        if (isSaved(current.streamLinks)) return 'duplicate';
+        commit({ ...current, streamLinks: [parsed.link] });
         showToast('Link added');
         return 'added';
       },

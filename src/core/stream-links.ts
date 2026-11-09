@@ -146,18 +146,6 @@ export function playbackFor(link: StreamLink): StreamPlayback {
 }
 
 /**
- * Shorter on-screen height for the same embed. The address does not change,
- * so the frame stays mounted. YouTube's minimum is 200. Spotify's short
- * player is 152. Apple's short size still shows its controls.
- */
-export function compactEmbedHeight(link: StreamLink): number {
-  if (link.service === 'youtube') return 200;
-  if (link.service === 'spotify') return 152;
-  if (link.service === 'apple-music') return 175;
-  return 0;
-}
-
-/**
  * On the web, a hidden browser tab can keep Spotify and Apple Music playing
  * because their frame stays mounted. YouTube's rules require the player to
  * leave when it is off screen, so that frame is removed.

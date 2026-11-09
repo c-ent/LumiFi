@@ -1,8 +1,12 @@
+// Decides which of the three screens to show (phone candle, tablet split,
+// desktop scene). Pure functions, no React, so they are easy to unit test
+// (layout.test.ts). Breakpoints: under 600 = phone, 600-840 = tablet, over 840 = desktop.
 export const PHONE_MAX_WIDTH = 600;
 export const TABLET_MAX_WIDTH = 840;
 
 export type AppLayout = 'phone' | 'tablet' | 'desktop';
 
+// Width-only rule, used directly on web.
 export function layoutForWidth(width: number): AppLayout {
   if (width < PHONE_MAX_WIDTH) return 'phone';
   if (width <= TABLET_MAX_WIDTH) return 'tablet';

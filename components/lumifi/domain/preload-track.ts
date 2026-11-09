@@ -1,3 +1,11 @@
+// The native half of the preload pair. `preload-track.web.ts` is its web
+// sibling: Metro resolves the `.web` file for the web bundle and this one
+// everywhere else, so `use-music.ts` imports a single name and gets the right
+// call for the platform. The pair must keep the same file name in this folder.
+//
+// The wrapper exists because web needs a different call than native. Native has
+// no swap to make, so a one-line pass-through is all this side needs.
+
 import { preload } from 'expo-audio';
 
 /**

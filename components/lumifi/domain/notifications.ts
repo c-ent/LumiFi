@@ -1,3 +1,10 @@
+// The session-end alarm. This is the only module that schedules or cancels the
+// session-end notification, and the only one that creates its Android channel
+// and asks for the permission to post it. AGENTS.md keeps exactly one scheduled
+// notification alive at `endAt`, so every pause, resume, reset, skip and mode
+// change cancels and reschedules through here. There is no foreground service
+// for the countdown; the media playback service expo-audio owns is the only one.
+
 import { TimerMode } from '@/src/core/types';
 import {
   AndroidAudioContentType,
@@ -47,6 +54,17 @@ function enqueueMutation(operation: () => Promise<void>): Promise<void> {
   return next;
 }
 
+/**
+ * Creates the Android channel and gets the permission, returning early on web
+ * where there is nothing to schedule. `alreadyAsked` stops a second prompt: the
+ * caller persists that flag, so a user who declined is not asked on the next
+ * session. This runs when a session starts, not on launch.
+ *
+ * The channel is rebuilt on every call because Android freezes the sound of a
+ * channel the first time it is created. Two older channels shipped silent, so
+ * they are deleted and replaced by one that plays the chime on the alarm
+ * stream, which stays audible while music and ambient hold audio focus.
+ */
 export async function prepareNotificationPermission(alreadyAsked: boolean): Promise<{ granted: boolean; asked: boolean }> {
   if (Platform.OS === 'web') return { granted: false, asked: alreadyAsked };
   try {
@@ -84,6 +102,14 @@ export async function prepareNotificationPermission(alreadyAsked: boolean): Prom
   }
 }
 
+/**
+ * Moves the single session-end alarm to `endAt`. The cancel runs first so an
+ * alarm still pending from the previous deadline cannot fire as well, and the
+ * pair is serialised through `enqueueMutation` so two quick changes cannot
+ * interleave. `alarmClock` delivery is deliberate: `bestEffort` can be deferred
+ * by minutes on some Android builds, which is fine for a chat message but not
+ * for a timer.
+ */
 export function scheduleSessionEnd(endAt: number, mode: TimerMode): Promise<void> {
   if (Platform.OS === 'web') return Promise.resolve();
   return enqueueMutation(async () => {
@@ -113,6 +139,7 @@ export function scheduleSessionEnd(endAt: number, mode: TimerMode): Promise<void
   });
 }
 
+/** Drops the pending alarm, for a pause, reset, skip or mode change. */
 export function cancelSessionEnd(): Promise<void> {
   if (Platform.OS === 'web') return Promise.resolve();
   return enqueueMutation(async () => {
@@ -124,6 +151,12 @@ export function cancelSessionEnd(): Promise<void> {
   });
 }
 
+/**
+ * Cancelling an alarm that was never scheduled, or deleting a channel that is
+ * already gone, throws a "not found" error on the platform and is not a
+ * problem. `expectedMissing` swallows those so a real failure is not buried
+ * under the noise of the routine ones.
+ */
 function reportNotificationError(message: string, error: unknown, expectedMissing = false) {
   if (expectedMissing && isMissingNotificationError(error)) return;
   console.warn(message, error);

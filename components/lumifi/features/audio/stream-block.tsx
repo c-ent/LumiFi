@@ -1,4 +1,5 @@
-import { colors, fade, fonts, radius, streamMark } from '@/src/theme/tokens';
+import { colors, fade, radius } from '@/src/theme/tokens';
+import { StreamServiceMark } from '@/components/lumifi/shared/stream-marks';
 import { parseStreamLink, playbackFor, streamServiceName } from '@/src/core/stream-links';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -7,11 +8,21 @@ import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { useTone } from '@/components/lumifi/features/tone';
 import { CloseIcon } from '@/components/lumifi/shared/icons';
 
+/**
+ * The "Streaming" part of the Music panel: a field to paste a Spotify /
+ * YouTube / Apple Music link, the saved link, and a note about how it works.
+ *
+ * It doesn't validate or play anything itself. It hands the text to
+ * `addStreamLink` (logic.tsx -> src/core/stream-links.ts) and shows the result.
+ * Children are rendered between the link list and the note; the desktop card
+ * uses that to place the embed slot.
+ */
+
+// Messages for the failure results of `addStreamLink`.
 const NOTICE = {
   empty: 'Paste a public Spotify, YouTube, YouTube Music, or Apple Music link.',
   unsupported: 'Paste a public Spotify, YouTube, YouTube Music, or Apple Music link.',
   private: 'That link is private or unavailable.',
-  full: 'The list is full. Remove one to add another.',
 } as const;
 
 export function StreamBlock({
@@ -37,20 +48,29 @@ export function StreamBlock({
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
+  // "Add" pressed. The save is async (it checks whether the link is private),
+  // so a successful add or an already-saved link clears the field and starts
+  // playing it; any other result shows a message under the field.
   const submit = () => {
     const pending = draft;
     void addStreamLink(pending).then((result) => {
       if (result === 'added' || result === 'duplicate') {
+        // Only clear if the user hasn't typed something new in the meantime.
         setDraft((current) => (current === pending ? '' : current));
         const parsed = parseStreamLink(pending);
         if (parsed.ok) openStream(parsed.link.id);
         setNotice(null);
         return;
       }
+      // A newer paste superseded this one; its own result will report.
+      if (result === 'stale') return;
       setNotice(NOTICE[result]);
     });
   };
 
+  // One row per saved link (currently at most one). Pressing the row plays it,
+  // or stops it if it's the embed already showing. "Open" links (YouTube Music)
+  // can't embed, so they always hand off to the other app instead of toggling.
   const links = streamLinks.map((link) => {
     const selected = link.id === activeStreamId;
     const opensOutside = playbackFor(link).kind === 'open';
@@ -74,7 +94,9 @@ export function StreamBlock({
         >
           {wide ? (
             <>
-              <Text style={[wideStyles.badge, { color: streamMark[link.service] }]}>{service}</Text>
+              <View style={wideStyles.badge} accessibilityLabel={service}>
+                <StreamServiceMark service={link.service} size={22} />
+              </View>
               <Text style={styles.taskText} numberOfLines={1}>{link.title}</Text>
             </>
           ) : (
@@ -96,6 +118,8 @@ export function StreamBlock({
     );
   });
 
+  // Sets honest expectations: these services play in their own player, and
+  // only local tracks keep playing with the screen off.
   const note = (
     <Text style={styles.note}>
       Spotify, YouTube, and Apple Music play in their own player, and it stays on screen when this panel closes. Signed out, Spotify and Apple Music play a short preview. YouTube Music opens in its app. Nothing is downloaded, and with the screen off only your tracks keep playing.
@@ -170,13 +194,9 @@ const wideStyles = StyleSheet.create({
   },
   badge: {
     flexShrink: 0,
-    overflow: 'hidden',
-    paddingVertical: 3,
-    paddingHorizontal: 9,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    fontFamily: fonts.bodySemibold,
-    fontSize: 11,
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   remove: {
     marginBottom: 0,

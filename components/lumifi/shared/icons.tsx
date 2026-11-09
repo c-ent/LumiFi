@@ -2,11 +2,15 @@ import React from 'react';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { colors } from '@/src/theme/tokens';
 
+// All app icons, drawn as inline SVG paths (hand-drawn in the Lucide style) on
+// a 24x24 grid. `lucide-react-native` isn't installed yet; see the Icons row in
+// AGENTS.md for the plan to swap these. Every icon takes `size` and `color`.
 interface IconProps {
   size?: number;
   color?: string;
 }
 
+// Shared wrapper giving every icon the same stroke style (1.8 wide, round caps).
 function Stroke({ size = 19, color = colors.textPrimary, children }: IconProps & { children: React.ReactNode }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">

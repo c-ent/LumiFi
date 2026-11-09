@@ -5,6 +5,9 @@ import { useLumiFi } from '@/components/lumifi/logic';
 import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { SCENES } from '@/components/lumifi/theme';
 
+// Desktop: choose the background scene (Dusk / Midnight / Forest / Ember). Each
+// button shows a swatch of the scene's middle gradient color. Phone/tablet use
+// MoodPicker instead (the two systems are still separate; see progress.md).
 export function ScenePicker() {
   const { scene, setScene } = useLumiFi();
   return (

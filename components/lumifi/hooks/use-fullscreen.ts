@@ -52,10 +52,17 @@ export function canUseFullscreen(): boolean {
   return Boolean(enabled && (root.requestFullscreen || root.webkitRequestFullscreen));
 }
 
+// useSyncExternalStore needs a subscribe function; nothing ever changes here.
+// It is used only to read a different value on the server render (false) than
+// in the browser (true), so web hydration doesn't mismatch.
 function subscribeToClient() {
   return () => {};
 }
 
+/**
+ * Powers the dock's Full screen button. `supported` hides the button where the
+ * browser can't do it, `active` shows the pressed state, `toggle` flips it.
+ */
 export function useFullscreen() {
   const isClient = useSyncExternalStore(subscribeToClient, () => true, () => false);
   const [active, setActive] = useState(false);

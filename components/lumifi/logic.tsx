@@ -266,36 +266,6 @@ function LumiFiSession({
     return () => subscription.remove();
   }, []);
 
-  // Streaming-embed bookkeeping (Spotify/YouTube/...). Refs, because the
-  // AppState listener below needs current values without re-subscribing.
-  const activeStreamIdRef = useRef<string | null>(null);
-  /** Local music was playing when an embed opened, so resume it on close. */
-  const heldForEmbed = useRef(false);
-  /** We handed off to another app and should resume when the user returns. */
-  const resumeWhenActive = useRef(false);
-  /** That other app actually took the foreground (not just a brief flicker). */
-  const leftForStream = useRef(false);
-  const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
-
-  // An external service app pauses the local player. Resume only after LumiFi
-  // has actually been in the background and come back, so the handoff itself
-  // does not count as closing it.
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (next) => {
-      if (next !== 'active') {
-        if (resumeWhenActive.current) leftForStream.current = true;
-        return;
-      }
-      if (!resumeWhenActive.current || !leftForStream.current) return;
-      resumeWhenActive.current = false;
-      leftForStream.current = false;
-      const resume = heldForEmbed.current;
-      heldForEmbed.current = false;
-      if (resume) musicRef.current.play();
-    });
-    return () => subscription.remove();
-  }, []);
-
   // Show a message for ~3.6s. A new toast replaces the old one and restarts the timer.
   const showToast = (message: string) => {
     setToast(message);

@@ -46,9 +46,11 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
   // 6 weeks x 7 days of cells for the shown month (see src/core/month-calendar.ts).
   const grid = monthGrid(now, days, shown.year, shown.month);
   // The detail line is looked up from the grid each render, never stored.
-  const selectedCell =selected == null
+  // Padding days from a neighbouring month never match, so a selection made in
+  // one month cannot show its details in another month's view.
+  const selectedCell = selected == null
     ? null
-    : grid.weeks.flat().find((cell) => cell.key === selected) ?? null;
+    : grid.weeks.flat().find((cell) => cell.inMonth && cell.key === selected) ?? null;
 
   // Built once, then either wrapped in a card (desktop) or returned bare at the bottom.
   const body = (

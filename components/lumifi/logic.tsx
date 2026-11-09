@@ -241,6 +241,30 @@ function LumiFiSession({
   const handledEndAt = useRef<number | null>(null);
   // When the chime last played, to avoid a double chime (in-app + notification).
   const chimeAt = useRef(0);
+  const activeStreamIdRef = useRef<string | null>(null);
+  const heldForEmbed = useRef(false);
+  const resumeWhenActive = useRef(false);
+  const leftForStream = useRef(false);
+  const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
+
+  // An external service app pauses the local player. Resume only after LumiFi
+  // has actually been in the background and come back, so the handoff itself
+  // does not count as closing it.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') {
+        if (resumeWhenActive.current) leftForStream.current = true;
+        return;
+      }
+      if (!resumeWhenActive.current || !leftForStream.current) return;
+      resumeWhenActive.current = false;
+      leftForStream.current = false;
+      const resume = heldForEmbed.current;
+      heldForEmbed.current = false;
+      if (resume) musicRef.current.play();
+    });
+    return () => subscription.remove();
+  }, []);
 
   // Streaming-embed bookkeeping (Spotify/YouTube/...). Refs, because the
   // AppState listener below needs current values without re-subscribing.

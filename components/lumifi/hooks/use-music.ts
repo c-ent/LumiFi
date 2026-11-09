@@ -1,5 +1,5 @@
 import { musicTracks, sessionEndChime } from '@/components/music-tracks';
-import { ownTrackExists } from '@/components/lumifi/domain/own-music';
+import { ownTrackExists, ownTrackUri } from '@/components/lumifi/domain/own-music';
 import { preloadTrack } from '@/components/lumifi/domain/preload-track';
 import { mergePlaylist, nextPlayableIndex, OwnTrack } from '@/src/core/own-tracks';
 import { LOWERED_MUSIC_RATIO, musicLevelAtSessionEnd, MusicEnd } from '@/src/core/session-end';
@@ -21,7 +21,15 @@ import { Platform } from 'react-native';
 export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
   // Bundled tracks stay in front, own files after them. `musicTracks` is a
   // module constant, so the playlist only changes when the own list does.
-  const playlist = useMemo(() => mergePlaylist(musicTracks, ownTracks), [ownTracks]);
+  // The stored uri can go stale (iOS moves the app container on update), so
+  // each own file's uri is rebuilt from its id.
+  const playlist = useMemo(
+    () => mergePlaylist(
+      musicTracks,
+      ownTracks.map((track) => ({ ...track, uri: ownTrackUri(track.id) ?? '' })),
+    ),
+    [ownTracks],
+  );
 
   // The cursor is the entry's key, not its index: removing an own file shifts
   // later own indices, and a key lookup follows the right track across that.
@@ -69,21 +77,22 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
       if (!item) return false;
       if (!item.own) return true;
       if (missingKeys.has(item.key)) return false;
-      const uri = item.uri as string;
-      const cached = existenceCache.current.get(uri);
+      const track = item.ownIndex != null ? ownTracks[item.ownIndex] : undefined;
+      if (!track) return false;
+      const cached = existenceCache.current.get(track.id);
       if (cached != null) return cached;
-      const exists = ownTrackExists(uri);
-      existenceCache.current.set(uri, exists);
+      const exists = ownTrackExists(track.id);
+      existenceCache.current.set(track.id, exists);
       return exists;
     },
-    [missingKeys, playlist],
+    [missingKeys, ownTracks, playlist],
   );
 
   // Step to the next playable entry in a direction, wrapping once. Settlement
   // (no playable entry) leaves the cursor alone so a broken list cannot spin.
   const stepTo = useCallback(
     (direction: number) => {
-      const index = nextPlayableIndex(playlist.length, trackIndex + direction, isPlayable);
+      const index = nextPlayableIndex(playlist.length, trackIndex + direction, isPlayable, direction < 0 ? -1 : 1);
       if (index != null) setSelectedKey(playlist[index].key);
     },
     [isPlayable, playlist, trackIndex],
@@ -107,7 +116,8 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
   // Load the selected entry when it differs from what the player holds. A key
   // comparison, not an index one, so a reindex after removal still reloads.
   useEffect(() => {
-    if (!entry || loadedKey.current === entry.key) return;
+    // An own entry whose uri could not be rebuilt has '' here: never load it.
+    if (!entry || !entry.uri || loadedKey.current === entry.key) return;
     loadedKey.current = entry.key;
     player.replace(entry.uri);
   }, [entry, player]);
@@ -132,7 +142,7 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
   // to re-run this effect on every tick and call `replace` again, which builds
   // a fresh media element and refetches the track on each step of the drag.
   useEffect(() => {
-    if (Platform.OS !== 'web' || !entry) return undefined;
+    if (Platform.OS !== 'web' || !entry || !entry.uri) return undefined;
     let cancelled = false;
     void preloadTrack(entry.uri).then(() => {
       if (cancelled || player.playing || player.currentTime > 0) return;
@@ -143,6 +153,8 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
       const { volume: latestVolume, gain: latestGain, loop: latestLoop } = levelRef.current;
       player.volume = Math.max(0, Math.min(1, latestVolume * latestGain));
       player.loop = latestLoop;
+    }, () => {
+      // A failed preload is only a missed head start: play() loads the source.
     });
     return () => {
       cancelled = true;
@@ -198,7 +210,7 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
 
   const selectTrack = useCallback((index: number) => {
     const target = playlist[index];
-    if (!target) return;
+    if (!target || !target.uri) return;
     if (target.key === entry?.key) {
       player.play();
       return;

@@ -100,7 +100,7 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
                 accent={tone.accent}
                 selected={selected === cell.key}
                 wide={desk}
-                onPress={cell.future ? undefined : () => pick(cell.key)}
+                onPress={cell.future || !cell.inMonth ? undefined : () => pick(cell.key)}
               />
             ))}
           </View>
@@ -120,7 +120,7 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
           <Text style={deskStyles.monthLine}>This month: {describe(grid.minutes, grid.sessions)}</Text>
           <View style={deskStyles.detail}>
             {selectedCell ? (
-              <Text style={deskStyles.detailTitle}>{selectedCell.key}</Text>
+              <Text style={deskStyles.detailTitle}>{dayLabel(selectedCell.at)}</Text>
             ) : (
               <Text style={deskStyles.detailMuted}>Tap a day to see its minutes and sessions.</Text>
             )}
@@ -133,7 +133,7 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
         <>
           <Text style={styles.monthTotal}>This month: {describe(grid.minutes, grid.sessions)}</Text>
           {selectedCell ? (
-            <Text style={styles.monthDetail}>{selectedCell.key}: {describeDay(selectedCell, quiet)}</Text>
+            <Text style={styles.monthDetail}>{dayLabel(selectedCell.at)}: {describeDay(selectedCell, quiet)}</Text>
           ) : (
             <Text style={styles.meta}>Tap a day to see its minutes and sessions.</Text>
           )}
@@ -169,10 +169,7 @@ function DayCell({
     ? 'transparent'
     : shade === 3
       ? accent
-      : desk
-        ? fade(accent, shade === 2 ? 0.42 : 0.2)
-        // Phone/tablet: append a hex alpha to a "#rrggbb" color ('66' ~ 40%, '33' ~ 20%).
-      : `${accent}${shade === 2 ? '66' : '33'}`;
+      : fade(accent, shade === 2 ? 0.42 : 0.2);
   const borderColor = selected
     ? (desk ? colors.success : accent)
     : cell.today
@@ -180,17 +177,19 @@ function DayCell({
       : 'transparent';
   // On the darkest (solid accent) cell the number switches to dark text to stay readable.
   const ink = desk && cell.inMonth && shade === 3;
+  // Future days and the padding days from next door cannot be picked.
+  const unavailable = cell.future || !cell.inMonth;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected, disabled: cell.future }}
+      accessibilityState={{ selected, disabled: unavailable }}
       accessibilityLabel={
         cell.future
-          ? `${cell.key}, not yet`
-          : `${cell.key}, ${describe(cell.minutes, cell.sessions)}`
+          ? `${dayLabel(cell.at)}, not yet`
+          : `${dayLabel(cell.at)}, ${describe(cell.minutes, cell.sessions)}`
       }
-      disabled={cell.future}
+      disabled={unavailable}
       onPress={onPress}
       style={[
         styles.monthCell,
@@ -204,6 +203,19 @@ function DayCell({
       {cell.today && !desk ? <View style={[styles.monthDot, { backgroundColor: accent }]} /> : null}
     </Pressable>
   );
+}
+
+// A day as people say it ("Mon, Nov 9, 2026"), in the user's own locale. The
+// cell's `key` stays the internal identity and is never shown or read aloud.
+const dayFormatter = new Intl.DateTimeFormat(undefined, {
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+function dayLabel(at: number): string {
+  return dayFormatter.format(new Date(at));
 }
 
 // The day detail, which swaps the bare zero reading for a quiet line only on a

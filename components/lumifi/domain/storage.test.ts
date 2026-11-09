@@ -3,20 +3,34 @@
 // progress that is still in storage, so the last three cases check that a later
 // save either keeps the old value or is skipped.
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LEGACY_STORAGE_KEY, STORAGE_KEY } from './saved-state';
-import { loadLumiFiState, saveLumiFiState } from './storage';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
 
+// `storage.ts` keeps a module-level read-failed flag. Each test loads a fresh
+// copy of the module (and the storage mock it uses), so a failed read in one
+// test cannot leave the flag set for the next.
+type StorageModule = typeof import('./storage');
+type AsyncStorageType = typeof import('@react-native-async-storage/async-storage').default;
+let AsyncStorage: AsyncStorageType;
+let loadLumiFiState: StorageModule['loadLumiFiState'];
+let saveLumiFiState: StorageModule['saveLumiFiState'];
+
 describe('loading saved state', () => {
   const now = new Date(2026, 10, 2, 8).getTime();
   const progress = JSON.stringify({ xp: 40, streak: { n: 3, last: '2026-11-1' } });
 
   beforeEach(async () => {
+    jest.isolateModules(() => {
+      /* eslint-disable @typescript-eslint/no-require-imports */
+      const mock = require('@react-native-async-storage/async-storage');
+      AsyncStorage = mock.default ?? mock;
+      ({ loadLumiFiState, saveLumiFiState } = require('./storage') as StorageModule);
+      /* eslint-enable @typescript-eslint/no-require-imports */
+    });
     await AsyncStorage.clear();
     jest.clearAllMocks();
     jest.spyOn(Date, 'now').mockReturnValue(now);
@@ -79,7 +93,10 @@ describe('loading saved state', () => {
 
   it('does not write defaults over the legacy save when the read fails', async () => {
     await AsyncStorage.setItem(LEGACY_STORAGE_KEY, progress);
-    jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('storage unavailable'));
+    // The current key reads as empty, then the legacy read is the one that fails.
+    jest.spyOn(AsyncStorage, 'getItem')
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('storage unavailable'));
 
     const state = await loadLumiFiState();
     await saveLumiFiState({ ...state, xp: 5 });

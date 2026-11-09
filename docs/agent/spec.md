@@ -29,7 +29,6 @@ From competitor research (evidence in `roadmap.md`). Check new work against thes
 4. The candle burns down. Music and ambient sounds play if enabled.
 5. The session ends: the flame dims softly, a soft chime plays, the notification fires, XP is awarded and quest progress updates. A short encouraging message shows with "Start break" and "Later". The next candle (break) is ready.
 6. After every 4th focus session the break is a long break.
-7. After the first completed session the app offers to save progress with an account (v4, last).
 
 ## Features
 ### Timer
@@ -69,8 +68,8 @@ From competitor research (evidence in `roadmap.md`). Check new work against thes
 ### Look and feel
 - Phone: candle timer with a draggable bottom sheet for controls, tasks, sounds, quests, stats and settings. Four small candles show sessions toward a long break.
 - Tablet: split view with the timer on one side and tasks, sounds, quests and the month calendar on the other.
-- Desktop web: full-screen atmospheric scene, very large thin timer, icon dock. Music, Progress and Quests are each a wide centered card. The other panels stay a narrow card on the left.
-- Tasks are one list on every layout: the phone Tasks tab, the tablet tasks block, and a centered Tasks card on desktop about 580 wide. The list is an add field with an optional due date, then each task with its checkbox, title, due date, subtasks, edit, and delete. Daily quests stay on the Quests surface.
+- Desktop web: full-screen atmospheric scene, very large thin timer, icon dock. Music, Progress, Quests and Tasks are each a centered card. The mixer and scenes stay a narrow card on the left, and timer settings is the same narrow card on the right.
+- Tasks are one list on every layout: the phone Tasks tab, the tablet tasks block, and a centered Tasks card on desktop about 470 wide. The list is an add field with an optional due date, then each task with its checkbox, title, due date, subtasks, edit, and delete. Daily quests stay on the Quests surface.
 - Moods change the palette (see `ui.md`). The interface fades during a focus session and returns on touch, which the user can turn off.
 
 ## Scope

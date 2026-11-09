@@ -12,8 +12,11 @@ import { MixLevels, MoodId, SceneId } from '@/components/lumifi/theme';
 // `storage.ts` hands the raw string in, `parseSavedState` turns it into a
 // `SavedState`, and `logic.tsx` writes that same shape back out. Every read is
 // defensive: a stored save can come from an older version or be hand-edited, so
-// a field that fails its check falls back to its default rather than throwing.
-// One broken value costs that value, not the whole save.
+// the fields that are checked (timer lengths, XP, tasks, history, session, music
+// end, own tracks and stream links) fall back to a default rather than throwing.
+// The remaining fields (scene, mood, zenOpt, mix, streak) are merged over the
+// defaults as stored, not validated. Parsing never throws: a save that is not
+// valid JSON becomes a fresh state.
 
 export const STORAGE_KEY = 'lumifi:state';
 export const LEGACY_STORAGE_KEY = 'nightlamp:state';
@@ -103,7 +106,9 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
       day: restored.day,
       days: restored.days,
       tasks,
-      activeId: activeTask?.parentId != null ? null : storedActive,
+      // Only a top-level task that exists can be active; a dangling id or a
+      // subtask's id is cleared.
+      activeId: activeTask && activeTask.parentId == null ? activeTask.id : null,
       auto: saved.auto === true,
       musicEnd: readMusicEnd(saved.musicEnd),
       musicLoop: saved.musicLoop === true,

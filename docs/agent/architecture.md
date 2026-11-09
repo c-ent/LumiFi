@@ -15,7 +15,7 @@ Read this when changing data flow, storage, auth, or folder boundaries. Only wha
 - `features/`: one folder per product concept. `layout.ts`, `tone.ts`, `background/`, `clock/`, `timer/`, `tasks/`, `audio/`, `progression/`, `settings/`. A feature owns its own components; device differences are a `mobile` prop (or the shell), not a separate folder.
 - `shared/`: `icons.tsx`, `panel-heading.tsx`, `panel-styles.ts`. Cross-layout UI. `panel-styles.ts` is the one `StyleSheet` the feature panels share.
 - `hooks/`: `use-ambient`, `use-background-audio`, `use-music`, `use-session-clock`. Kept together rather than scattered per feature.
-- `domain/`: `saved-state.ts`, `session.ts`, `notifications.ts`, `storage.ts`, `own-music.ts`. Non-UI: persistence, scheduling, file picking and copying, and pure re-exports.
+- `domain/`: `saved-state.ts`, `session.ts`, `notifications.ts`, `storage.ts`, `own-music.ts`, `preload-track.ts` (plus `preload-track.web.ts`, its web sibling, which must keep the same basename), `silence-ambient.ts`, `stream-check.ts`. Non-UI: persistence, scheduling, file picking and copying, platform wrappers, and pure re-exports. Tests sit beside their file (`*.test.ts`).
 
 ### session.ts is the reward path
 

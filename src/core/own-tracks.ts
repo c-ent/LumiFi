@@ -41,7 +41,8 @@ export function titleFromFileName(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return 'Untitled';
   const dot = trimmed.lastIndexOf('.');
-  const base = dot > 0 ? trimmed.slice(0, dot).trim() : trimmed;
+  // A leading dot with nothing before it (".mp3") is an extension with no title.
+  const base = dot >= 0 ? trimmed.slice(0, dot).trim() : trimmed;
   return base || 'Untitled';
 }
 
@@ -92,6 +93,8 @@ export function mergePlaylist(bundled: BundledTrack[], own: OwnTrack[]): Playlis
 
 /**
  * The next index at or after `from` whose track is playable, wrapping once.
+ * `direction` is 1 to scan forward (the default) or -1 to scan backward, so a
+ * "previous" press lands on the nearest earlier playable track.
  * Returns null when nothing is playable, so a playlist of missing files settles
  * instead of looping. `isAvailable` reports whether the file for an index still
  * exists; bundled tracks are always available.
@@ -100,11 +103,12 @@ export function nextPlayableIndex(
   total: number,
   from: number,
   isAvailable: (index: number) => boolean,
+  direction: 1 | -1 = 1,
 ): number | null {
   if (total <= 0) return null;
   const start = ((from % total) + total) % total;
   for (let step = 0; step < total; step += 1) {
-    const index = (start + step) % total;
+    const index = (((start + direction * step) % total) + total) % total;
     if (isAvailable(index)) return index;
   }
   return null;

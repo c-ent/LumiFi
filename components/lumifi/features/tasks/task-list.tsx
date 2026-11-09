@@ -105,6 +105,23 @@ function DueControl({
   const color = dateColor(value, overdue, accent, compact);
 
   if (Platform.OS !== 'web') {
+    // The add form has no validation step in between, so every keystroke goes up
+    // and Add never reads a stale date. A task row keeps the draft until editing
+    // ends, because `setTaskDate` validates the finished value.
+    if (!compact) {
+      return (
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={fade(colors.textPrimary, 0.45)}
+          accessibilityLabel={label}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={[styles.nativeAddDate, { color }]}
+        />
+      );
+    }
     return (
       <TextInput
         value={focused ? draft : value}

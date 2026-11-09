@@ -75,6 +75,7 @@ export function StreamStage({ style, plain = false, inert = false }: { style?: S
           </View>
         )}
         <StreamPlayer
+          key={open.link.id}
           service={open.link.service}
           embedUrl={open.playback.embedUrl}
           pageUrl={open.link.url}

@@ -25,7 +25,7 @@ export function SceneBackground() {
   const driftA = useLoop(38000);
   const driftB = useLoop(46000);
   const driftC = useLoop(30000);
-  // 0..1 value for the core's breathing. Only moves during a focus session.
+  // The core's breathing moves whenever the timer runs (focus or a break).
   // `phase` is the position in one breath (0..1, linear); `breathe` is the
   // eased size derived from it, so pausing can store and resume a plain phase.
   const phase = useAnimatedValue(0);
@@ -37,6 +37,7 @@ export function SceneBackground() {
 
   // Breathing while any session runs (focus or break): the scene "pulses" with you.
   useEffect(() => {
+    // The core moves whenever `running` is true, in any mode including breaks.
     // Paused or idle: do nothing, so the previous run's cleanup leaves the core frozen
     // at its current size instead of snapping back. Resume continues from there.
     if (!running) return undefined;

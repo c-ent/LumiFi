@@ -4,7 +4,7 @@
  * phone), timer presets and the time formatter. Components import from here
  * so they never reach into `src/core` directly.
  */
-import { QUESTS } from '@/src/core/quests';
+import { hasOpenQuests, QUESTS } from '@/src/core/quests';
 import type { DayStats, Task, TimerCfg, TimerMode } from '@/src/core/types';
 import { LEVEL_NAMES, levelInfo } from '@/src/core/xp';
 import { moods, type MoodId } from '@/src/theme/tokens';
@@ -13,7 +13,7 @@ export type { DayStats, Task, TimerCfg, TimerMode };
 export type { MoodId };
 export type { MonthCell, MonthGrid, MonthRef, MonthShade } from '@/src/core/month-calendar';
 export { monthGrid, monthRef, monthShade, quietDayLine, shiftMonth } from '@/src/core/month-calendar';
-export { LEVEL_NAMES, QUESTS, levelInfo };
+export { hasOpenQuests, LEVEL_NAMES, QUESTS, levelInfo };
 export { breakWax, colors, fonts, radius, rounded } from '@/src/theme/tokens';
 
 export type SceneId = 'dusk' | 'midnight' | 'forest' | 'ember';

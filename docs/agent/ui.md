@@ -25,7 +25,7 @@ No hardcoded hex values. React Native has no CSS variables, so tokens are keys i
 | Error | `colors.error` | `#FF8F8F` (proposed, not in a prototype yet) |
 | Break wax (body, shadow, melt) | `breakWax.body`, `breakWax.shadow`, `breakWax.melt` | `#D8EEE9`, `#A8C9C2`, `#BFE3DA` |
 
-Streaming badges use `streamMark`: Spotify `#7BE8B0`, YouTube and YouTube Music `#FF9F9F`, Apple Music `#F5A3C7`. They name the service.
+Streaming badges use `streamMark`: Spotify `#7BE8B0`, YouTube and YouTube Music `#FF9F9F`, Apple Music `#F5A3C7`. They name the service. The playing card's header shows the Spotify, YouTube, or Apple Music artwork from `assets/images/icons` at the left of the service name.
 
 ### Moods
 A mood replaces the background, flame and accent tokens only. Moonlit is stored as `moon`. Wax, dish and glow stay on each mood in `components/lumifi/theme.ts`; they are candle illustration colors. The current build still keeps the four desktop scenes (Dusk, Midnight, Forest, Ember) separate from the three phone moods. The decided direction is one shared set of about five or six themes, with near-duplicates merged, and each platform choosing its default. The exact mapping is still open.

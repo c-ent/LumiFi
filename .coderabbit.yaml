@@ -1,6 +1,8 @@
 language: "en-US"
+tone_instructions: |
+  Be concise, direct, and constructive.
 reviews:
-  profile: "chill"
+  profile: "assertive"
   # Review pull requests into dev as well as the default branch.
   auto_review:
     base_branches:
@@ -11,3 +13,10 @@ reviews:
   # Exclude specific files/directories from being reviewed
   path_filters:
     - "!.agents/**"
+
+  path_instructions:
+    - path: "src/**/*.ts"
+      instructions: |
+        Focus on architecture and system design.
+        Prioritize scalability and
+        long-term maintainability.

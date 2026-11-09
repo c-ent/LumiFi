@@ -1,6 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LEGACY_STORAGE_KEY, parseSavedState, SavedState, STORAGE_KEY } from './saved-state';
 
+// The one place the app reads and writes its saved state, through Zustand's
+// persist in `logic.tsx`. Load parses what it finds through `parseSavedState`
+// and quietly moves a pre-rename `nightlamp:state` save onto the current key.
+// Save is the only writer, so the read-failed guard below is the only thing
+// standing between a bad read and overwriting real progress.
+
 // Set while the last load failed to read storage. A rejected read leaves
 // nothing to parse, so the app shows fresh defaults for the session, but those
 // defaults must not be written back: the progress they would replace may still
@@ -8,6 +14,11 @@ import { LEGACY_STORAGE_KEY, parseSavedState, SavedState, STORAGE_KEY } from './
 // Changes made during such a session stay in memory until a read succeeds.
 let readFailed = false;
 
+/**
+ * Reads the saved state, falling back to fresh defaults on any failure. A
+ * failed read also arms `readFailed`, because defaults that came from an error
+ * must never be written back: real progress may still be in storage.
+ */
 export async function loadLumiFiState(): Promise<SavedState> {
   let raw: string | null = null;
   let legacy = false;
@@ -40,6 +51,11 @@ export async function loadLumiFiState(): Promise<SavedState> {
   return state;
 }
 
+/**
+ * Writes the state, unless the last load failed. Storage can be unavailable in
+ * private browsing, and a failed write is dropped rather than surfaced: the
+ * in-memory state is still correct, so the next successful write catches up.
+ */
 export async function saveLumiFiState(state: SavedState): Promise<void> {
   if (readFailed) return;
   try {

@@ -1,5 +1,8 @@
 import { silenceAmbientMix } from './silence-ambient';
 
+// A session end set to keep the music must not stop the ambient loops, and it
+// must not touch the music level either.
+
 describe('silence ambient mix', () => {
   it('sets every ambient slider to zero and leaves the music level', () => {
     expect(silenceAmbientMix({

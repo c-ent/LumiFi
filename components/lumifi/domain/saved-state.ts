@@ -8,6 +8,13 @@ import { parseDueDate } from '@/src/core/tasks';
 import type { DayHistory, DayStats, ProgressState, Task, TimerCfg, TimerMode } from '@/src/core/types';
 import { MixLevels, MoodId, SceneId } from '@/components/lumifi/theme';
 
+// The shape of everything LumiFi persists, and the boundary that validates it.
+// `storage.ts` hands the raw string in, `parseSavedState` turns it into a
+// `SavedState`, and `logic.tsx` writes that same shape back out. Every read is
+// defensive: a stored save can come from an older version or be hand-edited, so
+// a field that fails its check falls back to its default rather than throwing.
+// One broken value costs that value, not the whole save.
+
 export const STORAGE_KEY = 'lumifi:state';
 export const LEGACY_STORAGE_KEY = 'nightlamp:state';
 
@@ -39,6 +46,7 @@ export interface SavedState extends ProgressState {
   session: SessionClock;
 }
 
+/** The state a fresh install starts from: no XP, no streak, no tasks. */
 export function createInitialState(now = Date.now()): SavedState {
   const day = emptyDay(now);
   const cfg: TimerCfg = { focus: 25, short: 5, long: 15 };
@@ -65,6 +73,12 @@ export function createInitialState(now = Date.now()): SavedState {
   };
 }
 
+/**
+ * Turns stored JSON into a `SavedState`, never throwing. Anything missing or
+ * unrecognised falls back to `createInitialState`, and a legacy `goals` key is
+ * dropped on the way through. Returns the state as written, not a merged copy,
+ * so a caller can rely on the defaults it hands back.
+ */
 export function parseSavedState(raw: string | null, now = Date.now()): SavedState {
   const fresh = createInitialState(now);
   if (!raw) return fresh;
@@ -125,6 +139,12 @@ function readMusicEnd(value: unknown): MusicEnd {
   return value === 'keep' || value === 'lower' || value === 'fade' ? value : 'lower';
 }
 
+/**
+ * Rebuilds a session from storage, clamping its length to the configured
+ * ceiling so a stored save cannot outlast the UI limit. A session marked
+ * running with no `endAt` comes back paused: there is no deadline to count to,
+ * and a running status without one would never finish.
+ */
 function readSession(value: unknown, cfg: TimerCfg): SessionClock {
   const fallback = idleSession('focus', modeDurationMs(cfg, 'focus'));
   if (!value || typeof value !== 'object') return fallback;

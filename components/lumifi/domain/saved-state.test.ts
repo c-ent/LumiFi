@@ -1,6 +1,12 @@
 import { calendarKey, shiftCalendarDays } from '@/src/core/calendar';
 import { createInitialState, parseSavedState } from './saved-state';
 
+// The parse boundary under test: whatever is stored, `parseSavedState` must
+// return a usable state and never throw. The cases cover a clean start, a save
+// from an older version, and a hand-edited one, plus the rules that survive a
+// round trip: a subtask whose parent is gone, a task's due date, a running
+// session with a missing deadline.
+
 describe('saved day history', () => {
   const now = new Date(2026, 10, 2, 8).getTime();
 

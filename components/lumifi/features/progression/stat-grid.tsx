@@ -5,6 +5,10 @@ import { useLumiFi } from '@/components/lumifi/logic';
 import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { progressWide as wide } from '@/components/lumifi/features/progression/wide-styles';
 
+/**
+ * Three number tiles: minutes focused today, sessions today, total XP.
+ * Read straight from the saved `day` totals; nothing is computed here.
+ */
 export function StatGrid({ wide: desk = false }: { wide?: boolean }) {
   const { day, xp } = useLumiFi();
   const items = [
@@ -41,14 +45,14 @@ export function StatGrid({ wide: desk = false }: { wide?: boolean }) {
 const deskStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 7,
   },
   stat: {
     flex: 1,
-    paddingTop: 14,
-    paddingHorizontal: 14,
-    paddingBottom: 12,
-    borderRadius: 14,
+    paddingTop: 9,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+    borderRadius: 11,
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.09)',
@@ -56,13 +60,13 @@ const deskStyles = StyleSheet.create({
   value: {
     color: colors.textPrimary,
     fontFamily: fonts.timeMedium,
-    fontSize: 28,
-    lineHeight: 31,
+    fontSize: 21,
+    lineHeight: 24,
   },
   label: {
     color: colors.textMuted,
     fontFamily: fonts.body,
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
   },
 });

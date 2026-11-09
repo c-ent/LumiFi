@@ -8,14 +8,26 @@ import { QUESTS } from '@/components/lumifi/theme';
 import { useTone } from '@/components/lumifi/features/tone';
 import { progressWide as wide } from '@/components/lumifi/features/progression/wide-styles';
 
+/**
+ * The daily quests list (4 sessions, 60 minutes, 1 task) with a progress bar and
+ * reward per quest. This component only DISPLAYS progress: the counters live in
+ * `day` and the rewards are paid by src/core/quests.ts when a session ends.
+ *
+ * `wide: desk` renames the `wide` prop locally because `wide` is already the
+ * name of the imported shared style object. Two layouts, one data table:
+ * the desktop card (wide) and the compact phone/tablet list.
+ */
 export function QuestList({ mobile = false, wide: desk = false }: { mobile?: boolean; wide?: boolean }) {
   const { day } = useLumiFi();
   const tone = useTone(mobile);
+  // Pre-compute each row once so both layouts render identical numbers.
   const rows = QUESTS.map((quest) => {
     const value = Math.min(day[quest.key], quest.goal);
     // The reward stays claimed after a task is undone, so the paid state comes
     // from the stored claim, not from a counter that can fall back below goal.
     const done = day.claimed.includes(quest.id);
+    // Bar fill as a percent string. `as const` narrows it to a template-literal
+    // type, which React Native's `width` style requires.
     const width = `${Math.round((value / quest.goal) * 100)}%` as const;
     return { quest, value, done, width };
   });
@@ -62,6 +74,7 @@ export function QuestList({ mobile = false, wide: desk = false }: { mobile?: boo
   );
 }
 
+// Desktop-only styles. Rows are divided by a hairline; the first has none.
 const deskStyles = StyleSheet.create({
   quest: {
     paddingVertical: 12,

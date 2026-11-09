@@ -11,8 +11,12 @@ export const glassPanel: ViewStyle = {
   ...(Platform.OS === 'web' ? { backdropFilter: 'blur(18px)' } : null),
 };
 
-// The panels were one file with one StyleSheet. They are split by feature now,
-// but the style keys are still shared, so the sheet stays in one place.
+// Screens and feature files share these keys, so the sheet stays in one place.
+// This is the app's "shared CSS file": buttons, inputs, rows, bars, the
+// calendar cells and so on. React Native has no stylesheet cascade or CSS
+// classes, so a style is shared by importing it (usually as `styles`) and
+// putting it in a component's `style` prop. Names are grouped roughly by
+// feature (task*, mix*, month*, stream*).
 export const panelStyles = StyleSheet.create({
   addRow: {
     flexDirection: 'row',
@@ -526,11 +530,11 @@ export const panelStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 22,
+    marginBottom: 18,
   },
   panelTitle: {
     color: colors.textPrimary,
     fontFamily: fonts.timeMedium,
-    fontSize: 26,
+    fontSize: 22,
   },
 });

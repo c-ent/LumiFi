@@ -13,6 +13,19 @@ import { CloseIcon, MusicIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RepeatIc
 import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { useTone } from '@/components/lumifi/features/tone';
 
+/**
+ * The Music panel. It has two sources:
+ * - "Tracks": the local player (bundled lofi + the user's own files).
+ * - "Streaming": a pasted Spotify/YouTube/Apple Music link (see stream-block.tsx).
+ *
+ * It renders in two shapes from the same pieces:
+ * - phone / tablet / narrow panel: tabs, one source at a time.
+ * - `wide` (the desktop Music card): tracks on the left, streaming on the
+ *   right, and an empty "slot" that the floating stream player is positioned over.
+ *
+ * The small components below (NowPlaying, TrackRows, ...) each take `wide` and
+ * `mobile` flags instead of being duplicated per layout.
+ */
 type MusicSource = 'tracks' | 'streaming';
 
 // Tile washes for playlist rows. These are art, not theme accents.
@@ -26,7 +39,9 @@ export function MusicBlock({
 }: {
   mobile?: boolean;
   wide?: boolean;
+  /** (wide only) Lets the desktop screen measure where the embed slot is. */
   embedSlotRef?: React.RefObject<React.ComponentRef<typeof View> | null>;
+  /** (wide only) Called when the slot moves/resizes so the player can follow. */
   onEmbedLayout?: () => void;
 }) {
   const tone = useTone(mobile);
@@ -88,6 +103,9 @@ export function MusicBlock({
   );
 }
 
+// An empty box on the desktop Music card. The real stream player (StreamStage)
+// floats above the scene and is positioned to cover this box, so the card looks
+// like it contains the player. Shows a hint until something is playing.
 function EmbedSlot({ slotRef, onLayout }: { slotRef?: React.RefObject<React.ComponentRef<typeof View> | null>; onLayout?: () => void }) {
   const { streamLinks, activeStreamId } = useLumiFi();
   const open = openStreamEmbed(streamLinks, activeStreamId);
@@ -105,6 +123,8 @@ function EmbedSlot({ slotRef, onLayout }: { slotRef?: React.RefObject<React.Comp
   );
 }
 
+// The repeat toggle. `accessibilityRole="switch"` + `checked` tells screen
+// readers it's an on/off control; the color change shows it visually.
 function LoopButton({
   on,
   onPress,
@@ -132,10 +152,13 @@ function LoopButton({
   );
 }
 
+// Current track, transport buttons (prev / play / next / repeat) and volume.
+// `lamp` is just the name for the app context (the app was once called Lamp).
 function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?: boolean }) {
   const lamp = useLumiFi();
   const tone = useTone(mobile);
   const icon = tone.ink;
+  // Built once and reused by both the compact and wide layouts below.
   const transport = (
     <>
       <Pressable accessibilityRole="button" accessibilityLabel="Previous track" style={wide ? wideStyles.round : styles.round} onPress={lamp.prevTrack}><PrevIcon color={colors.textPrimary} size={16} /></Pressable>
@@ -198,6 +221,7 @@ function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?:
   );
 }
 
+// The "Tracks" tab contents for the non-wide layouts.
 function TrackList({ mobile = false }: { mobile?: boolean }) {
   return (
     <View>
@@ -209,6 +233,8 @@ function TrackList({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
+// "Playlist" heading with the Add files button. Picking device files only works
+// on Android/iOS; on `wide` the button lives in FilesNote at the bottom instead.
 function PlaylistHead({ wide = false }: { wide?: boolean }) {
   const lamp = useLumiFi();
   const canAddFiles = Platform.OS !== 'web' && !wide;
@@ -229,6 +255,8 @@ function PlaylistHead({ wide = false }: { wide?: boolean }) {
   );
 }
 
+// The track list. Phone: one column. Wide: a two-column grid, built by chunking
+// the playlist into pairs (an odd last row gets an empty cell so widths match).
 function TrackRows({ wide = false, mobile = false }: { wide?: boolean; mobile?: boolean }) {
   const lamp = useLumiFi();
   const tone = useTone(mobile);
@@ -265,11 +293,15 @@ function TrackRows({ wide = false, mobile = false }: { wide?: boolean; mobile?: 
   );
 }
 
+// Bundled tracks can't be removed; only the user's own files can. Returns the
+// own-track id for a playlist entry, or null for a bundled one (no remove button).
 function ownId(ownTracks: { id: string }[], entry: PlaylistEntry) {
   if (entry.ownIndex == null) return null;
   return ownTracks[entry.ownIndex]?.id ?? null;
 }
 
+// One playlist row: art tile, title/artist, an animated EQ mark while it plays,
+// and a remove button for own files. `fade(color, a)` = color at alpha `a`.
 function TrackRow({
   entry,
   index,
@@ -328,6 +360,8 @@ function TrackRow({
   );
 }
 
+// Privacy/availability note under the playlist. Web can't add own files (no
+// private app folder to copy them into), so it explains that instead.
 function FilesNote({ wide = false }: { wide?: boolean }) {
   const lamp = useLumiFi();
   const canAddFiles = Platform.OS !== 'web';
@@ -362,6 +396,9 @@ function FilesNote({ wide = false }: { wide?: boolean }) {
   );
 }
 
+// Placeholder cover art: a soft gradient tile in one of the ART colors (picked
+// by row index) with a music note. There is no real cover art to load.
+// Hidden from screen readers since it's decorative.
 function TrackArt({ index, size = 42 }: { index: number; size?: number }) {
   const hue = ART[index % ART.length] ?? ART[0];
   const id = `track-art-${size}-${index}`;
@@ -386,6 +423,9 @@ function TrackArt({ index, size = 42 }: { index: number; size?: number }) {
   );
 }
 
+// Three little bars that bounce next to the playing track (an "equalizer").
+// Each bar reads the same 0..1 pulse with a different phase offset (+0, +0.8,
+// +1.6) so they move out of step. Static when reduced motion is on.
 function EqMark({ color }: { color: string }) {
   const reduced = useReducedMotion();
   const pulse = useSharedValue(0);
@@ -419,6 +459,9 @@ function EqMark({ color }: { color: string }) {
   );
 }
 
+// Styles for the desktop (`wide`) card, and a few shared by the phone rows.
+// `minHeight: 0` / `minWidth: 0` on flex children lets them shrink and scroll
+// instead of stretching the parent (a common React Native/CSS flexbox gotcha).
 const wideStyles = StyleSheet.create({
   row: {
     flex: 1,

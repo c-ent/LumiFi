@@ -7,12 +7,21 @@ import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { useTone } from '@/components/lumifi/features/tone';
 import { progressWide as wide } from '@/components/lumifi/features/progression/wide-styles';
 
-const RING = 36;
+// Radius of the progress ring, and its circumference. The ring is a circle
+// whose dash pattern is as long as the circle; shifting the dash offset hides
+// part of it, which is the standard SVG trick for a circular progress bar.
+const RING = 26;
 const RING_LENGTH = 2 * Math.PI * RING;
 
+/**
+ * Shows the current level, its name and XP progress to the next level.
+ * Desktop: a ring around the level number. Phone/tablet: a plain bar.
+ * All numbers come from `levelInfo(xp)` in src/core/xp.ts via the context.
+ */
 export function LevelCard({ mobile = false, wide: desk = false }: { mobile?: boolean; wide?: boolean }) {
   const { level, levelName, xpInLevel, xpNeeded } = useLumiFi();
   const tone = useTone(mobile);
+  // 0..1 progress through the current level (guards against divide-by-zero).
   const ratio = xpNeeded > 0 ? Math.min(1, xpInLevel / xpNeeded) : 0;
   const width = `${Math.round(ratio * 100)}%` as const;
   const left = Math.max(0, xpNeeded - xpInLevel);
@@ -22,15 +31,17 @@ export function LevelCard({ mobile = false, wide: desk = false }: { mobile?: boo
       <View style={wide.card}>
         <View style={deskStyles.row}>
           <View style={deskStyles.ring}>
-            <Svg width={84} height={84} viewBox="0 0 84 84" style={deskStyles.spin}>
-              <Circle cx="42" cy="42" r={RING} fill="none" stroke="rgba(255, 255, 255, 0.14)" strokeWidth={7} />
+            {/* Track (faint full circle), then the filled arc on top. The SVG is
+                rotated -90deg by `spin` so the arc starts at 12 o'clock. */}
+            <Svg width={62} height={62} viewBox="0 0 62 62" style={deskStyles.spin}>
+              <Circle cx="31" cy="31" r={RING} fill="none" stroke="rgba(255, 255, 255, 0.14)" strokeWidth={5} />
               <Circle
-                cx="42"
-                cy="42"
+                cx="31"
+                cy="31"
                 r={RING}
                 fill="none"
                 stroke={tone.accent}
-                strokeWidth={7}
+                strokeWidth={5}
                 strokeLinecap="round"
                 strokeDasharray={`${RING_LENGTH} ${RING_LENGTH}`}
                 strokeDashoffset={RING_LENGTH * (1 - ratio)}
@@ -67,11 +78,11 @@ const deskStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 18,
+    gap: 12,
   },
   ring: {
-    width: 84,
-    height: 84,
+    width: 62,
+    height: 62,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -82,7 +93,7 @@ const deskStyles = StyleSheet.create({
     position: 'absolute',
     color: colors.textPrimary,
     fontFamily: fonts.timeMedium,
-    fontSize: 28,
+    fontSize: 21,
   },
   copy: {
     flex: 1,
@@ -91,16 +102,16 @@ const deskStyles = StyleSheet.create({
   name: {
     color: colors.textPrimary,
     fontFamily: fonts.timeMedium,
-    fontSize: 24,
-    lineHeight: 29,
+    fontSize: 18,
+    lineHeight: 23,
   },
   meta: {
     color: colors.textMuted,
     fontFamily: fonts.body,
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: 12,
+    marginTop: 3,
   },
   bar: {
-    marginTop: 10,
+    marginTop: 7,
   },
 });

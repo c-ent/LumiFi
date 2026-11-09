@@ -7,10 +7,20 @@ import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { useTone } from '@/components/lumifi/features/tone';
 import { AMBIENT_KEYS, type AmbientKey } from '@/components/lumifi/hooks/use-ambient';
 
+/**
+ * The "Ambient sounds" list: one volume slider per looping sound, plus a
+ * "Turn off" button. Used in the Sounds panel on all three layouts.
+ *
+ * The sliders only change `mix` (0..100) in the app state; the audio itself
+ * is played by hooks/use-ambient.ts. `mobile` just picks the phone's mood
+ * colors instead of the desktop scene colors (see features/tone.ts).
+ */
 export function MixerBlock({ mobile = false }: { mobile?: boolean }) {
   const { mix, setMix, silenceAmbient } = useLumiFi();
   const tone = useTone(mobile);
+  // Disable "Turn off" when nothing is playing, so it never looks pressable for no reason.
   const ambientOn = AMBIENT_KEYS.some((key) => mix[key] > 0);
+  // Display names for each sound. Order here is the order on screen.
   const rows: { key: AmbientKey; label: string }[] = [
     { key: 'rain', label: 'Rain' },
     { key: 'cafe', label: 'Cafe' },
@@ -46,6 +56,7 @@ export function MixerBlock({ mobile = false }: { mobile?: boolean }) {
             minimumValue={0}
             maximumValue={100}
             value={mix[row.key]}
+            // Fires continuously while dragging; rounding keeps whole-number steps.
             onValueChange={(value) => setMix(row.key, Math.round(value))}
             minimumTrackTintColor={tone.accent}
             maximumTrackTintColor={colors.border}

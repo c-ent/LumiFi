@@ -24,7 +24,7 @@ describe('titleFromFileName', () => {
   it('falls back for an empty or extension-only name', () => {
     expect(titleFromFileName('')).toBe('Untitled');
     expect(titleFromFileName('   ')).toBe('Untitled');
-    expect(titleFromFileName('.mp3')).toBe('.mp3');
+    expect(titleFromFileName('.mp3')).toBe('Untitled');
   });
 });
 
@@ -97,6 +97,11 @@ describe('nextPlayableIndex', () => {
 
   it('wraps around to find a playable track', () => {
     expect(nextPlayableIndex(4, 3, (i) => i === 0)).toBe(0);
+  });
+
+  it('scans backward, skipping a missing file and wrapping', () => {
+    expect(nextPlayableIndex(4, 2, (i) => i !== 2, -1)).toBe(1);
+    expect(nextPlayableIndex(4, 0, (i) => i === 3, -1)).toBe(3);
   });
 
   it('returns null when nothing is playable', () => {

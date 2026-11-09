@@ -2,7 +2,6 @@ import {
   decideStreamNavigation,
   parseStreamLink,
   parseStreamLinks,
-  compactEmbedHeight,
   keepsWebPlaybackWhenHidden,
   playbackFor,
   publicCheckUrl,
@@ -100,15 +99,12 @@ describe('parseStreamLink', () => {
   });
 });
 
-describe('compact player', () => {
-  it('shrinks a tall playlist and keeps YouTube at least 200 tall', () => {
+describe('embed height', () => {
+  it('gives every service its own player height', () => {
     expect(playbackFor(linkFrom(SPOTIFY))).toMatchObject({ height: 352 });
-    expect(compactEmbedHeight(linkFrom(SPOTIFY))).toBe(152);
-    expect(compactEmbedHeight(linkFrom('spotify:track:11dFghVXANMlKmJXsNCbNl'))).toBe(152);
-    expect(compactEmbedHeight(linkFrom(YOUTUBE_LIST))).toBe(200);
-    const apple = compactEmbedHeight(linkFrom(APPLE));
-    expect(apple).toBeGreaterThanOrEqual(152);
-    expect(apple).toBeLessThan(450);
+    expect(playbackFor(linkFrom('spotify:track:11dFghVXANMlKmJXsNCbNl'))).toMatchObject({ height: 152 });
+    expect(playbackFor(linkFrom(YOUTUBE_LIST))).toMatchObject({ height: 270 });
+    expect(playbackFor(linkFrom(APPLE))).toMatchObject({ height: 450 });
   });
 
   it('leaves Spotify and Apple Music playing in a hidden browser tab, and removes YouTube', () => {

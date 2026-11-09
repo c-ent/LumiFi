@@ -2,11 +2,23 @@ import React from 'react';
 import { Animated, Platform, StyleSheet, ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
+/**
+ * A soft glowing ball of color used in the scene background.
+ *
+ * Why two code paths: on web we can use the CSS `filter: blur()`. React Native
+ * on Android/iOS has no equivalent that is cheap and reliable, so there the
+ * blur is faked with an SVG radial gradient that fades out smoothly.
+ * `glowStops` and `orbFrame` are pure helpers so they can be unit tested
+ * (see soft-orb.test.ts).
+ */
+
 // Same radius as the web `filter: blur(70px)`. The glow is drawn out to two
 // standard deviations, which is where that blur has faded out.
 export const ORB_BLUR = 70;
 export const ORB_PAD = ORB_BLUR * 2;
 
+// Where the orb sits, as position offsets (px, or % for left/top) from the
+// scene edges. Same idea as CSS absolute positioning.
 export type OrbPlace = {
   left?: number | `${number}%`;
   top?: number | `${number}%`;
@@ -14,6 +26,7 @@ export type OrbPlace = {
   bottom?: number;
 };
 
+// Animated x/y offsets from the parent's drift loop.
 type Drift = {
   x: Animated.AnimatedInterpolation<number>;
   y: Animated.AnimatedInterpolation<number>;
@@ -67,6 +80,7 @@ export function orbFrame(size: number, place: OrbPlace) {
   return { style, shiftX, shiftY };
 }
 
+/** `size` is the disc diameter in px; `opacity` is the overall strength. */
 export function SceneOrb({
   color,
   size,
@@ -80,6 +94,7 @@ export function SceneOrb({
   place: OrbPlace;
   drift: Drift;
 }) {
+  // Web: a plain colored circle with a real CSS blur.
   if (Platform.OS === 'web') {
     return (
       <Animated.View
@@ -101,6 +116,8 @@ export function SceneOrb({
     );
   }
 
+  // Native: an oversized SVG circle filled with a gradient that fades to
+  // transparent. The unique id keeps orbs from sharing one gradient definition.
   const frame = orbFrame(size, place);
   const stops = glowStops(size);
   const radius = (size + ORB_PAD * 2) / 2;

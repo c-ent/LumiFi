@@ -58,6 +58,11 @@ export function FocusLine({
       accessibilityLabel={text}
       accessibilityHint="Opens the task list"
       onPress={onPress}
+      // While the zen fade hides the chip it must not take taps or be read out.
+      disabled={zen}
+      pointerEvents={zen ? 'none' : 'auto'}
+      accessibilityElementsHidden={zen}
+      importantForAccessibility={zen ? 'no-hide-descendants' : 'auto'}
       // Pressable accepts a function for `style` so it can react to the pressed state.
       style={({ pressed }) => [chip, { opacity: pressed ? 0.7 : opacity }]}
     >

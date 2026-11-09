@@ -10,6 +10,7 @@ Read this when changing data flow, storage, auth, or folder boundaries. Only wha
 - `assets/audio/`: licensed tracks only, listed in `MUSIC_LICENSES.md`.
 
 ### `components/lumifi/` is grouped by feature
+
 - Root: `lumifi-screen.tsx` (the public entry `app/` imports), `logic.tsx` (the provider and context), `theme.ts` (scene and mood palettes, `PRESETS`, `formatTime`, and a re-export barrel for `src/theme/tokens` and six `src/core` modules).
 - `screens/`: `mobile.tsx`, `tablet.tsx`, `desktop.tsx`. The device shells. Arrangement only, no business rules. Each is a thin composition of the feature panels.
 - `features/`: one folder per product concept. `layout.ts`, `tone.ts`, `background/`, `clock/`, `timer/`, `tasks/`, `audio/`, `progression/`, `settings/`. A feature owns its own components; device differences are a `mobile` prop (or the shell), not a separate folder.
@@ -27,9 +28,8 @@ Read this when changing data flow, storage, auth, or folder boundaries. Only wha
 The check is dimensions, never device model: an iPad in portrait (shorter side 768-834) gets the tablet layout, and an iPad Pro in landscape (shorter side 1024) gets the desktop scene because 1024 is past 840. So "tablet" is a width band, not "iPad". Android is the only verified target; iOS is untested.
 
 ## Storage model
-- Device (AsyncStorage through Zustand persist): tasks, settings, XP, streak, daily quest progress, goals, the current session. Local-first, so the app works with no account.
-- Supabase Postgres (v2, planned): profile with XP, level and streak; tasks; completed focus sessions; quest claims; later pets owned and goals. Every row belongs to one user.
-- Goals: stored on the device with the rest of the progress, one row per goal with its counters, its `done` and `paid` flags, and the `goalId` that links a task to it. A goal is credited from a completed focus session in `src/core`, never from a component, so a client still cannot invent a goal payout.
+- Device (AsyncStorage through Zustand persist): tasks, settings, XP, streak, daily quest progress, the current session. Local-first, so the app works with no account.
+- Supabase Postgres (v2, planned): profile with XP, level and streak; tasks; completed focus sessions; quest claims. Every row belongs to one user.
 - Daily minutes: keep one total per day on the device without pruning, so the calendar has history. The month grid reads that history through `monthGrid` and stores nothing of its own; only the displayed month and the tapped day live in the panel's state.
 - Audio files: bundled in `assets/audio` for v1. The user's own files are copied into the app's private document folder (`Paths.document/own-tracks`) and only their id, title and `file://` URI are stored in AsyncStorage. A streaming link stores the public page URL and the service name in the same save. The audio stays in that service's player. Do not store audio in database rows, and do not copy a stream into a file.
 

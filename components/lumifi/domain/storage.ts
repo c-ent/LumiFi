@@ -13,13 +13,28 @@ import { LEGACY_STORAGE_KEY, parseSavedState, SavedState, STORAGE_KEY } from './
 // be sitting in storage, and a failed read says nothing about what is there.
 // Changes made during such a session stay in memory until a read succeeds.
 let readFailed = false;
+// The skipped-save warning is printed once per session, not on every save.
+let warnedSkippedSave = false;
+// The read in flight, if any. Two overlapping loads share it, so they cannot
+// finish in a different order from the one that set `readFailed`.
+let inFlight: Promise<SavedState> | null = null;
 
 /**
  * Reads the saved state, falling back to fresh defaults on any failure. A
  * failed read also arms `readFailed`, because defaults that came from an error
- * must never be written back: real progress may still be in storage.
+ * must never be written back: real progress may still be in storage. Callers
+ * that overlap share one read, so the flag always matches the state returned.
  */
-export async function loadLumiFiState(): Promise<SavedState> {
+export function loadLumiFiState(): Promise<SavedState> {
+  if (!inFlight) {
+    inFlight = readLumiFiState().finally(() => {
+      inFlight = null;
+    });
+  }
+  return inFlight;
+}
+
+async function readLumiFiState(): Promise<SavedState> {
   let raw: string | null = null;
   let legacy = false;
   try {
@@ -57,7 +72,13 @@ export async function loadLumiFiState(): Promise<SavedState> {
  * in-memory state is still correct, so the next successful write catches up.
  */
 export async function saveLumiFiState(state: SavedState): Promise<void> {
-  if (readFailed) return;
+  if (readFailed) {
+    if (!warnedSkippedSave) {
+      warnedSkippedSave = true;
+      console.warn('LumiFi: the saved state could not be read, so changes are not being saved this session.');
+    }
+    return;
+  }
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {

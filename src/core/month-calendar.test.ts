@@ -149,8 +149,8 @@ describe('quietDayLine', () => {
     expect(quietDayLine(() => 0.999999)).toBe(QUIET_DAY_LINES[count - 1]);
 
     // Both ends of every band, so the boundaries land where the floor says.
-    expect(quietDayLine(() => 0.2)).toBe(QUIET_DAY_LINES[1]);
-    expect(quietDayLine(() => 0.199999)).toBe(QUIET_DAY_LINES[0]);
+    expect(quietDayLine(() => 1 / count)).toBe(QUIET_DAY_LINES[1]);
+    expect(quietDayLine(() => 1 / count - 0.000001)).toBe(QUIET_DAY_LINES[0]);
   });
 });
 

@@ -15,7 +15,8 @@ reviews:
     - "!.agents/**"
 
   path_instructions:
-    - path: "src/**/*.ts"
+    # Source files only: test files are left out of the architecture guidance.
+    - path: "src/**/!(*.test|*.spec).ts"
       instructions: |
         Focus on architecture and system design.
         Prioritize scalability and

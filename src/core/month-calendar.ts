@@ -68,7 +68,7 @@ export const QUIET_DAY_LINES = [
   'Rest is part of the work',
   'A quiet day',
   'Some days are for resting',
-  'There\'s a room to begin',
+  'There\'s room to begin',
 ] as const;
 
 /** One of `QUIET_DAY_LINES`, the way `focusEndLine` picks a session-end line. */

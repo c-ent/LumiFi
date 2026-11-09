@@ -28,7 +28,9 @@ export function useKeyboardInset() {
     if (Platform.OS === 'web') {
       const viewport = window.visualViewport;
       if (!viewport) return undefined;
-      const update = () => setInset(visualKeyboardCover(window.innerHeight, viewport.height, viewport.offsetTop));
+      // A pinch-zoomed page also shrinks the visual viewport, which is not a
+      // keyboard, so a zoomed viewport reports no cover.
+      const update = () => setInset(viewport.scale !== 1 ? 0 : visualKeyboardCover(window.innerHeight, viewport.height, viewport.offsetTop));
       update();
       viewport.addEventListener('resize', update);
       viewport.addEventListener('scroll', update);

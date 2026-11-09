@@ -13,7 +13,7 @@ import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import { glassPanel } from '@/components/lumifi/shared/panel-styles';
 import { useFullscreen } from '@/components/lumifi/hooks/use-fullscreen';
 import { useLumiFi } from '@/components/lumifi/logic';
-import { formatTime, MODE_LABEL, TimerMode } from '@/components/lumifi/theme';
+import { formatTime, hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/lumifi/theme';
 import { RainOverlay } from '@/components/lumifi/features/background/rain';
 import { SceneBackground } from '@/components/lumifi/features/background/scene-background';
 import { LevelCard } from '@/components/lumifi/features/progression/level-card';
@@ -160,8 +160,8 @@ export function DesktopLumiFi() {
     : 'Stretch, drink some water, look away from the screen';
   const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
   const startLabel = lamp.running ? 'Pause' : lamp.status === 'paused' ? 'Resume' : 'Start';
-  // Dot on the Quests button while any daily quest is unfinished.
-  const questOpen = lamp.day.sessions < 4 || lamp.day.minutes < 60 || lamp.day.tasks < 1;
+  // Dot on the Quests button while any daily quest is unclaimed.
+  const questOpen = hasOpenQuests(lamp.day);
   // Music card height: up to 720px, or whatever fits above the dock.
   const musicRoom = height - insets.top - insets.bottom - 104;
   const musicHeight = Math.min(720, Math.max(0, musicRoom));
@@ -288,12 +288,12 @@ export function DesktopLumiFi() {
           pointerEvents="box-none"
           style={[styles.wideWrap, styles.progressWrap, { top: insets.top + 20, bottom: insets.bottom + 84 }]}
         >
-          <View style={[styles.progressScroll, panel === 'quests' && styles.questsScroll, panel === 'tasks' && styles.tasksScroll]}>
+          <ScrollView style={[styles.progressScroll, panel === 'quests' && styles.questsScroll, panel === 'tasks' && styles.tasksScroll]}>
             <View style={styles.progressCard}>
               <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
               {panel === 'progress' ? <ProgressBoard /> : panel === 'quests' ? <QuestsBoard /> : <TaskList />}
             </View>
-          </View>
+          </ScrollView>
         </View>
       ) : null}
 
@@ -582,6 +582,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   // Caps at the space above the dock and scrolls only when the content is taller.
+  // A ScrollView for Progress, Quests and Tasks; the Music card reuses the box
+  // as a plain View with `musicScroll`, which clips instead of scrolling.
   progressScroll: {
     width: '100%',
     maxWidth: 900,
@@ -589,7 +591,6 @@ const styles = StyleSheet.create({
     minHeight: 0,
     flexGrow: 0,
     flexShrink: 1,
-    overflow: 'auto' as 'scroll',
   },
   // Daily quests are one column, so the card stays narrower than Progress.
   questsScroll: {

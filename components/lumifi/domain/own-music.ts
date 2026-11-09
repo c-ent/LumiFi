@@ -19,16 +19,27 @@ const MAX_EXT = 8;
 
 let sequence = 0;
 
+/**
+ * Whether this platform can keep a picked file at all. The picker UI checks it
+ * and hides itself on web, where a picked file could not be stored.
+ */
 export function ownTracksSupported(): boolean {
   return Platform.OS !== 'web';
 }
 
-/** A unique, filesystem-safe id that doubles as the file's name in the folder. */
+/** The id is the file's name, so a delete can be done from the saved entry
+ * alone. The extension is kept so the platform player can sniff the format. */
 function newId(extension: string): string {
   sequence += 1;
   return `${Date.now().toString(36)}-${sequence.toString(36)}${extension}`;
 }
 
+/**
+ * Keeps the extension only when it is a plain dot plus alphanumerics, and caps
+ * its length. A name arrives from outside, so anything else (a path part, a
+ * double extension, a trailing dot) is dropped rather than trusted. An unknown
+ * extension is safe because the player reads the file's own header.
+ */
 function safeExtension(name: string): string {
   const dot = name.lastIndexOf('.');
   if (dot < 0) return '';
@@ -37,12 +48,9 @@ function safeExtension(name: string): string {
   return /^\.[a-z0-9]{1,8}$/.test(ext) ? ext.slice(0, MAX_EXT) : '';
 }
 
-function ownTracksFolder(): Directory {
-  return new Directory(Paths.document, FOLDER);
-}
-
-function ensureFolder(): Directory {
-  const folder = ownTracksFolder();
+/** The app's own-tracks folder, created on first use. */
+function ensureOwnTracksFolder(): Directory {
+  const folder = new Directory(Paths.document, FOLDER);
   if (!folder.exists) folder.create({ intermediates: true, idempotent: true });
   return folder;
 }
@@ -63,7 +71,7 @@ export async function pickOwnTracks(): Promise<OwnTrack[] | null> {
   });
   if (result.canceled) return null;
 
-  const folder = ensureFolder();
+  const folder = ensureOwnTracksFolder();
   const tracks: OwnTrack[] = [];
   for (const asset of result.assets) {
     const saved = await copyIntoFolder(folder, asset.uri, asset.name);
@@ -72,6 +80,10 @@ export async function pickOwnTracks(): Promise<OwnTrack[] | null> {
   return tracks;
 }
 
+/**
+ * Copies one picked file in. A single failure returns null instead of throwing
+ * so the caller can keep the rest of a multi-select batch.
+ */
 async function copyIntoFolder(
   folder: Directory,
   sourceUri: string,
@@ -87,22 +99,42 @@ async function copyIntoFolder(
   }
 }
 
-/** Deletes a track's file. A file already gone is not an error. */
-export function deleteOwnTrackFile(uri: string): void {
-  if (!ownTracksSupported()) return;
+/**
+ * The file for a saved track, rebuilt from its id. The stored `uri` is an
+ * absolute path that can go stale (iOS changes the app container path on
+ * update), so the id, which is the file's name, is the source of truth. An id
+ * is data read back from storage, so only a plain file name is accepted: no
+ * separators, no `.` or `..`. Returns null on web or for an unsafe id.
+ */
+function ownTrackFile(id: string): File | null {
+  if (!ownTracksSupported()) return null;
+  if (!/^[A-Za-z0-9._-]+$/.test(id) || id === '.' || id === '..') return null;
+  return new File(new Directory(Paths.document, FOLDER), id);
+}
+
+/** The current URI for a saved track's file, or null when it cannot be built. */
+export function ownTrackUri(id: string): string | null {
   try {
-    const file = new File(uri);
-    if (file.exists) file.delete();
+    return ownTrackFile(id)?.uri ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Deletes a track's file by id. A file already gone is not an error. */
+export function deleteOwnTrackFile(id: string): void {
+  try {
+    const file = ownTrackFile(id);
+    if (file?.exists) file.delete();
   } catch {
     // A hand-edited or already-removed path: nothing to delete.
   }
 }
 
-/** Whether the file behind a saved entry still exists. */
-export function ownTrackExists(uri: string): boolean {
-  if (!ownTracksSupported()) return false;
+/** Whether the file behind a saved track id still exists. */
+export function ownTrackExists(id: string): boolean {
   try {
-    return new File(uri).exists;
+    return ownTrackFile(id)?.exists ?? false;
   } catch {
     return false;
   }

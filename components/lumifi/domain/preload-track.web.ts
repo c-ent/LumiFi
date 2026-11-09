@@ -1,3 +1,7 @@
+// The web half of the preload pair. The shared rationale for the wrapper lives
+// in `preload-track.ts`; this file exists because web must swap the element
+// onto a fetched copy, which native does not need.
+
 import { AudioModule } from 'expo-audio';
 
 /**

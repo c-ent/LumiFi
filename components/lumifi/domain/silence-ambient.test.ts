@@ -1,5 +1,8 @@
 import { silenceAmbientMix } from './silence-ambient';
 
+// Ending a session while keeping the music sets every ambient level to zero and
+// leaves the music level unchanged.
+
 describe('silence ambient mix', () => {
   it('sets every ambient slider to zero and leaves the music level', () => {
     expect(silenceAmbientMix({

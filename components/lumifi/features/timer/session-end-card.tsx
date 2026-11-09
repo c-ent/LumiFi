@@ -5,17 +5,30 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface SessionEndCardProps {
   title: string;
+  /** The one encouraging sentence (a random line from src/core/session-end.ts). */
   line: string;
+  /** Text of the main button, e.g. "Start break". */
   actionLabel: string;
   accent: string;
+  /** False when the next session already auto-started: then there is nothing to choose. */
   showLater: boolean;
   onStart: () => void;
   onDismiss: () => void;
 }
 
+/**
+ * The gentle "Focus finished" card shown when a session completes. It replaces
+ * a harsh alarm: a short message and two quiet buttons (start the next phase or
+ * "Later"). Tapping anywhere outside the card dismisses it.
+ */
 export function SessionEndCard({ title, line, actionLabel, accent, showLater, onStart, onDismiss }: SessionEndCardProps) {
   return (
+    // Outer Pressable = full-screen backdrop that dismisses on tap. It is hidden
+    // from screen readers (accessible={false}) since the card itself is the target.
     <Pressable accessible={false} tabIndex={-1} onPress={onDismiss} style={styles.scrim}>
+      {/* The card. When it has buttons, a tap on empty card space must NOT
+          reach the backdrop (stopPropagation). When it has none (auto-start),
+          the whole card becomes a single "Dismiss" button. */}
       <Pressable
         accessible={!showLater}
         accessibilityRole={showLater ? undefined : 'button'}
@@ -41,6 +54,7 @@ export function SessionEndCard({ title, line, actionLabel, accent, showLater, on
 }
 
 const styles = StyleSheet.create({
+  // Covers the whole screen and sits above everything (zIndex 30).
   scrim: {
     ...StyleSheet.absoluteFill,
     zIndex: 30,

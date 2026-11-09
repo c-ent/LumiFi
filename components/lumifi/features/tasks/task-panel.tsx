@@ -5,6 +5,12 @@ import { useLumiFi } from '@/components/lumifi/logic';
 import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { useTone } from '@/components/lumifi/features/tone';
 
+/**
+ * A simpler task list: add a task, check it off, press "Focus on".
+ * NOTE: none of the three screens import this any more. `TaskList`
+ * (task-list.tsx) is the live one, with due dates, editing and subtasks.
+ * This file looks like a leftover from before that; check before reusing it.
+ */
 export function TaskPanel({ mobile = false }: { mobile?: boolean }) {
   const { tasks, activeTask, addTask, toggleTask, focusTask } = useLumiFi();
   const tone = useTone(mobile);

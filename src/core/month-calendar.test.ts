@@ -1,5 +1,5 @@
 import { calendarKey } from './calendar';
-import { monthGrid, monthRef, monthShade, shiftMonth } from './month-calendar';
+import { monthGrid, monthRef, monthShade, QUIET_DAY_LINES, quietDayLine, shiftMonth } from './month-calendar';
 import { DayHistory } from './types';
 
 function history(entries: Record<string, { minutes: number; sessions: number }>): DayHistory {
@@ -133,6 +133,24 @@ describe('monthGrid', () => {
     // The whole of a past month is pickable, and the whole of a future one is not.
     expect(monthGrid(now, history({}), 2026, 9).weeks.flat().some((entry) => entry.future)).toBe(false);
     expect(monthGrid(now, history({}), 2026, 11).weeks.flat().every((entry) => entry.future)).toBe(true);
+  });
+});
+
+describe('quietDayLine', () => {
+  it('picks every line in the set and never falls off either end', () => {
+    const count = QUIET_DAY_LINES.length;
+    // The middle of each band, so each line is reachable.
+    const middles = QUIET_DAY_LINES.map((_, index) => () => (index + 0.5) / count);
+    expect(middles.map(quietDayLine)).toEqual([...QUIET_DAY_LINES]);
+
+    // A random source at or beyond the ends still returns a real line.
+    expect(quietDayLine(() => 0)).toBe(QUIET_DAY_LINES[0]);
+    expect(quietDayLine(() => 1)).toBe(QUIET_DAY_LINES[count - 1]);
+    expect(quietDayLine(() => 0.999999)).toBe(QUIET_DAY_LINES[count - 1]);
+
+    // Both ends of every band, so the boundaries land where the floor says.
+    expect(quietDayLine(() => 0.2)).toBe(QUIET_DAY_LINES[1]);
+    expect(quietDayLine(() => 0.199999)).toBe(QUIET_DAY_LINES[0]);
   });
 });
 

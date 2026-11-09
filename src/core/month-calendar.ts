@@ -59,6 +59,28 @@ export function monthShade(minutes: number): MonthShade {
   return 3;
 }
 
+/**
+ * What a day with no focus time says in the day detail, instead of a bare zero.
+ * Drawn per view rather than per day, so a month full of gaps does not read as
+ * one line repeated.
+ */
+export const QUIET_DAY_LINES = [
+  'Rest is part of the work',
+  'A quiet day',
+  'Some days are for resting',
+  'There\'s a room to begin',
+] as const;
+
+/** One of `QUIET_DAY_LINES`, the way `focusEndLine` picks a session-end line. */
+export function quietDayLine(random: () => number): string {
+  const rolled = random();
+  const index = Math.min(
+    QUIET_DAY_LINES.length - 1,
+    Math.max(0, Math.floor(rolled * QUIET_DAY_LINES.length)),
+  );
+  return QUIET_DAY_LINES[index];
+}
+
 export function monthRef(now: number): MonthRef {
   const date = new Date(now);
   return { year: date.getFullYear(), month: date.getMonth() };

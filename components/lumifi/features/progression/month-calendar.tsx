@@ -9,6 +9,8 @@ import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { useTone } from '@/components/lumifi/features/tone';
 import { progressWide as wide } from '@/components/lumifi/features/progression/wide-styles';
 
+// Column headers, Sunday first. Duplicate letters (T, S) are why the render key
+// below also includes the index.
 const DAY_NAMES = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 // The month view beside the last-7-days chart. The core returns the cells; this
@@ -20,6 +22,7 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
   // primitives: the grid comes from the stored history and the detail line from
   // the tapped cell, so neither reading is kept a second time. The quiet line is
   // the one exception, since it is drawn rather than derived.
+  // null = "follow the current month"; set once the user presses an arrow.
   const [view, setView] = useState<MonthRef | null>(null);
   // Today starts picked, so the panel opens on a day's numbers instead of the
   // "tap a day" hint. Stepping to another month finds no cell for that key and
@@ -40,11 +43,14 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
   // focus time, and neither does a future day, so the next arrow stops there and
   // a future cell is dimmed and not pressable.
   const atCurrentMonth = shown.year === current.year && shown.month === current.month;
+  // 6 weeks x 7 days of cells for the shown month (see src/core/month-calendar.ts).
   const grid = monthGrid(now, days, shown.year, shown.month);
-  const selectedCell = selected == null
+  // The detail line is looked up from the grid each render, never stored.
+  const selectedCell =selected == null
     ? null
     : grid.weeks.flat().find((cell) => cell.key === selected) ?? null;
 
+  // Built once, then either wrapped in a card (desktop) or returned bare at the bottom.
   const body = (
     <View>
       <Text style={[styles.kicker, desk && wide.label]}>Calendar</Text>
@@ -139,6 +145,8 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
   return desk ? <View style={wide.card}>{body}</View> : body;
 }
 
+// One square in the grid. Its fill darkens with the day's minutes (4 steps).
+// `onPress` is undefined for future days so they can't be selected.
 function DayCell({
   cell,
   accent,
@@ -163,12 +171,14 @@ function DayCell({
       ? accent
       : desk
         ? fade(accent, shade === 2 ? 0.42 : 0.2)
-        : `${accent}${shade === 2 ? '66' : '33'}`;
+        // Phone/tablet: append a hex alpha to a "#rrggbb" color ('66' ~ 40%, '33' ~ 20%).
+      : `${accent}${shade === 2 ? '66' : '33'}`;
   const borderColor = selected
     ? (desk ? colors.success : accent)
     : cell.today
       ? (desk ? colors.textPrimary : colors.textMuted)
       : 'transparent';
+  // On the darkest (solid accent) cell the number switches to dark text to stay readable.
   const ink = desk && cell.inMonth && shade === 3;
 
   return (

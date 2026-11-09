@@ -8,6 +8,9 @@ export function keyboardCover(windowHeight: number, screenY: number): number {
   return Math.max(0, Math.round(windowHeight - screenY));
 }
 
+// Web version of the same number. On mobile browsers the on-screen keyboard
+// shrinks the *visual* viewport but not the layout viewport, so the keyboard
+// height is the difference between the two.
 export function visualKeyboardCover(innerHeight: number, viewportHeight: number, offsetTop: number): number {
   if (!Number.isFinite(innerHeight) || !Number.isFinite(viewportHeight) || !Number.isFinite(offsetTop)) return 0;
   return Math.max(0, Math.round(innerHeight - viewportHeight - offsetTop));
@@ -35,6 +38,8 @@ export function useKeyboardInset() {
       };
     }
 
+    // Native: iOS has "will" events that fire before the animation, so the
+    // sheet moves with the keyboard. Android only has "did" events.
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const show = Keyboard.addListener(showEvent, (event) => setInset(coverFromEvent(event)));

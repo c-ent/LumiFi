@@ -43,13 +43,37 @@ import {
   TimerMode,
 } from '@/components/lumifi/theme';
 
+/**
+ * logic.tsx is the app's brain. Think of it like a Next.js/React Context
+ * provider that wraps the whole app: every screen calls `useLumiFi()` to read
+ * state (xp, tasks, timer) and call actions (toggle, skip, addTask).
+ *
+ * How the pieces fit:
+ * - `LumiFiProvider` loads the saved state from AsyncStorage (async, so it
+ *   renders a blank dark view until ready), then mounts `LumiFiSession`.
+ * - `LumiFiSession` owns the live state, wires up the music/ambient audio and
+ *   the session clock, and builds one big `value` object for the context.
+ * - The actual rules (XP, streaks, quests, deadlines) are NOT here. They are
+ *   pure functions in `src/core` and `domain/session.ts`; this file only calls
+ *   them and stores the result. That keeps components free of game logic.
+ *
+ * Two patterns you'll see a lot:
+ * - `savedRef` mirrors `saved` state. Timers, listeners and notifications fire
+ *   later and would otherwise read a stale value from an old render's closure.
+ * - `commit(next)` = update state AND write to storage right away. Plain
+ *   `setSaved` updates state only; the persist effect saves it afterwards.
+ */
+
+// The "Focus finished" card shown after a session completes (session-end-card.tsx).
 interface SessionEnding {
   title: string;
   line: string;
   actionLabel: string;
+  /** Hide the "Later" button when the next session already auto-started. */
   showLater: boolean;
 }
 
+// Everything screens can read or call. Grouped: values first, then actions.
 interface LumiFiContextValue {
   cfg: TimerCfg;
   auto: boolean;
@@ -131,9 +155,12 @@ interface LumiFiContextValue {
 
 const LumiFiContext = createContext<LumiFiContextValue | null>(null);
 
+// Outer shell: just loads the save file. Splitting it from LumiFiSession means
+// the session hooks can assume `saved` is never null.
 export function LumiFiProvider({ children }: { children: React.ReactNode }) {
   const [saved, setSaved] = useState<SavedState | null>(null);
 
+  // Load once on mount. `active` guards against setting state after unmount.
   useEffect(() => {
     let active = true;
     loadLumiFiState().then((state) => {
@@ -144,6 +171,7 @@ export function LumiFiProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Blank dark view while loading, so there's no white flash on a dark-only app.
   if (!saved) {
     return <View style={{ flex: 1, backgroundColor: colors.bgBase }} />;
   }
@@ -164,7 +192,10 @@ function LumiFiSession({
   setSaved: React.Dispatch<React.SetStateAction<SavedState | null>>;
   children: React.ReactNode;
 }) {
+  // The clock hook calls this when time runs out. It's a ref so the hook can be
+  // set up first; `finish` (defined below) is assigned into it later.
   const onReachEnd = useRef<() => void>(() => {});
+  // Audio. Sliders store 0..100; the players want 0..1, hence the `/ 100`.
   const music = useMusic(saved.mix.music / 100, saved.ownTracks, saved.musicLoop);
   const ambient = useAmbient({
     rain: saved.mix.rain / 100,
@@ -178,6 +209,8 @@ function LumiFiSession({
     waves: saved.mix.waves / 100,
   });
   useBackgroundAudio(music.player, music.musicPlaying, music.trackTitle, music.trackArtist, ambient);
+  // "Latest value" refs. Callbacks created once (timers, listeners) read these
+  // instead of the render-time variables, which would be stale by then.
   const savedRef = useRef(saved);
   const musicRef = useRef(music);
   const ambientRef = useRef(ambient);
@@ -187,22 +220,36 @@ function LumiFiSession({
     ambientRef.current = ambient;
   });
   const clock = useSessionClock(saved.session, onReachEnd);
+
+  // Short-lived UI state (not saved): toast text, current time, end-of-session
+  // effects, and `swap`, a counter that bumps on a phase change so animations replay.
   const [toast, setToast] = useState<string | null>(null);
   const [now, setNow] = useState<number | null>(null);
   const [smoke, setSmoke] = useState(false);
   const [dimming, setDimming] = useState(false);
   const [ending, setEnding] = useState<SessionEnding | null>(null);
   const [swap, setSwap] = useState(0);
+  // Timer ids, kept so they can be cleared on re-trigger and on unmount.
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const smokeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dimTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Skip the first persist run so loading doesn't immediately re-write the file.
   const persistReady = useRef(false);
+  // Guards against a double tap on Start running `begin` twice.
   const starting = useRef(false);
+  // The `endAt` already completed, so one session can never pay out twice.
   const handledEndAt = useRef<number | null>(null);
+  // When the chime last played, to avoid a double chime (in-app + notification).
   const chimeAt = useRef(0);
+
+  // Streaming-embed bookkeeping (Spotify/YouTube/...). Refs, because the
+  // AppState listener below needs current values without re-subscribing.
   const activeStreamIdRef = useRef<string | null>(null);
+  /** Local music was playing when an embed opened, so resume it on close. */
   const heldForEmbed = useRef(false);
+  /** We handed off to another app and should resume when the user returns. */
   const resumeWhenActive = useRef(false);
+  /** That other app actually took the foreground (not just a brief flicker). */
   const leftForStream = useRef(false);
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
 
@@ -225,18 +272,23 @@ function LumiFiSession({
     return () => subscription.remove();
   }, []);
 
+  // Show a message for ~3.6s. A new toast replaces the old one and restarts the timer.
   const showToast = (message: string) => {
     setToast(message);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3600);
   };
 
+  // Update state AND save immediately. Used for important changes (session
+  // start/finish) where the ref must be current right away and we don't want to
+  // wait for the effect below. Also sets the ref first so the next read is fresh.
   const commit = (next: SavedState) => {
     savedRef.current = next;
     setSaved(next);
     void saveLumiFiState(next);
   };
 
+  // Safety net: any state change made via plain `setSaved` gets persisted here.
   useEffect(() => {
     if (!persistReady.current) {
       persistReady.current = true;
@@ -245,6 +297,8 @@ function LumiFiSession({
     void saveLumiFiState(saved);
   }, [saved]);
 
+  // On app launch: if a session was running when the app closed, re-schedule
+  // its end-of-session notification (the OS may have dropped it).
   useEffect(() => {
     const session = savedRef.current.session;
     if (session.status !== 'running' || session.endAt == null) return undefined;
@@ -260,6 +314,10 @@ function LumiFiSession({
     };
   }, []);
 
+  // Every 15s: refresh "now" and roll the day over. `now` only changes when the
+  // calendar day changes (so most ticks cause no re-render). `rollToToday`
+  // moves "today" stats into history once midnight passes, even if the app was
+  // left open overnight.
   useEffect(() => {
     const tick = () => {
       const nextNow = Date.now();
@@ -276,12 +334,15 @@ function LumiFiSession({
     return () => clearInterval(id);
   }, [setSaved]);
 
+  // Unmount cleanup: cancel any pending timeouts.
   useEffect(() => () => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     if (smokeTimer.current) clearTimeout(smokeTimer.current);
     if (dimTimer.current) clearTimeout(dimTimer.current);
   }, []);
 
+  // Play the soft end chime at most once per 8s. Two things can trigger it for
+  // the same session end (the in-app finish and the arriving notification).
   const playEndChime = () => {
     const playedAt = Date.now();
     if (playedAt - chimeAt.current < 8000) return;
@@ -289,6 +350,8 @@ function LumiFiSession({
     musicRef.current.playChime();
   };
 
+  // Native only: when the end-of-session notification arrives while the app is
+  // open, play the chime (the OS only plays the sound if the app is closed).
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
     const subscription = addNotificationReceivedListener((notification) => {
@@ -298,15 +361,21 @@ function LumiFiSession({
     return () => subscription.remove();
   }, []);
 
+  // A session reached its deadline. All reward math happens inside
+  // `takeCompletedSession` (src/core); this function applies the result:
+  // saves the new state, plays the gentle end effects and shows the end card.
   const finish = () => {
     const current = savedRef.current;
     const endAt = current.session.endAt;
+    // Already handled this exact deadline (the clock can fire more than once).
     if (endAt == null || handledEndAt.current === endAt) return;
     const outcome = takeCompletedSession(current, current.session, Date.now(), current.auto);
     if (!outcome.completed) return;
     handledEndAt.current = endAt;
     commit({ ...outcome.state, session: outcome.clock });
     setSwap((value) => value + 1);
+    // Gentle end: smoke wisp for 2.4s, flame dims for 1s, soft chime, then music
+    // is lowered or faded per the user's setting. No harsh alarm.
     setSmoke(true);
     setDimming(true);
     if (smokeTimer.current) clearTimeout(smokeTimer.current);
@@ -332,6 +401,7 @@ function LumiFiSession({
     }
     const message = outcome.messages[outcome.messages.length - 1];
     if (message) showToast(message);
+    // With auto-start the next phase is already running, so schedule its alarm.
     if (outcome.clock.status === 'running' && outcome.clock.endAt != null) {
       void scheduleSessionEnd(outcome.clock.endAt, outcome.clock.mode);
     } else {
@@ -339,10 +409,13 @@ function LumiFiSession({
     }
   };
 
+  // Point the clock's callback at the latest `finish` after every render.
+  // useLayoutEffect (not useEffect) so it's set before the next timer tick.
   useLayoutEffect(() => {
     onReachEnd.current = finish;
   });
 
+  // Start (or resume) the timer.
   const begin = async () => {
     if (starting.current) return;
     const current = savedRef.current;
@@ -373,6 +446,8 @@ function LumiFiSession({
     }
   };
 
+  // Pause keeps the remaining time; the scheduled notification is cancelled
+  // because the old end time no longer applies.
   const pause = () => {
     const current = savedRef.current;
     if (current.session.status !== 'running') return;
@@ -381,6 +456,9 @@ function LumiFiSession({
     void cancelSessionEnd();
   };
 
+  // Change timer lengths. If the current phase's length changed and it isn't
+  // running, reset it so the new length shows immediately. A running session
+  // keeps its old deadline.
   const updateCfg = (cfg: TimerCfg) => {
     const current = savedRef.current;
     const durationChanged = cfg[current.session.mode] !== current.cfg[current.session.mode];
@@ -390,6 +468,8 @@ function LumiFiSession({
     commit({ ...current, cfg, session });
   };
 
+  // The user started local music while an embed was up: drop the embed and
+  // forget the "resume later" bookkeeping, since local audio now takes over.
   const releaseStreamForLocal = () => {
     resumeWhenActive.current = false;
     leftForStream.current = false;
@@ -399,6 +479,7 @@ function LumiFiSession({
     setActiveStreamId(null);
   };
 
+  // End the stream (unmounts the player) and resume local music if we paused it.
   const closeStream = () => {
     activeStreamIdRef.current = null;
     setActiveStreamId(null);
@@ -409,6 +490,9 @@ function LumiFiSession({
     if (resume) musicRef.current.play();
   };
 
+  // Start a saved streaming link. Embeds show in-app; "open" links (YouTube
+  // Music) hand off to the other app. Local music is paused either way, because
+  // two things playing at once is never wanted.
   const openStream = (id: string) => {
     const link = savedRef.current.streamLinks.find((item) => item.id === id);
     if (!link) return;
@@ -439,9 +523,16 @@ function LumiFiSession({
     setActiveStreamId(id);
   };
 
+  // Derived values, computed fresh each render rather than stored.
   const levels = levelInfo(saved.xp);
   const total = modeDurationMs(saved.cfg, saved.session.mode);
   const activeTask = saved.tasks.find((task) => task.id === saved.activeId) ?? null;
+
+  // The context value: what every screen sees through `useLumiFi()`. Actions
+  // that touch the timer use `commit` (instant save). Simple setting toggles
+  // use `setSaved((current) => ...)`, the functional form, so two quick changes
+  // can't overwrite each other. The `current ? ... : current` check is only
+  // there to satisfy TypeScript, since `saved` is nullable in the setter type.
   const value: LumiFiContextValue = {
       cfg: saved.cfg,
       auto: saved.auto,
@@ -455,6 +546,8 @@ function LumiFiSession({
       levelName: levels.name,
       xpInLevel: levels.left,
       xpNeeded: levels.need,
+      // Shown streak is recomputed against "now", so a missed day reads 0 even
+      // before anything has been saved.
       streak: now == null ? 0 : streakCount(saved.streak, now),
       now: now ?? 0,
       day: saved.day,
@@ -510,6 +603,8 @@ function LumiFiSession({
         setDimming(false);
         void cancelSessionEnd();
       },
+      // Skip jumps to the next phase WITHOUT awarding XP (only a completed
+      // session pays out). It keeps running only if auto-start is on.
       skip: () => {
         const current = savedRef.current;
         const nowMs = Date.now();
@@ -533,6 +628,8 @@ function LumiFiSession({
       setMusicEnd: (musicEnd) => setSaved((current) => (current ? { ...current, musicEnd } : current)),
       applyPreset: updateCfg,
       setDuration: (key, minutes) => updateCfg({ ...savedRef.current.cfg, [key]: minutes }),
+      // Task actions delegate to pure functions in domain/session.ts. Those that
+      // can earn a reward return `messages`; the last one is shown as a toast.
       addTask: (text, date) => setSaved((current) => (
         current ? addTaskState(current, text, date, Date.now()) : current
       )),
@@ -573,6 +670,8 @@ function LumiFiSession({
         });
       },
       focusTask: (id) => setSaved((current) => (current ? focusTaskState(current, id) : current)),
+      // A volume slider moved. Ambient sounds are pushed to the player right away
+      // (`sync`) so dragging feels live; then the value is saved in state.
       setMix: (key, amount) => {
         if (key === 'music') {
           musicRef.current.restoreMusic();
@@ -610,6 +709,8 @@ function LumiFiSession({
         releaseStreamForLocal();
         music.selectTrack(index);
       },
+      // Own music files (native only): open the file picker, copy the picks into
+      // the app's private folder, then add them to the saved list.
       addOwnFiles: () => {
         void pickOwnTracks().then((picked) => {
           if (!picked || picked.length === 0) return;
@@ -629,6 +730,9 @@ function LumiFiSession({
           return { ...current, ownTracks: current.ownTracks.filter((item) => item.id !== id) };
         });
       },
+      // Validate a pasted link, check it isn't private, and save it. Returns a
+      // string code the UI turns into a message. Re-reads `savedRef` after the
+      // network check because state may have changed while we awaited.
       addStreamLink: async (raw) => {
         const parsed = parseStreamLink(raw);
         if (!parsed.ok) return parsed.reason;
@@ -653,6 +757,7 @@ function LumiFiSession({
       closeStream,
   };
 
+  // Wait for the first clock tick so no screen ever renders with an unknown date.
   if (now == null) {
     return <View style={{ flex: 1, backgroundColor: colors.bgBase }} />;
   }
@@ -660,6 +765,7 @@ function LumiFiSession({
   return <LumiFiContext.Provider value={value}>{children}</LumiFiContext.Provider>;
 }
 
+/** Read app state and actions. Throws if used outside `LumiFiProvider`. */
 export function useLumiFi() {
   const value = useContext(LumiFiContext);
   if (!value) throw new Error('useLumiFi must be used inside LumiFiProvider');

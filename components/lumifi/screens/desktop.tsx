@@ -45,6 +45,16 @@ import {
   TaskIcon,
 } from '@/components/lumifi/shared/icons';
 
+/**
+ * The desktop layout (window over 840px, or a large tablet in landscape): a
+ * full-screen animated scene with the timer in the middle, an icon dock along
+ * the bottom, and panels that open as floating cards. Uses "scenes" for color
+ * (the phone and tablet use "moods").
+ *
+ * Only one panel can be open at a time, tracked by `panel`.
+ */
+
+// Which panel (if any) is open. `null` = just the scene and timer.
 type PanelId = 'music' | 'mixer' | 'scenes' | 'tasks' | 'progress' | 'quests' | 'settings';
 
 // A narrow card opens under the dock button that opened it: the left group holds music
@@ -59,6 +69,7 @@ const PANEL_SIDE: Record<PanelId, 'left' | 'right'> = {
   settings: 'right',
 };
 
+// Title shown in each panel's heading bar.
 const PANEL_TITLE: Record<PanelId, string> = {
   music: 'Music',
   mixer: 'Ambient mixer',
@@ -75,11 +86,16 @@ export function DesktopLumiFi() {
   const fullscreen = useFullscreen();
   const { width, height } = useWindowDimensions();
   const [panel, setPanel] = useState<PanelId | null>(null);
+  // Zen: while focusing, the whole UI fades out after 3.5s without input.
   const [zen, setZen] = useState(false);
+  // The empty "slot" box inside the Music card, and its measured position on
+  // screen. The stream player floats over the scene (so it survives the card
+  // closing) and is moved to sit exactly on top of this slot.
   const embedSlotRef = useRef<React.ComponentRef<typeof View>>(null);
   const [embedFrame, setEmbedFrame] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const lastAct = useRef(0);
   const theme = lamp.sceneTheme;
+  // Big timer digits scale with the window but never pass 280px.
   const timeSize = Math.min(width * 0.23, height * 0.36, 280);
 
   const poke = useCallback(() => {
@@ -87,6 +103,7 @@ export function DesktopLumiFi() {
     setZen(false);
   }, []);
 
+  // Zen check, 2.5x per second. Never hides while a panel is open.
   useEffect(() => {
     lastAct.current = Date.now();
     const id = setInterval(() => {
@@ -96,6 +113,8 @@ export function DesktopLumiFi() {
     return () => clearInterval(id);
   }, [lamp.mode, lamp.running, lamp.zenOpt, panel]);
 
+  // Web only: a mouse (unlike a touch) moves without pressing, so listen to the
+  // window directly. `onTouchStart` on the root view covers touches.
   useEffect(() => {
     if (Platform.OS !== 'web') return undefined;
     const onMove = () => poke();
@@ -107,11 +126,15 @@ export function DesktopLumiFi() {
     };
   }, [poke]);
 
+  // Open a panel, or close it if its button is pressed again.
   const togglePanel = (id: PanelId) => {
     poke();
     setPanel((current) => (current === id ? null : id));
   };
 
+  // Measure where the embed slot is in the window and remember it. Skips
+  // zero-size results (not laid out yet) and identical results (avoids a
+  // pointless re-render loop).
   const placeEmbed = useCallback(() => {
     embedSlotRef.current?.measureInWindow((x, y, width, height) => {
       const frame = { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
@@ -124,6 +147,8 @@ export function DesktopLumiFi() {
     });
   }, []);
 
+  // Re-measure when the music card opens or the window resizes. Wait one frame
+  // (requestAnimationFrame) so the card has finished laying out first.
   useEffect(() => {
     if (panel !== 'music') return undefined;
     const id = requestAnimationFrame(() => placeEmbed());
@@ -135,15 +160,20 @@ export function DesktopLumiFi() {
     : 'Stretch, drink some water, look away from the screen';
   const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
   const startLabel = lamp.running ? 'Pause' : lamp.status === 'paused' ? 'Resume' : 'Start';
+  // Dot on the Quests button while any daily quest is unfinished.
   const questOpen = lamp.day.sessions < 4 || lamp.day.minutes < 60 || lamp.day.tasks < 1;
+  // Music card height: up to 720px, or whatever fits above the dock.
   const musicRoom = height - insets.top - insets.bottom - 104;
   const musicHeight = Math.min(720, Math.max(0, musicRoom));
 
   return (
     <View style={[styles.root, { backgroundColor: theme.b1 }]} onTouchStart={poke}>
+      {/* Back to front: animated scene, rain, then the UI layers below. */}
       <SceneBackground />
       <RainOverlay amount={lamp.mix.rain} />
 
+      {/* Top bar: logo on the left; streak, minutes and level pills on the
+          right (each opens the Progress card). */}
       <View style={[styles.top, { paddingTop: insets.top + 14, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
         <View style={styles.brand}>
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -169,6 +199,7 @@ export function DesktopLumiFi() {
         </View>
       </View>
 
+      {/* Center: mode tabs, big time, focus chip, session pips, start/reset/skip. */}
       <View style={[styles.center, { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 90 }]}>
         <View style={[styles.tabs, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
           {(['focus', 'short', 'long'] as TimerMode[]).map((item) => {
@@ -200,6 +231,8 @@ export function DesktopLumiFi() {
         </View>
       </View>
 
+      {/* Dock: left group opens panels, right group is timer settings and full
+          screen. Full screen only appears where the browser supports it. */}
       <View style={[styles.dock, { paddingBottom: insets.bottom + 14, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
         <View style={styles.dockGroup}>
           <DockButton label="Music" active={panel === 'music'} dot={lamp.musicPlaying || lamp.activeStreamId != null} onPress={() => togglePanel('music')}><MusicIcon /></DockButton>
@@ -216,6 +249,9 @@ export function DesktopLumiFi() {
         </View>
       </View>
 
+      {/* The stream player. With the Music card open it is moved onto the slot
+          (`plain`, absolutely positioned at `embedFrame`); before the slot is
+          measured it is hidden and inert; otherwise it floats above the dock. */}
       <StreamStage
         plain={panel === 'music' && embedFrame != null}
         inert={panel === 'music' && embedFrame == null}
@@ -226,10 +262,13 @@ export function DesktopLumiFi() {
         }
       />
 
+      {/* Click anywhere outside an open panel to close it. */}
       {panel ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Close panel" onPress={() => setPanel(null)} style={styles.backdrop} />
       ) : null}
 
+      {/* Wide, centered cards: Music, Progress, Quests and Tasks. Their
+          wrapper is 'box-none' so clicks outside the card reach the backdrop. */}
       {panel === 'music' ? (
         <View
           pointerEvents="box-none"
@@ -258,6 +297,8 @@ export function DesktopLumiFi() {
         </View>
       ) : null}
 
+      {/* Narrow side cards: mixer, scenes, timer settings. They anchor left or
+          right to sit under the dock button that opened them (PANEL_SIDE). */}
       {panel && panel !== 'music' && panel !== 'progress' && panel !== 'quests' && panel !== 'tasks' ? (
         <View style={[styles.panel, styles[PANEL_SIDE[panel] === 'right' ? 'panelRight' : 'panelLeft'], { bottom: insets.bottom + 72 }]}>
           <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
@@ -290,6 +331,8 @@ export function DesktopLumiFi() {
   );
 }
 
+// Progress card contents: two columns. Left: level, stats, last-7-days chart.
+// Right: the month calendar.
 function ProgressBoard() {
   return (
     <View style={styles.board}>
@@ -305,10 +348,13 @@ function ProgressBoard() {
   );
 }
 
+// Quests card contents: just the daily quest list.
 function QuestsBoard() {
   return <QuestList wide />;
 }
 
+// A round dock icon. Like the phone's DockItem, it recolors its icon child with
+// cloneElement (dark when active, light otherwise) and can show an accent dot.
 function DockButton({ children, active, dot, onPress, label }: { children: React.ReactNode; active: boolean; dot?: boolean; onPress: () => void; label: string }) {
   const { sceneTheme } = useLumiFi();
   return (

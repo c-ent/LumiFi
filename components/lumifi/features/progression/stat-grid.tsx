@@ -5,6 +5,10 @@ import { useLumiFi } from '@/components/lumifi/logic';
 import { panelStyles as styles } from '@/components/lumifi/shared/panel-styles';
 import { progressWide as wide } from '@/components/lumifi/features/progression/wide-styles';
 
+/**
+ * Three number tiles: minutes focused today, sessions today, total XP.
+ * Read straight from the saved `day` totals; nothing is computed here.
+ */
 export function StatGrid({ wide: desk = false }: { wide?: boolean }) {
   const { day, xp } = useLumiFi();
   const items = [

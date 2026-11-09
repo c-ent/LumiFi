@@ -2,6 +2,8 @@ import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import { StyleSheet } from 'react-native';
 
 // Shared chrome for the desktop Progress card. Phone and tablet keep panel-styles.
+// Imported as `wide` by the progression components. `tabular` makes digits equal
+// width so changing numbers (minutes, XP) don't jiggle the layout.
 export const progressWide = StyleSheet.create({
   card: {
     padding: 14,

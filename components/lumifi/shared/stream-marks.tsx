@@ -3,6 +3,10 @@ import AppleMusicIcon from '@/assets/images/icons/Apple_Music_icon.svg';
 import SpotifyIcon from '@/assets/images/icons/Spotify_icon.svg';
 import YouTubeIcon from '@/assets/images/icons/YouTube_icon.svg';
 
+// The `.svg` imports below are turned into React components by react-native-svg-transformer
+// at build time, which is why they can be used as <Mark width=... />.
+// `ratio` is each file's height/width, so the mark keeps its proportions.
+//
 // Artwork from assets/images/icons, shown at the left of the playing card.
 // YouTube Music is not an embed, so it never reaches this card; the YouTube
 // file covers that service only so the map stays complete.

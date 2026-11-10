@@ -6,6 +6,7 @@ import { modeDurationMs } from '@/src/core/phase';
 import { MusicEnd } from '@/src/core/session-end';
 import { parseDueDate } from '@/src/core/tasks';
 import type { DayHistory, DayStats, ProgressState, Task, TimerCfg, TimerMode } from '@/src/core/types';
+import { PixelArtId, readPixelArtId } from '@/components/wickglow/domain/pixel-art-ids';
 import { MixLevels, MoodId, SceneId } from '@/components/wickglow/theme';
 
 // The shape of everything Wickglow persists, and the boundary that validates it.
@@ -37,6 +38,10 @@ export interface SavedState extends ProgressState {
   zenOpt: boolean;
   scene: SceneId;
   mood: MoodId;
+  /** Play the looping video behind the timer instead of the gradient. Not used on phones. */
+  videoBg: boolean;
+  /** A still pixel-art picture behind the timer (desktop only), or null for none. */
+  pixelBg: PixelArtId | null;
   mix: MixLevels;
   musicEnd: MusicEnd;
   /** Repeat the current track instead of advancing to the next one. */
@@ -59,6 +64,8 @@ export function createInitialState(now = Date.now()): SavedState {
     zenOpt: true,
     scene: 'dusk',
     mood: 'amber',
+    videoBg: false,
+    pixelBg: null,
     xp: 0,
     streak: { n: 0, last: '' },
     day,
@@ -110,6 +117,8 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
       // subtask's id is cleared.
       activeId: activeTask && activeTask.parentId == null ? activeTask.id : null,
       auto: saved.auto === true,
+      videoBg: saved.videoBg === true,
+      pixelBg: readPixelArtId(saved.pixelBg),
       musicEnd: readMusicEnd(saved.musicEnd),
       musicLoop: saved.musicLoop === true,
       notificationsAsked: saved.notificationsAsked === true,

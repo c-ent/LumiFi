@@ -7,7 +7,7 @@ const { withProjectBuildGradle } = require('expo/config-plugins');
 // already ship in the Expo SDK 58 template, so only this needs reapplying.
 const STAGING_ROOT = 'C:/rn';
 
-const MARKER = '// lumifi: short CMake staging path for Windows long-path limits.';
+const MARKER = '// wickglow: short CMake staging path for Windows long-path limits.';
 
 const BLOCK = `
 ${MARKER}

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "LumiFi",
-    "slug": "lumifi",
+    "name": "Wickglow",
+    "slug": "wickglow",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
-    "scheme": "lumifi",
+    "scheme": "wickglow",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
@@ -19,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.cent.lumifi"
+      "package": "com.cent.wickglow"
     },
     "web": {
       "output": "static",

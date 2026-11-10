@@ -9,7 +9,7 @@ import 'react-native-reanimated';
 export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === 'web') {
-      document.title = 'LumiFi';
+      document.title = 'Wickglow';
       return;
     }
     void SystemUI.setBackgroundColorAsync(colors.bgBase);
@@ -19,7 +19,7 @@ export default function RootLayout() {
     <>
       <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bgBase } }}>
-        <Stack.Screen name="index" options={{ title: 'LumiFi' }} />
+        <Stack.Screen name="index" options={{ title: 'Wickglow' }} />
       </Stack>
     </>
   );

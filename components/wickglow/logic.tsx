@@ -9,6 +9,7 @@ import { colors } from '@/src/theme/tokens';
 import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { addNotificationReceivedListener } from 'expo-notifications';
 import { AppState, Linking, Platform, View } from 'react-native';
+import type { PixelArtId } from '@/components/wickglow/domain/pixel-art-ids';
 import { SavedState } from '@/components/wickglow/domain/saved-state';
 import { deleteOwnTrackFile, pickOwnTracks } from '@/components/wickglow/domain/own-music';
 import { checkStreamLink } from '@/components/wickglow/domain/stream-check';
@@ -80,6 +81,8 @@ interface WickglowContextValue {
   zenOpt: boolean;
   scene: SceneId;
   mood: MoodId;
+  videoBg: boolean;
+  pixelBg: PixelArtId | null;
   sceneTheme: (typeof SCENES)[number];
   moodTheme: (typeof MOODS)[number];
   xp: number;
@@ -130,6 +133,8 @@ interface WickglowContextValue {
   skip: () => void;
   setScene: (scene: SceneId) => void;
   setMood: (mood: MoodId) => void;
+  setVideoBg: (value: boolean) => void;
+  setPixelBg: (id: PixelArtId) => void;
   setAuto: (value: boolean) => void;
   setZenOpt: (value: boolean) => void;
   setMusicEnd: (value: MusicEnd) => void;
@@ -535,6 +540,8 @@ function WickglowSession({
       zenOpt: saved.zenOpt,
       scene: saved.scene,
       mood: saved.mood,
+      videoBg: saved.videoBg,
+      pixelBg: saved.pixelBg,
       sceneTheme: SCENES.find((item) => item.id === saved.scene) ?? SCENES[0],
       moodTheme: MOODS.find((item) => item.id === saved.mood) ?? MOODS[0],
       xp: saved.xp,
@@ -617,8 +624,11 @@ function WickglowSession({
         if (session.status === 'running' && session.endAt != null) void scheduleSessionEnd(session.endAt, session.mode);
         else void cancelSessionEnd();
       },
-      setScene: (scene) => setSaved((current) => (current ? { ...current, scene } : current)),
-      setMood: (mood) => setSaved((current) => (current ? { ...current, mood } : current)),
+      // Picking a scene or mood puts the gradient back; the video is its own choice.
+      setScene: (scene) => setSaved((current) => (current ? { ...current, scene, videoBg: false, pixelBg: null } : current)),
+      setMood: (mood) => setSaved((current) => (current ? { ...current, mood, videoBg: false, pixelBg: null } : current)),
+      setVideoBg: (videoBg) => setSaved((current) => (current ? { ...current, videoBg, pixelBg: videoBg ? null : current.pixelBg } : current)),
+      setPixelBg: (pixelBg) => setSaved((current) => (current ? { ...current, pixelBg, videoBg: false } : current)),
       setAuto: (auto) => setSaved((current) => (current ? { ...current, auto } : current)),
       setZenOpt: (zenOpt) => setSaved((current) => (current ? { ...current, zenOpt } : current)),
       setMusicEnd: (musicEnd) => setSaved((current) => (current ? { ...current, musicEnd } : current)),

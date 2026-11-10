@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import Svg, { Defs, Rect, Stop, LinearGradient as SvgGradient } from 'react-native-svg';
 import { SceneOrb } from '@/components/wickglow/features/background/soft-orb';
+import { PixelBackground } from '@/components/wickglow/features/background/pixel-background';
+import { VideoBackground } from '@/components/wickglow/features/background/video-background';
 import { useFillSize } from '@/components/wickglow/features/background/fill-gradient';
 import { useAnimatedValue } from '@/components/wickglow/hooks/use-animated-value';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
@@ -20,7 +22,9 @@ const PHASE_OUT = PHASE_IN.map((p) => (1 - Math.cos(p * 2 * Math.PI)) / 2);
  * It is purely decorative, so the whole thing ignores touches.
  */
 export function SceneBackground() {
-  const { sceneTheme } = useWickglow();
+  const { sceneTheme, videoBg, pixelBg } = useWickglow();
+  // A video or a pixel-art picture replaces the gradient, orbs, core and shade.
+  const picture = videoBg || pixelBg !== null;
   // Three drift loops with different lengths so the orbs never move in sync.
   const driftA = useLoop(38000);
   const driftB = useLoop(46000);
@@ -77,8 +81,10 @@ export function SceneBackground() {
     // collapsable={false}: on Android, RN may flatten a View that only lays out
     // children, which would remove the native view `onLayout` needs.
     <View collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout}>
+      {videoBg ? <VideoBackground /> : null}
+      {pixelBg ? <PixelBackground /> : null}
       {/* Wait for a real size before drawing, otherwise the gradient is 0x0. */}
-      {size.width > 0 && size.height > 0 ? (
+      {!picture && size.width > 0 && size.height > 0 ? (
         <Svg width={size.width} height={size.height}>
           <Defs>
             <SvgGradient id="scene" x1="0" y1="0" x2="0.4" y2="1">
@@ -90,19 +96,24 @@ export function SceneBackground() {
           <Rect width={size.width} height={size.height} fill="url(#scene)" />
         </Svg>
       ) : null}
-      <SceneOrb color={sceneTheme.o1} size={460} opacity={0.45} place={{ left: -120, top: -80 }} drift={driftA} />
-      <SceneOrb color={sceneTheme.o2} size={400} opacity={0.35} place={{ right: -120, bottom: -80 }} drift={driftB} />
-      <SceneOrb color={sceneTheme.o3} size={260} opacity={0.22} place={{ left: '52%', top: '8%' }} drift={driftC} />
-      <Animated.View
-        style={[
-          styles.core,
-          {
-            opacity: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.9] }),
-            transform: [{ scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] }) }],
-          },
-        ]}
-      />
-      <View style={styles.shade} />
+      {picture ? null : (
+        <>
+          <SceneOrb color={sceneTheme.o1} size={460} opacity={0.45} place={{ left: -120, top: -80 }} drift={driftA} />
+          <SceneOrb color={sceneTheme.o2} size={400} opacity={0.35} place={{ right: -120, bottom: -80 }} drift={driftB} />
+          <SceneOrb color={sceneTheme.o3} size={260} opacity={0.22} place={{ left: '52%', top: '8%' }} drift={driftC} />
+          <Animated.View
+            style={[
+              styles.core,
+              {
+                opacity: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.9] }),
+                transform: [{ scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] }) }],
+              },
+            ]}
+          />
+        </>
+      )}
+      {/* The video and pixel art bring their own overlay, so only the gradient needs this shade. */}
+      {picture ? null : <View style={styles.shade} />}
     </View>
   );
 }

@@ -6,6 +6,7 @@ import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset
 import { useWickglow } from '@/components/wickglow/logic';
 import { formatTime, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
 import { FillGradient } from '@/components/wickglow/features/background/fill-gradient';
+import { VideoBackground } from '@/components/wickglow/features/background/video-background';
 import { RainOverlay } from '@/components/wickglow/features/background/rain';
 import { Candle } from '@/components/wickglow/features/clock/candle';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
@@ -69,14 +70,18 @@ export function TabletWickglow() {
 
   return (
     <View style={[styles.root, { backgroundColor: mood.bgBase }]} onTouchStart={poke}>
-      <FillGradient
-        id="room"
-        stops={[
-          { offset: '0', color: mood.bgBase },
-          { offset: '0.58', color: mood.bgMid },
-          { offset: '1', color: mood.bgGlow },
-        ]}
-      />
+      {lamp.videoBg ? (
+        <VideoBackground />
+      ) : (
+        <FillGradient
+          id="room"
+          stops={[
+            { offset: '0', color: mood.bgBase },
+            { offset: '0.58', color: mood.bgMid },
+            { offset: '1', color: mood.bgGlow },
+          ]}
+        />
+      )}
       <RainOverlay amount={lamp.mix.rain} />
 
       {/* Two columns side by side (flexDirection: 'row'). */}
@@ -159,7 +164,7 @@ export function TabletWickglow() {
           <Text style={styles.kicker}>Tasks</Text>
           <TaskList mobile />
           <Text style={styles.kicker}>Sounds</Text>
-          <MoodPicker />
+          <MoodPicker video />
           <MusicBlock mobile />
           <MixerBlock mobile />
           <QuestList mobile />
@@ -191,8 +196,7 @@ export function TabletWickglow() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
+const styles = StyleSheet.create({  root: {
     flex: 1,
     overflow: 'hidden',
   },

@@ -1,6 +1,6 @@
 {
   "name": "deepmerge",
-  "version": "4.3.1-lumifi.1",
+  "version": "4.3.1-wickglow.1",
   "description": "Local patch of deepmerge 4.3.1. Drops __proto__, constructor and prototype keys while merging the source, and stops copying them from the target (GHSA-gcqx-w48m-w2h4, unpatched upstream). This directory is committed on purpose: the file: override in package.json points here, so a clone without it cannot npm install. Delete the override and this directory when upstream ships a fix.",
   "main": "index.js",
   "types": "index.d.ts",

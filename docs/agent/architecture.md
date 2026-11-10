@@ -3,15 +3,15 @@
 Read this when changing data flow, storage, auth, or folder boundaries. Only what the code cannot show on its own.
 
 ## Folder boundaries
-- `app/`: Expo Router routes only. Thin files that render a screen from `components/lumifi`.
+- `app/`: Expo Router routes only. Thin files that render a screen from `components/wickglow`.
 - `src/core/`: pure logic (deadline math, phase cycle, XP, levels, streaks, quests, own-track playlist math, streaming-link parsing). No React, React Native, Expo or Supabase imports.
 - `src/theme/`: shared color, font and radius tokens. No React. Screens read these instead of hardcoding colors.
 - `src/data/`: the only place that talks to Supabase.
 - `assets/audio/`: licensed tracks only, listed in `MUSIC_LICENSES.md`.
 
-### `components/lumifi/` is grouped by feature
+### `components/wickglow/` is grouped by feature
 
-- Root: `lumifi-screen.tsx` (the public entry `app/` imports), `logic.tsx` (the provider and context), `theme.ts` (scene and mood palettes, `PRESETS`, `formatTime`, and a re-export barrel for `src/theme/tokens` and six `src/core` modules).
+- Root: `wickglow-screen.tsx` (the public entry `app/` imports), `logic.tsx` (the provider and context), `theme.ts` (scene and mood palettes, `PRESETS`, `formatTime`, and a re-export barrel for `src/theme/tokens` and six `src/core` modules).
 - `screens/`: `mobile.tsx`, `tablet.tsx`, `desktop.tsx`. The device shells. Arrangement only, no business rules. Each is a thin composition of the feature panels.
 - `features/`: one folder per product concept. `layout.ts`, `tone.ts`, `background/`, `clock/`, `timer/`, `tasks/`, `audio/`, `progression/`, `settings/`. A feature owns its own components; device differences are a `mobile` prop (or the shell), not a separate folder.
 - `shared/`: `icons.tsx`, `panel-heading.tsx`, `panel-styles.ts`. Cross-layout UI. `panel-styles.ts` is the one `StyleSheet` the feature panels share.
@@ -49,4 +49,4 @@ Check these before finishing a task. Timer, notification, audio and navigation r
 - Supabase over Firebase. Why: Postgres functions and RLS allow server-validated XP on the free plan, Firebase Cloud Functions need the paid plan. Date: 2026-11-01
 - Expo SDK 58 with Expo Router. Why: stable since mid October 2026, and the app uses few third-party native libraries. Date: 2026-11-01
 - Timestamp timer with a scheduled notification, no custom foreground service. Why: a foreground service is the wrong Android tool for a countdown. Date: 2026-11-01
-- One local notification on the `session-end` channel, scheduled at `endAt` with `delivery: 'alarmClock'` and `USE_EXACT_ALARM`. Why: LumiFi is a timer, and Google Play allows that permission for timer apps. `bestEffort` can be deferred by minutes on some Android builds. Date: 2026-11-02
+- One local notification on the `session-end` channel, scheduled at `endAt` with `delivery: 'alarmClock'` and `USE_EXACT_ALARM`. Why: Wickglow is a timer, and Google Play allows that permission for timer apps. `bestEffort` can be deferred by minutes on some Android builds. Date: 2026-11-02

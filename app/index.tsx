@@ -1,11 +1,11 @@
-import { LumiFiScreen } from '@/components/lumifi/lumifi-screen';
+import { WickglowScreen } from '@/components/wickglow/wickglow-screen';
 import { colors } from '@/src/theme/tokens';
 import { StyleSheet, View } from 'react-native';
 
 export default function HomeScreen() {
   return (
     <View style={styles.fill}>
-      <LumiFiScreen />
+      <WickglowScreen />
     </View>
   );
 }

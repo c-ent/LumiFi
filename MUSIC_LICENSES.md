@@ -64,6 +64,6 @@ Both effects are sourced from [Freesound](https://freesound.org), and both are *
 | Chime             | `chime.mp3`           | Session-end notification    | drooler    | [660863](https://freesound.org/s/660863/) | CC0 1.0 |
 | Session End Chime | `SessionEndChime.MP3` | In-app chime at session end | AnthonyRox | [740423](https://freesound.org/s/740423/) | CC0 1.0 |
 
-**File names are deliberate, including their casing.** `chime.mp3` is lower case because Android notification resources require it; `SessionEndChime.MP3` keeps the capital `.MP3`. `components/music-tracks.ts`, `components/lumifi/domain/notifications.ts` and the `expo-notifications` `sounds` entry in `app.json` each reference these exact names, and a case mismatch fails the bundle. Both files are real MP3s (ID3 v2.4).
+**File names are deliberate, including their casing.** `chime.mp3` is lower case because Android notification resources require it; `SessionEndChime.MP3` keeps the capital `.MP3`. `components/music-tracks.ts`, `components/wickglow/domain/notifications.ts` and the `expo-notifications` `sounds` entry in `app.json` each reference these exact names, and a case mismatch fails the bundle. Both files are real MP3s (ID3 v2.4).
 
 **Status.** All bundled audio is now covered: no file needs a purchase, and none needs a credits screen.

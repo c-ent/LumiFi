@@ -1,67 +1,58 @@
-import React, { ReactNode, useCallback, useEffect, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 // A layer that never reports ready (a video whose first-frame event does not
 // fire on some platform) still replaces the old one after this long.
 const READY_FALLBACK_MS = 500;
-// Each layer can hold a video player, so rapid switching keeps at most this many.
-const MAX_LAYERS = 3;
-
-type Layer = { id: string; ready: boolean };
 
 /**
  * Switches between backgrounds without a transition. When `id` changes, the
  * new background is mounted hidden on top while the old one keeps showing.
  * Once the new one reports ready (a video after its first frame), it replaces
- * the old one at once and everything below it is unmounted, so there is no
- * black flash and no fade.
+ * the old one at once and the old one is unmounted, so there is no black
+ * flash and no fade.
  *
  * `render` draws one background and must call `onReady` once it has something
  * on screen; a gradient can call it straight away.
  */
 export function Crossfade({ id, render }: { id: string; render: (id: string, onReady: () => void) => ReactNode }) {
-  const [layers, setLayers] = useState<Layer[]>(() => [{ id, ready: true }]);
-  const [lastId, setLastId] = useState(id);
+  // The background on screen. `id` is the one asked for; while the two differ,
+  // the asked-for one loads hidden on top.
+  //
+  // The layers are worked out from `id` and `shown` on every render. Do not
+  // keep them in state and add the new one with a `setState` during render: a
+  // ready call that changes nothing (the first background's own first frame)
+  // waits in React's queue, a click renders at a higher priority and skips it,
+  // and when React replays it the layer added during render is lost. The pick
+  // then never shows until the next one.
+  const [shown, setShown] = useState(id);
+  const wanted = useRef(id);
+  useLayoutEffect(() => {
+    wanted.current = id;
+  });
 
-  // A new id adds a hidden layer on top, during render rather than in an
-  // effect so the old background never shows for a frame without it. Layers
-  // in between are trimmed.
-  if (lastId !== id) {
-    setLastId(id);
-    setLayers((current) => {
-      // Back to the base before anything above it showed: just drop the rest.
-      if (current[0].id === id) return [current[0]];
-      return [...current.filter((layer) => layer.id !== id), { id, ready: false }].slice(-MAX_LAYERS);
-    });
-  }
-  const top = layers[layers.length - 1];
-
-  // When the top layer is ready it becomes the only one; a ready layer that is
-  // no longer on top just waits, hidden, until it is trimmed.
+  // Only the asked-for background may take over; a late call from any other is ignored.
   const markReady = useCallback((layerId: string) => {
-    setLayers((current) => {
-      const index = current.findIndex((layer) => layer.id === layerId);
-      if (index < 0 || current[index].ready) return current;
-      if (index === current.length - 1) return [{ ...current[index], ready: true }];
-      return current.map((layer, i) => (i === index ? { ...layer, ready: true } : layer));
-    });
+    if (layerId === wanted.current) setShown(layerId);
   }, []);
 
-  // Fallback in case the top layer never reports ready.
+  // Fallback in case the new background never reports ready.
   useEffect(() => {
-    if (top.ready) return undefined;
-    const timer = setTimeout(() => markReady(top.id), READY_FALLBACK_MS);
+    if (id === shown) return undefined;
+    const timer = setTimeout(() => markReady(id), READY_FALLBACK_MS);
     return () => clearTimeout(timer);
-  }, [markReady, top.id, top.ready]);
+  }, [id, markReady, shown]);
 
-  // Only the bottom layer is visible; the ones above are loading.
-  return (
-    <>
-      {layers.map((layer, i) => (
-        <View key={layer.id} style={[StyleSheet.absoluteFill, { opacity: i === 0 ? 1 : 0 }]} pointerEvents="none">
-          {render(layer.id, () => markReady(layer.id))}
-        </View>
-      ))}
-    </>
-  );
+  // Only the bottom layer is visible; the one above is loading. Picking again
+  // while one loads replaces the loading one, so there are never more than two.
+  const layers = id === shown ? [shown] : [shown, id];
+  // `markReady` reads the ref only when a background later reports ready, never
+  // while rendering. The rule cannot see into the call.
+  const drawn = layers.map((layerId, i) => (
+    <View key={layerId} style={[StyleSheet.absoluteFill, { opacity: i === 0 ? 1 : 0 }]} pointerEvents="none">
+      {/* eslint-disable-next-line react-hooks/refs */}
+      {render(layerId, () => markReady(layerId))}
+    </View>
+  ));
+  return <>{drawn}</>;
 }

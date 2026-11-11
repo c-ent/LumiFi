@@ -6,6 +6,7 @@ import {
 import {
   Outfit_200ExtraLight,
   Outfit_300Light,
+  Outfit_400Regular,
   Outfit_500Medium,
 } from '@expo-google-fonts/outfit';
 import { useFonts } from 'expo-font';
@@ -34,10 +35,16 @@ function subscribe() {
 
 export function WickglowScreen() {
   const isClient = useSyncExternalStore(subscribe, () => true, () => false);
-  // Register the custom fonts under the names used in `fonts` tokens.
+  // Register the custom fonts under the names used in `fonts` tokens. On
+  // Android and iOS the same files are also embedded at build time by the
+  // `expo-font` plugin in app.json, under these same names (the family name is
+  // the file name), so text is in the right font from the first frame. This
+  // call stays for web, which has no build-time embedding, and for a
+  // development build made before the fonts were added to the plugin.
   useFonts({
     [fonts.time]: Outfit_200ExtraLight,
     [fonts.timeLight]: Outfit_300Light,
+    [fonts.timeRegular]: Outfit_400Regular,
     [fonts.timeMedium]: Outfit_500Medium,
     [fonts.body]: Figtree_400Regular,
     [fonts.bodyMedium]: Figtree_500Medium,

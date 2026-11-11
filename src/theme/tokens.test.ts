@@ -16,6 +16,7 @@ describe('theme tokens', () => {
   it('keeps the shared chrome colors from the UI spec', () => {
     expect(colors.bgSurface).toBe('rgba(24, 14, 20, 0.93)');
     expect(colors.bgCard).toBe('rgba(255, 255, 255, 0.06)');
+    expect(colors.bgControl).toBe('rgba(255, 255, 255, 0.2)');
     expect(colors.bgInset).toBe('rgba(0, 0, 0, 0.28)');
     expect(colors.textPrimary).toBe('#F8F1E8');
     expect(colors.textMuted).toBe('rgba(248, 241, 232, 0.62)');
@@ -54,6 +55,7 @@ describe('theme tokens', () => {
       bodySemibold: 'Figtree_600SemiBold',
       time: 'Outfit_200ExtraLight',
       timeLight: 'Outfit_300Light',
+      timeRegular: 'Outfit_400Regular',
       timeMedium: 'Outfit_500Medium',
     });
   });

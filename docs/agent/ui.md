@@ -16,6 +16,7 @@ No hardcoded hex values. React Native has no CSS variables, so tokens are keys i
 | Surface (sheet and modal) | `colors.bgSurface` | `#180E14` at 93% opacity |
 | Surface, opaque | `colors.bgSurfaceSolid` | `#140F1C` |
 | Card fill | `colors.bgCard` | white at 6% opacity |
+| Scene control fill | `colors.bgControl` | white at 20% opacity, so it holds up over bright video backgrounds. Desktop top pills, mode tabs, timer round buttons and dock buttons |
 | Inset field | `colors.bgInset` | black at 28% opacity |
 | Primary text | `colors.textPrimary` | `#F8F1E8` |
 | Muted text | `colors.textMuted` | `#F8F1E8` at 62% opacity |

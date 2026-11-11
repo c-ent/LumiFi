@@ -1,57 +1,48 @@
-import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import { Animated, Easing, StyleSheet } from 'react-native';
-import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
+import React, { ReactNode, useCallback, useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
-const FADE_MS = 700;
 // A layer that never reports ready (a video whose first-frame event does not
-// fire on some platform) still fades in after this long.
+// fire on some platform) still replaces the old one after this long.
 const READY_FALLBACK_MS = 500;
 // Each layer can hold a video player, so rapid switching keeps at most this many.
 const MAX_LAYERS = 3;
 
-type Layer = { id: string; opacity: Animated.Value; ready: boolean };
+type Layer = { id: string; ready: boolean };
 
 /**
- * Crossfades between backgrounds. When `id` changes, the new background is
- * mounted on top at opacity 0 and fades in once it reports ready (a video
- * after its first frame), while the old one keeps playing underneath. When the
- * fade ends, everything below it is unmounted. The first background, and every
- * change under reduced motion, appears without a fade.
+ * Switches between backgrounds without a transition. When `id` changes, the
+ * new background is mounted hidden on top while the old one keeps showing.
+ * Once the new one reports ready (a video after its first frame), it replaces
+ * the old one at once and everything below it is unmounted, so there is no
+ * black flash and no fade.
  *
  * `render` draws one background and must call `onReady` once it has something
  * on screen; a gradient can call it straight away.
  */
 export function Crossfade({ id, render }: { id: string; render: (id: string, onReady: () => void) => ReactNode }) {
-  const reduced = useReducedMotion();
-  const [layers, setLayers] = useState<Layer[]>(() => [{ id, opacity: new Animated.Value(1), ready: true }]);
+  const [layers, setLayers] = useState<Layer[]>(() => [{ id, ready: true }]);
   const [lastId, setLastId] = useState(id);
 
-  // A new id adds a layer on top, during render rather than in an effect so
-  // the old background never shows for a frame without it. Layers in between
-  // are trimmed.
+  // A new id adds a hidden layer on top, during render rather than in an
+  // effect so the old background never shows for a frame without it. Layers
+  // in between are trimmed.
   if (lastId !== id) {
     setLastId(id);
     setLayers((current) => {
       // Back to the base before anything above it showed: just drop the rest.
-      if (current[0].id === id && current.slice(1).every((layer) => !layer.ready)) return [current[0]];
-      return [...current.filter((layer) => layer.id !== id), { id, opacity: new Animated.Value(0), ready: false }].slice(-MAX_LAYERS);
+      if (current[0].id === id) return [current[0]];
+      return [...current.filter((layer) => layer.id !== id), { id, ready: false }].slice(-MAX_LAYERS);
     });
   }
   const top = layers[layers.length - 1];
 
-  // The layer left at the bottom is made fully opaque so nothing shows through
-  // it. Done after commit, before paint, so the updater above stays pure and a
-  // discarded render never touches a visible layer.
-  const baseOpacity = layers[0].opacity;
-  useLayoutEffect(() => {
-    baseOpacity.stopAnimation();
-    baseOpacity.setValue(1);
-  }, [baseOpacity]);
-
+  // When the top layer is ready it becomes the only one; a ready layer that is
+  // no longer on top just waits, hidden, until it is trimmed.
   const markReady = useCallback((layerId: string) => {
     setLayers((current) => {
       const index = current.findIndex((layer) => layer.id === layerId);
       if (index < 0 || current[index].ready) return current;
+      if (index === current.length - 1) return [{ ...current[index], ready: true }];
       return current.map((layer, i) => (i === index ? { ...layer, ready: true } : layer));
     });
   }, []);
@@ -63,33 +54,13 @@ export function Crossfade({ id, render }: { id: string; render: (id: string, onR
     return () => clearTimeout(timer);
   }, [markReady, top.id, top.ready]);
 
-  // Fade the top layer in once it is ready, then drop the layers below it.
-  const fading = layers.length > 1 && top.ready ? top : null;
-  useEffect(() => {
-    if (!fading) return undefined;
-    const dropBelow = () => setLayers((current) => {
-      const index = current.findIndex((layer) => layer.id === fading.id);
-      return index > 0 ? current.slice(index) : current;
-    });
-    // Under reduced motion the new background simply replaces the old one.
-    const animation = Animated.timing(fading.opacity, {
-      toValue: 1,
-      duration: reduced ? 0 : FADE_MS,
-      easing: Easing.inOut(Easing.quad),
-      useNativeDriver: true,
-    });
-    animation.start(({ finished }) => {
-      if (finished) dropBelow();
-    });
-    return () => animation.stop();
-  }, [fading, reduced]);
-
+  // Only the bottom layer is visible; the ones above are loading.
   return (
     <>
-      {layers.map((layer) => (
-        <Animated.View key={layer.id} style={[StyleSheet.absoluteFill, { opacity: layer.opacity }]} pointerEvents="none">
+      {layers.map((layer, i) => (
+        <View key={layer.id} style={[StyleSheet.absoluteFill, { opacity: i === 0 ? 1 : 0 }]} pointerEvents="none">
           {render(layer.id, () => markReady(layer.id))}
-        </Animated.View>
+        </View>
       ))}
     </>
   );

@@ -16,7 +16,7 @@ import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset
 import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
 import { hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
-import { FillGradient } from '@/components/wickglow/features/background/fill-gradient';
+import { RoomBackground } from '@/components/wickglow/features/background/room-background';
 import { RainOverlay } from '@/components/wickglow/features/background/rain';
 import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { LevelCard } from '@/components/wickglow/features/progression/level-card';
@@ -115,14 +115,7 @@ export function MobileWickglow() {
     // onTouchStart fires for every touch anywhere, which is how zen mode notices activity.
     <View style={[styles.root, { backgroundColor: mood.bgBase }]} onTouchStart={poke}>
       <RainOverlay amount={lamp.mix.rain} />
-      <FillGradient
-        id="room"
-        stops={[
-          { offset: '0', color: mood.bgBase },
-          { offset: '0.58', color: mood.bgMid },
-          { offset: '1', color: mood.bgGlow },
-        ]}
-      />
+      <RoomBackground video={false} />
 
       {/* Top bar: level ring (opens Stats) and streak / minutes-today pills.
           Hidden elements also get pointerEvents="none" so invisible buttons

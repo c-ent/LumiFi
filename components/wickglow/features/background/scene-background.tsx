@@ -8,6 +8,10 @@ import { useFillSize } from '@/components/wickglow/features/background/fill-grad
 import { useAnimatedValue } from '@/components/wickglow/hooks/use-animated-value';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 import { useWickglow } from '@/components/wickglow/logic';
+import { Crossfade } from '@/components/wickglow/features/background/crossfade';
+import type { VideoId } from '@/components/wickglow/domain/video-ids';
+import type { PixelArtId } from '@/components/wickglow/domain/pixel-art-ids';
+import { SCENES, SceneTheme } from '@/components/wickglow/theme';
 
 const CYCLE_MS = 7000;
 // One breath is (1 - cos) / 2 over the phase: 0 -> 1 -> 0, eased at both ends.
@@ -18,13 +22,13 @@ const PHASE_OUT = PHASE_IN.map((p) => (1 - Math.cos(p * 2 * Math.PI)) / 2);
  * The full-screen backdrop of the desktop scene: a diagonal gradient, three
  * blurred orbs that drift slowly, a soft pulsing "core" and a dark shade on
  * top so the UI stays readable. Colors come from the selected scene theme.
+ * A chosen video or pixel-art picture replaces all of that, and switching
+ * between any two backgrounds crossfades (see crossfade.tsx).
  *
  * It is purely decorative, so the whole thing ignores touches.
  */
 export function SceneBackground() {
   const { sceneTheme, videoBg, pixelBg } = useWickglow();
-  // A video or a pixel-art picture replaces the gradient, orbs, core and shade.
-  const picture = videoBg || pixelBg !== null;
   // Three drift loops with different lengths so the orbs never move in sync.
   const driftA = useLoop(38000);
   const driftB = useLoop(46000);
@@ -77,44 +81,73 @@ export function SceneBackground() {
     };
   }, [phase, reduced, running]);
 
+  // Which background is showing. A change of id crossfades to the new one.
+  const look = videoBg ? `video:${videoBg}` : pixelBg ? `pixel:${pixelBg}` : `scene:${sceneTheme.id}`;
+
+  const renderLook = (id: string, onReady: () => void) => {
+    const [kind, value] = id.split(':') as [string, string];
+    if (kind === 'video') return <SelectedVideoBackground id={value as VideoId} onReady={onReady} />;
+    if (kind === 'pixel') return <PixelBackground id={value as PixelArtId} onReady={onReady} />;
+    const theme = SCENES.find((item) => item.id === value) ?? sceneTheme;
+    return <GradientScene theme={theme} size={size} drifts={[driftA, driftB, driftC]} breathe={breathe} onReady={onReady} />;
+  };
+
   return (
     // collapsable={false}: on Android, RN may flatten a View that only lays out
     // children, which would remove the native view `onLayout` needs.
     <View collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout}>
-      {videoBg ? <SelectedVideoBackground /> : null}
-      {pixelBg ? <PixelBackground /> : null}
+      <Crossfade id={look} render={renderLook} />
+    </View>
+  );
+}
+
+type Drift = ReturnType<typeof useLoop>;
+
+/**
+ * The gradient scene: the diagonal gradient, three drifting orbs, the
+ * breathing core and a dark shade so the UI stays readable. The video and
+ * pixel art bring their own overlay, so only this one needs the shade.
+ */
+function GradientScene({ theme, size, drifts, breathe, onReady }: {
+  theme: SceneTheme;
+  size: { width: number; height: number };
+  drifts: [Drift, Drift, Drift];
+  breathe: Animated.AnimatedInterpolation<number>;
+  onReady: () => void;
+}) {
+  // A gradient has nothing to load, so it is ready at once.
+  useEffect(() => onReady(), [onReady]);
+  // Two scenes can be on screen during a crossfade, so each gradient id is unique.
+  const gradientId = `scene-${theme.id}`;
+  return (
+    <>
       {/* Wait for a real size before drawing, otherwise the gradient is 0x0. */}
-      {!picture && size.width > 0 && size.height > 0 ? (
+      {size.width > 0 && size.height > 0 ? (
         <Svg width={size.width} height={size.height}>
           <Defs>
-            <SvgGradient id="scene" x1="0" y1="0" x2="0.4" y2="1">
-              <Stop offset="0" stopColor={sceneTheme.b1} />
-              <Stop offset="0.52" stopColor={sceneTheme.b2} />
-              <Stop offset="1" stopColor={sceneTheme.b3} />
+            <SvgGradient id={gradientId} x1="0" y1="0" x2="0.4" y2="1">
+              <Stop offset="0" stopColor={theme.b1} />
+              <Stop offset="0.52" stopColor={theme.b2} />
+              <Stop offset="1" stopColor={theme.b3} />
             </SvgGradient>
           </Defs>
-          <Rect width={size.width} height={size.height} fill="url(#scene)" />
+          <Rect width={size.width} height={size.height} fill={`url(#${gradientId})`} />
         </Svg>
       ) : null}
-      {picture ? null : (
-        <>
-          <SceneOrb color={sceneTheme.o1} size={460} opacity={0.45} place={{ left: -120, top: -80 }} drift={driftA} />
-          <SceneOrb color={sceneTheme.o2} size={400} opacity={0.35} place={{ right: -120, bottom: -80 }} drift={driftB} />
-          <SceneOrb color={sceneTheme.o3} size={260} opacity={0.22} place={{ left: '52%', top: '8%' }} drift={driftC} />
-          <Animated.View
-            style={[
-              styles.core,
-              {
-                opacity: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.9] }),
-                transform: [{ scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] }) }],
-              },
-            ]}
-          />
-        </>
-      )}
-      {/* The video and pixel art bring their own overlay, so only the gradient needs this shade. */}
-      {picture ? null : <View style={styles.shade} />}
-    </View>
+      <SceneOrb color={theme.o1} size={460} opacity={0.45} place={{ left: -120, top: -80 }} drift={drifts[0]} />
+      <SceneOrb color={theme.o2} size={400} opacity={0.35} place={{ right: -120, bottom: -80 }} drift={drifts[1]} />
+      <SceneOrb color={theme.o3} size={260} opacity={0.22} place={{ left: '52%', top: '8%' }} drift={drifts[2]} />
+      <Animated.View
+        style={[
+          styles.core,
+          {
+            opacity: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.9] }),
+            transform: [{ scale: breathe.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] }) }],
+          },
+        ]}
+      />
+      <View style={styles.shade} />
+    </>
   );
 }
 

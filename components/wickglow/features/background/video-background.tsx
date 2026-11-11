@@ -11,8 +11,10 @@ const DEFAULT_SOURCE: number = require('../../../../assets/backgrounds/videos/27
  * gradient. It plays only while the app is in the foreground and the system is
  * not asking for reduced motion (then it holds the first frame), so it costs
  * nothing on a locked screen. It has no audio and ignores touches.
+ * `onReady` fires once the first frame is on screen, so a crossfade can wait
+ * for it instead of fading in a black box.
  */
-export function VideoBackground({ source = DEFAULT_SOURCE }: { source?: number }) {
+export function VideoBackground({ source = DEFAULT_SOURCE, onReady }: { source?: number; onReady?: () => void }) {
   const reduced = useReducedMotion();
   const player = useVideoPlayer(source, (p) => {
     p.loop = true;
@@ -37,6 +39,7 @@ export function VideoBackground({ source = DEFAULT_SOURCE }: { source?: number }
         contentFit="cover"
         nativeControls={false}
         allowsPictureInPicture={false}
+        onFirstFrameRender={onReady}
       />
       {/* Slightly dark, see-through layer so the timer and panels stay readable. */}
       <View style={styles.overlay} />

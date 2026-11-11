@@ -7,8 +7,7 @@ import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset
 import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
 import { MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
-import { FillGradient } from '@/components/wickglow/features/background/fill-gradient';
-import { SelectedVideoBackground } from '@/components/wickglow/features/background/selected-video-background';
+import { RoomBackground } from '@/components/wickglow/features/background/room-background';
 import { RainOverlay } from '@/components/wickglow/features/background/rain';
 import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
@@ -54,18 +53,7 @@ export function TabletWickglow() {
 
   return (
     <View style={[styles.root, { backgroundColor: mood.bgBase }]} onTouchStart={poke}>
-      {lamp.videoBg ? (
-        <SelectedVideoBackground />
-      ) : (
-        <FillGradient
-          id="room"
-          stops={[
-            { offset: '0', color: mood.bgBase },
-            { offset: '0.58', color: mood.bgMid },
-            { offset: '1', color: mood.bgGlow },
-          ]}
-        />
-      )}
+      <RoomBackground />
       <RainOverlay amount={lamp.mix.rain} />
 
       {/* Two columns side by side (flexDirection: 'row'). */}

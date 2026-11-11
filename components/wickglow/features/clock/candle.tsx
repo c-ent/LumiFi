@@ -15,6 +15,7 @@ import Svg, {
 } from 'react-native-svg';
 import { MoodTheme, TimerMode } from '@/components/wickglow/theme';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
+import { useWickglowClock } from '@/components/wickglow/logic';
 
 /**
  * The candle on the phone and tablet screens. It IS the timer's progress bar:
@@ -48,6 +49,15 @@ interface CandleProps {
   mood: MoodTheme;
   /** Changes whenever the phase swaps, so the candle replays its entrance. */
   swap: number;
+}
+
+/**
+ * The candle wired to the running session. It reads the clock context itself,
+ * so the once-a-second tick re-renders the candle and not the screen around it.
+ */
+export function SessionCandle(props: Omit<CandleProps, 'progress'>) {
+  const { progress } = useWickglowClock();
+  return <Candle {...props} progress={progress} />;
 }
 
 export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood, swap }: CandleProps) {

@@ -20,14 +20,14 @@ export function MoodPicker({ video = false }: { video?: boolean }) {
           const selected = item.id === mood && !(video && videoBg);
           return (
             <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${item.name} mood`} key={item.id} onPress={() => setMood(item.id)} style={[styles.moodBtn, selected && { borderColor: colors.textPrimary }]}>
-              <View style={[styles.moodFlame, { backgroundColor: item.flame2, shadowColor: item.flame2 }]} />
+              <View style={[styles.moodFlame, { backgroundColor: item.flame2 }]} />
               <Text style={[styles.sceneName, selected && { color: colors.textPrimary }]}>{item.name}</Text>
             </Pressable>
           );
         })}
         {video ? (
-          <Pressable accessibilityRole="button" accessibilityState={{ selected: videoBg }} accessibilityLabel="Video background" onPress={() => setVideoBg(true)} style={[styles.moodBtn, videoBg && { borderColor: colors.textPrimary }]}>
-            <View style={[styles.moodFlame, { backgroundColor: colors.textMuted, shadowColor: colors.textMuted }]} />
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: videoBg !== null }} accessibilityLabel="Video background" onPress={() => setVideoBg('classic')} style={[styles.moodBtn, videoBg && { borderColor: colors.textPrimary }]}>
+            <View style={[styles.moodFlame, { backgroundColor: colors.textMuted }]} />
             <Text style={[styles.sceneName, videoBg && { color: colors.textPrimary }]}>Video</Text>
           </Pressable>
         ) : null}

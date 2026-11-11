@@ -1,4 +1,4 @@
-import { colors, fade, fonts } from '@/src/theme/tokens';
+import { colors, fade, fonts, rounded } from '@/src/theme/tokens';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { MonthCell, MonthRef, MonthShade } from '@/components/wickglow/theme';
@@ -277,7 +277,7 @@ const deskStyles = StyleSheet.create({
   // Every cell carries the same 2px border, transparent until picked or today,
   // so selecting a day recolors the border and never resizes the cell.
   cell: {
-    borderRadius: 10,
+    ...rounded(10),
     borderWidth: 2,
   },
   ink: {
@@ -311,7 +311,7 @@ const deskStyles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: 11,
     paddingVertical: 9,
-    borderRadius: 11,
+    ...rounded(11),
     backgroundColor: 'rgba(0, 0, 0, 0.25)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',

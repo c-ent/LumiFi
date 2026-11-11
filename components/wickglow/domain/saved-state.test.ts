@@ -65,6 +65,47 @@ describe('saved day history', () => {
     expect(state.mix.music).toBe(60);
   });
 
+  it('never hands the audio players a level that is not a number from 0 to 100', () => {
+    const state = parseSavedState(JSON.stringify({
+      mix: { music: 'loud', rain: null, cafe: 250, fire: -4, wind: 33, extra: 80 },
+    }), now);
+    expect(state.mix).toEqual({ music: 60, rain: 0, cafe: 100, fire: 0, wind: 33, clock: 0, brown: 0, forest: 0, keyboard: 0, waves: 0 });
+    expect(parseSavedState(JSON.stringify({ mix: 'all of it' }), now).mix.music).toBe(60);
+    expect(parseSavedState(JSON.stringify({ mix: null }), now).mix.music).toBe(60);
+  });
+
+  it('falls back to the defaults for a scene, mood or zen setting it does not know', () => {
+    const kept = parseSavedState(JSON.stringify({ scene: 'forest', mood: 'spirit', zenOpt: false }), now);
+    expect(kept).toMatchObject({ scene: 'forest', mood: 'spirit', zenOpt: false });
+    const bad = parseSavedState(JSON.stringify({ scene: 'beach', mood: 7, zenOpt: 'no' }), now);
+    expect(bad).toMatchObject({ scene: 'dusk', mood: 'amber', zenOpt: true });
+  });
+
+  it('reads the streak and the session count as whole numbers that cannot go below zero', () => {
+    expect(parseSavedState(JSON.stringify({ streak: { n: '3', last: 5 }, cycle: 'two' }), now)).toMatchObject({
+      streak: { n: 0, last: '' },
+      cycle: 0,
+    });
+    expect(parseSavedState(JSON.stringify({ streak: { n: 4.7, last: '2026-11-1' }, cycle: 6 }), now)).toMatchObject({
+      streak: { n: 4, last: '2026-11-1' },
+      cycle: 6,
+    });
+    expect(parseSavedState(JSON.stringify({ streak: 'long', cycle: -3 }), now)).toMatchObject({
+      streak: { n: 0, last: '' },
+      cycle: 0,
+    });
+  });
+
+  it('drops a key that is not part of the state, and survives a save that is not an object', () => {
+    const state = parseSavedState(JSON.stringify({ xp: 40, leftover: { big: 'blob' }, goals: [] }), now);
+    expect(state.xp).toBe(40);
+    expect(state).not.toHaveProperty('leftover');
+    expect(Object.keys(state).sort()).toEqual(Object.keys(createInitialState(now)).sort());
+    expect(parseSavedState('[1,2,3]', now).xp).toBe(0);
+    expect(parseSavedState('42', now).xp).toBe(0);
+    expect(parseSavedState('not json', now).xp).toBe(0);
+  });
+
   it('starts with no own tracks and keeps a valid saved list', () => {
     expect(parseSavedState(null, now).ownTracks).toEqual([]);
 

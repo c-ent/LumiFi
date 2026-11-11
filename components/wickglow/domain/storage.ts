@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LEGACY_STORAGE_KEY, parseSavedState, SavedState, STORAGE_KEY } from './saved-state';
 
-// The one place the app reads and writes its saved state, through Zustand's
-// persist in `logic.tsx`. Load parses what it finds through `parseSavedState`
-// and quietly moves a pre-rename `nightlamp:state` save onto the current key.
+// The one place the app reads and writes its saved state. `logic.tsx` loads it
+// once and writes it through `save-queue.ts`. Load parses what it finds through
+// `parseSavedState` and quietly moves a pre-rename `lumifi:state` save onto the
+// current key.
 // Save is the only writer, so the read-failed guard below is the only thing
 // standing between a bad read and overwriting real progress.
 

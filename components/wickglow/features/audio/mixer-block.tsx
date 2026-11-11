@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useWickglow } from '@/components/wickglow/logic';
 import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles';
 import { useTone } from '@/components/wickglow/features/tone';
-import { AMBIENT_KEYS, type AmbientKey } from '@/components/wickglow/hooks/use-ambient';
+import { AMBIENT_SOUNDS, ambientOn } from '@/src/core/ambient';
 
 /**
  * The "Ambient sounds" list: one volume slider per looping sound, plus a
@@ -19,19 +19,7 @@ export function MixerBlock({ mobile = false }: { mobile?: boolean }) {
   const { mix, setMix, silenceAmbient } = useWickglow();
   const tone = useTone(mobile);
   // Disable "Turn off" when nothing is playing, so it never looks pressable for no reason.
-  const ambientOn = AMBIENT_KEYS.some((key) => mix[key] > 0);
-  // Display names for each sound. Order here is the order on screen.
-  const rows: { key: AmbientKey; label: string }[] = [
-    { key: 'rain', label: 'Rain' },
-    { key: 'cafe', label: 'Cafe' },
-    { key: 'fire', label: 'Fireplace' },
-    { key: 'wind', label: 'Wind' },
-    { key: 'clock', label: 'Clock' },
-    { key: 'brown', label: 'Brown noise' },
-    { key: 'forest', label: 'Forest' },
-    { key: 'keyboard', label: 'Keyboard' },
-    { key: 'waves', label: 'Waves' },
-  ];
+  const anyOn = ambientOn(mix);
   return (
     <View>
       <View style={styles.mixHead}>
@@ -39,15 +27,15 @@ export function MixerBlock({ mobile = false }: { mobile?: boolean }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Turn off ambient sounds"
-          accessibilityState={{ disabled: !ambientOn }}
-          disabled={!ambientOn}
+          accessibilityState={{ disabled: !anyOn }}
+          disabled={!anyOn}
           onPress={silenceAmbient}
-          style={[styles.mini, !ambientOn && styles.mixOffMuted]}
+          style={[styles.mini, !anyOn && styles.mixOffMuted]}
         >
-          <Text style={[styles.miniText, !ambientOn && { color: colors.textMuted }]}>Turn off</Text>
+          <Text style={[styles.miniText, !anyOn && { color: colors.textMuted }]}>Turn off</Text>
         </Pressable>
       </View>
-      {rows.map((row) => (
+      {AMBIENT_SOUNDS.map((row) => (
         <View key={row.key} style={styles.mixRow}>
           <Text style={styles.mixLabel}>{row.label}</Text>
           <Slider

@@ -18,19 +18,8 @@ export { breakWax, colors, fonts, radius, rounded } from '@/src/theme/tokens';
 
 export type SceneId = 'dusk' | 'midnight' | 'forest' | 'ember';
 
-// Volume sliders, each 0..100 (saved as-is; divided by 100 for the players).
-export interface MixLevels {
-  music: number;
-  rain: number;
-  cafe: number;
-  fire: number;
-  wind: number;
-  clock: number;
-  brown: number;
-  forest: number;
-  keyboard: number;
-  waves: number;
-}
+// Volume sliders, each 0..100. The ambient sounds are listed in src/core/ambient.ts.
+export type { MixLevels } from '@/src/core/ambient';
 
 // Desktop scene colors: b1-b3 are the three gradient stops (top to bottom),
 // o1-o3 the three drifting orbs, accent the highlight color for the UI.
@@ -110,11 +99,7 @@ export const PRESETS: TimerCfg[] = [
   { focus: 90, short: 20, long: 30 },
 ];
 
-export const MODE_LABEL: Record<TimerMode, string> = {
-  focus: 'Focus',
-  short: 'Short break',
-  long: 'Long break',
-};
+export { MODE_LABEL } from '@/src/core/session-face';
 
 // Milliseconds -> "MM:SS". Rounds UP so the display never shows 00:00 while
 // there is still a fraction of a second left.

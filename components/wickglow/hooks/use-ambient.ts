@@ -1,48 +1,29 @@
-import { ambientBrown, ambientCafe, ambientClock, ambientFire, ambientForest, ambientKeyboard, ambientRain, ambientWaves, ambientWind } from '@/components/ambient-tracks';
-import { AudioPlayer, useAudioPlayer } from 'expo-audio';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { AMBIENT_SOURCES } from '@/components/ambient-tracks';
+import { AMBIENT_KEYS, AmbientKey, AmbientMix } from '@/src/core/ambient';
+import { AudioPlayer, createAudioPlayer } from 'expo-audio';
+import { useCallback, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
 /**
- * The ambient sound mixer: nine looping background sounds (rain, cafe, ...),
- * each with its own volume from 0 to 1.
+ * The ambient sound mixer: one looping player per sound in `src/core/ambient.ts`,
+ * each at its own slider level.
  *
- * Why nine separate `useAudioPlayer` calls: React hooks can't be called in a
- * loop with a changing count, and each sound needs its own player so volumes
- * mix independently. A volume of 0 means "paused", so unused sounds cost nothing.
+ * Each sound needs its own player so volumes mix independently, but a player
+ * is only built the first time its level goes above zero. Building all of them
+ * at launch loaded sources nobody had asked to hear. Once built, a player is
+ * kept and paused at zero, so a drag through zero does not rebuild it, and all
+ * of them are released when the provider unmounts.
+ *
+ * Levels are slider values, 0..100, the same as the save. This file is the one
+ * place they become a 0..1 volume.
  */
 
-// The volume of each sound, 0..1. This is what gets saved to storage.
-export interface AmbientLevels {
-  rain: number;
-  cafe: number;
-  fire: number;
-  wind: number;
-  clock: number;
-  brown: number;
-  forest: number;
-  keyboard: number;
-  waves: number;
-}
-
-export type AmbientKey = keyof AmbientLevels;
-
-export const AMBIENT_KEYS: AmbientKey[] = ['rain', 'cafe', 'fire', 'wind', 'clock', 'brown', 'forest', 'keyboard', 'waves'];
-
-// What the hook returns: the raw players (so other code can pause them or put
-// them on the lock screen), the current levels, and `sync` to push a volume now.
+// What the hook returns: `sync` to push a level now, and `playerFor` so other
+// code can put a sound on the lock screen.
 export interface AmbientPlayback {
-  rain: AudioPlayer;
-  cafe: AudioPlayer;
-  fire: AudioPlayer;
-  wind: AudioPlayer;
-  clock: AudioPlayer;
-  brown: AudioPlayer;
-  forest: AudioPlayer;
-  keyboard: AudioPlayer;
-  waves: AudioPlayer;
-  levels: AmbientLevels;
-  sync: (key: AmbientKey, gain: number) => void;
+  sync: (key: AmbientKey, level: number) => void;
+  /** The player for a sound, or null when it has never been turned up. */
+  playerFor: (key: AmbientKey) => AudioPlayer | null;
 }
 
 // updateInterval: status events once a second is plenty for a loop.
@@ -50,42 +31,49 @@ export interface AmbientPlayback {
 // with the screen locked (this is what makes background playback work).
 const PLAYER_OPTIONS = { updateInterval: 1000, keepAudioSessionActive: true };
 
-export function useAmbient(levels: AmbientLevels): AmbientPlayback {
-  const rain = useAudioPlayer(ambientRain, PLAYER_OPTIONS);
-  const cafe = useAudioPlayer(ambientCafe, PLAYER_OPTIONS);
-  const fire = useAudioPlayer(ambientFire, PLAYER_OPTIONS);
-  const wind = useAudioPlayer(ambientWind, PLAYER_OPTIONS);
-  const clock = useAudioPlayer(ambientClock, PLAYER_OPTIONS);
-  const brown = useAudioPlayer(ambientBrown, PLAYER_OPTIONS);
-  const forest = useAudioPlayer(ambientForest, PLAYER_OPTIONS);
-  const keyboard = useAudioPlayer(ambientKeyboard, PLAYER_OPTIONS);
-  const waves = useAudioPlayer(ambientWaves, PLAYER_OPTIONS);
-  useAmbientVoice(rain, levels.rain);
-  useAmbientVoice(cafe, levels.cafe);
-  useAmbientVoice(fire, levels.fire);
-  useAmbientVoice(wind, levels.wind);
-  useAmbientVoice(clock, levels.clock);
-  useAmbientVoice(brown, levels.brown);
-  useAmbientVoice(forest, levels.forest);
-  useAmbientVoice(keyboard, levels.keyboard);
-  useAmbientVoice(waves, levels.waves);
+type Voices = Partial<Record<AmbientKey, AudioPlayer>>;
 
-  const voices = useMemo(
-    () => ({ rain, cafe, fire, wind, clock, brown, forest, keyboard, waves }),
-    [brown, cafe, clock, fire, forest, keyboard, rain, waves, wind],
-  );
+export function useAmbient(mix: AmbientMix): AmbientPlayback {
+  // The players built so far. A ref, not state: building one must not re-render.
+  const voices = useRef<Voices>({});
 
-  // A ref mirrors `levels` so the web listener below always reads the latest
+  // A ref mirrors `mix` so the web listener below always reads the latest
   // values without having to re-subscribe on every slider change.
-  const levelsRef = useRef(levels);
+  const mixRef = useRef(mix);
   useEffect(() => {
-    levelsRef.current = levels;
-  }, [levels]);
+    mixRef.current = mix;
+  }, [mix]);
 
   // Apply one slider value to the audio immediately (used while dragging).
-  const sync = useCallback((key: AmbientKey, gain: number) => {
-    applyVoice(voices[key], gain);
-  }, [voices]);
+  const sync = useCallback((key: AmbientKey, level: number) => {
+    applyVoice(voices.current, key, level);
+  }, []);
+
+  const playerFor = useCallback((key: AmbientKey) => voices.current[key] ?? null, []);
+
+  // Keep every sound in step with its level whenever the mix changes. This
+  // also starts the sounds restored from a saved mix. The mix comes from the
+  // saved state, so it is a new object only when a slider moved.
+  useEffect(() => {
+    for (const key of AMBIENT_KEYS) applyVoice(voices.current, key, mix[key]);
+  }, [mix]);
+
+  // Release every player on unmount. `createAudioPlayer` does not release on
+  // its own the way the `useAudioPlayer` hook does.
+  useEffect(() => {
+    const built = voices;
+    return () => {
+      const players = built.current;
+      built.current = {};
+      for (const key of AMBIENT_KEYS) {
+        try {
+          players[key]?.remove();
+        } catch {
+          // Already released with the native module: nothing left to free.
+        }
+      }
+    };
+  }, []);
 
   // Web only: browsers block audio until the user interacts with the page, so
   // a sound restored from a saved level stays silent. The first click/tap
@@ -93,40 +81,33 @@ export function useAmbient(levels: AmbientLevels): AmbientPlayback {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
     const kick = () => {
-      const current = levelsRef.current;
-      for (const key of AMBIENT_KEYS) resumeVoice(voices[key], current[key]);
+      const current = mixRef.current;
+      for (const key of AMBIENT_KEYS) {
+        const player = voices.current[key];
+        if (player && current[key] > 0 && !player.playing) player.play();
+      }
     };
     window.addEventListener('pointerdown', kick);
     return () => window.removeEventListener('pointerdown', kick);
-  }, [voices]);
+  }, []);
 
-  return { rain, cafe, fire, wind, clock, brown, forest, keyboard, waves, levels, sync };
+  return { sync, playerFor };
 }
 
-// Keeps one player in step with its level whenever the level changes.
-function useAmbientVoice(player: AudioPlayer, gain: number) {
-  useEffect(() => {
-    applyVoice(player, gain);
-  }, [gain, player]);
-}
-
-// Set volume, then play if audible or pause if silent.
-function applyVoice(player: AudioPlayer, gain: number) {
+// Set volume, then play if audible or pause if silent. A sound at zero that
+// was never turned up has no player, and none is built for it.
+function applyVoice(voices: Voices, key: AmbientKey, level: number) {
+  let player = voices[key];
+  if (!player) {
+    if (level <= 0) return;
+    player = createAudioPlayer(AMBIENT_SOURCES[key], PLAYER_OPTIONS);
+    voices[key] = player;
+  }
   player.loop = true;
-  player.volume = clampGain(gain);
-  if (gain <= 0) {
+  player.volume = Math.max(0, Math.min(1, level / 100));
+  if (level <= 0) {
     if (player.playing) player.pause();
     return;
   }
   if (!player.playing) player.play();
-}
-
-// Start a sound that should be audible but isn't playing (see the web kick above).
-function resumeVoice(player: AudioPlayer, gain: number) {
-  if (gain <= 0 || player.playing) return;
-  player.play();
-}
-
-function clampGain(gain: number) {
-  return Math.max(0, Math.min(1, gain));
 }

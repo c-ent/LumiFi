@@ -1,34 +1,33 @@
+import { MixLevels, silentAmbient } from '@/src/core/ambient';
 import { idleSession, SessionClock } from '@/src/core/clock';
 import { emptyDay, restoreDayHistory } from '@/src/core/history';
 import { OwnTrack, parseOwnTracks } from '@/src/core/own-tracks';
 import { parseStreamLinks, StreamLink } from '@/src/core/stream-links';
-import { modeDurationMs } from '@/src/core/phase';
+import { DEFAULT_MINUTES, MAX_MINUTES, MIN_MINUTES, modeDurationMs } from '@/src/core/phase';
 import { MusicEnd } from '@/src/core/session-end';
 import { parseDueDate } from '@/src/core/tasks';
-import type { DayHistory, DayStats, ProgressState, Task, TimerCfg, TimerMode } from '@/src/core/types';
+import type { DayHistory, DayStats, ProgressState, StreakState, Task, TimerCfg, TimerMode } from '@/src/core/types';
 import { PixelArtId, readPixelArtId } from '@/components/wickglow/domain/pixel-art-ids';
-import { MixLevels, MoodId, SceneId } from '@/components/wickglow/theme';
+import { readVideoId, VideoId } from '@/components/wickglow/domain/video-ids';
+import { MoodId, SceneId } from '@/components/wickglow/theme';
 
 // The shape of everything Wickglow persists, and the boundary that validates it.
 // `storage.ts` hands the raw string in, `parseSavedState` turns it into a
 // `SavedState`, and `logic.tsx` writes that same shape back out. Every read is
 // defensive: a stored save can come from an older version or be hand-edited, so
-// the fields that are checked (timer lengths, XP, tasks, history, session, music
-// end, own tracks and stream links) fall back to a default rather than throwing.
-// The remaining fields (scene, mood, zenOpt, mix, streak) are merged over the
-// defaults as stored, not validated. Parsing never throws: a save that is not
+// every field is read through a check and falls back to a default rather than
+// throwing. The result is built from the known fields only, so a key this
+// version does not know (an old `goals` list, a typo) is dropped instead of
+// being carried in the save forever. Parsing never throws: a save that is not
 // valid JSON becomes a fresh state.
 
 export const STORAGE_KEY = 'wickglow:state';
 export const LEGACY_STORAGE_KEY = 'lumifi:state';
 
 const MODES: TimerMode[] = ['focus', 'short', 'long'];
+const SCENE_IDS: SceneId[] = ['dusk', 'midnight', 'forest', 'ember'];
+const MOOD_IDS: MoodId[] = ['amber', 'moon', 'spirit'];
 
-// Same ceilings the timer settings enforce, so a stored or hand-edited value
-// cannot pay out more minutes, XP or quest progress than the UI allows.
-const MAX_MINUTES: Record<TimerMode, number> = { focus: 180, short: 60, long: 90 };
-const MIN_MINUTES = 1;
-const DEFAULT_MINUTES: Record<TimerMode, number> = { focus: 25, short: 5, long: 15 };
 // levelInfo walks XP a level at a time, so a huge finite total would spin for
 // years. This sits far above any reachable score but keeps the walk bounded.
 const MAX_XP = 1_000_000_000;
@@ -38,8 +37,8 @@ export interface SavedState extends ProgressState {
   zenOpt: boolean;
   scene: SceneId;
   mood: MoodId;
-  /** Play the looping video behind the timer instead of the gradient. Not used on phones. */
-  videoBg: boolean;
+  /** The looping video behind the timer instead of the gradient, or null for none. Not used on phones. */
+  videoBg: VideoId | null;
   /** A still pixel-art picture behind the timer (desktop only), or null for none. */
   pixelBg: PixelArtId | null;
   mix: MixLevels;
@@ -57,14 +56,14 @@ export interface SavedState extends ProgressState {
 /** The state a fresh install starts from: no XP, no streak, no tasks. */
 export function createInitialState(now = Date.now()): SavedState {
   const day = emptyDay(now);
-  const cfg: TimerCfg = { focus: 25, short: 5, long: 15 };
+  const cfg: TimerCfg = { ...DEFAULT_MINUTES };
   return {
     cfg,
     auto: false,
     zenOpt: true,
     scene: 'dusk',
     mood: 'amber',
-    videoBg: false,
+    videoBg: null,
     pixelBg: null,
     xp: 0,
     streak: { n: 0, last: '' },
@@ -73,7 +72,7 @@ export function createInitialState(now = Date.now()): SavedState {
     tasks: [],
     activeId: null,
     cycle: 0,
-    mix: { music: 60, rain: 0, cafe: 0, fire: 0, wind: 0, clock: 0, brown: 0, forest: 0, keyboard: 0, waves: 0 },
+    mix: { music: 60, ...silentAmbient() },
     musicEnd: 'lower',
     musicLoop: false,
     ownTracks: [],
@@ -85,16 +84,16 @@ export function createInitialState(now = Date.now()): SavedState {
 
 /**
  * Turns stored JSON into a `SavedState`, never throwing. Anything missing or
- * unrecognised falls back to `createInitialState`, and a legacy `goals` key is
- * dropped on the way through. Returns the state as written, not a merged copy,
- * so a caller can rely on the defaults it hands back.
+ * unrecognised falls back to `createInitialState`, and a key that is not part
+ * of the state (a legacy `goals` list) is dropped on the way through.
  */
 export function parseSavedState(raw: string | null, now = Date.now()): SavedState {
   const fresh = createInitialState(now);
   if (!raw) return fresh;
   try {
-    const parsed = JSON.parse(raw) as Partial<SavedState> & { goals?: unknown };
-    const { goals: _droppedGoals, ...saved } = parsed;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fresh;
+    const saved = parsed as { [key in keyof SavedState]?: unknown };
     const restored = restoreDayHistory(readHistory(saved.days), isDayStats(saved.day) ? saved.day : null, now);
     const cfg = readCfg(saved.cfg);
     const tasks = readTasks(saved.tasks) ?? fresh.tasks;
@@ -102,14 +101,16 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
     const storedActive = typeof saved.activeId === 'number' ? saved.activeId : null;
     const activeTask = tasks.find((task) => task.id === storedActive);
     return {
-      ...fresh,
-      ...saved,
       cfg,
       xp,
-      mix: { ...fresh.mix, ...saved.mix },
+      zenOpt: typeof saved.zenOpt === 'boolean' ? saved.zenOpt : fresh.zenOpt,
+      scene: SCENE_IDS.find((id) => id === saved.scene) ?? fresh.scene,
+      mood: MOOD_IDS.find((id) => id === saved.mood) ?? fresh.mood,
+      cycle: readCount(saved.cycle),
+      mix: readMix(saved.mix, fresh.mix),
       ownTracks: parseOwnTracks(saved.ownTracks),
       streamLinks: parseStreamLinks(saved.streamLinks),
-      streak: { ...fresh.streak, ...saved.streak },
+      streak: readStreak(saved.streak),
       day: restored.day,
       days: restored.days,
       tasks,
@@ -117,7 +118,7 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
       // subtask's id is cleared.
       activeId: activeTask && activeTask.parentId == null ? activeTask.id : null,
       auto: saved.auto === true,
-      videoBg: saved.videoBg === true,
+      videoBg: saved.videoBg === true ? 'classic' : readVideoId(saved.videoBg),
       pixelBg: readPixelArtId(saved.pixelBg),
       musicEnd: readMusicEnd(saved.musicEnd),
       musicLoop: saved.musicLoop === true,
@@ -151,6 +152,34 @@ function readXp(value: unknown): number {
 
 function readMusicEnd(value: unknown): MusicEnd {
   return value === 'keep' || value === 'lower' || value === 'fade' ? value : 'lower';
+}
+
+/** A whole number that cannot go below zero: the focus-session count, the streak length. */
+function readCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.floor(value);
+}
+
+/**
+ * Each slider is 0..100. A value that is not a real number would reach the
+ * audio player as `NaN` on every launch, so it falls back to that slider's
+ * default, and an out-of-range one is clamped. Unknown sliders are dropped.
+ */
+function readMix(value: unknown, fallback: MixLevels): MixLevels {
+  const mix = { ...fallback };
+  if (!value || typeof value !== 'object') return mix;
+  const saved = value as Partial<Record<keyof MixLevels, unknown>>;
+  for (const key of Object.keys(fallback) as (keyof MixLevels)[]) {
+    const level = saved[key];
+    if (typeof level === 'number' && Number.isFinite(level)) mix[key] = Math.max(0, Math.min(100, level));
+  }
+  return mix;
+}
+
+function readStreak(value: unknown): StreakState {
+  if (!value || typeof value !== 'object') return { n: 0, last: '' };
+  const streak = value as Partial<Record<keyof StreakState, unknown>>;
+  return { n: readCount(streak.n), last: typeof streak.last === 'string' ? streak.last : '' };
 }
 
 /**

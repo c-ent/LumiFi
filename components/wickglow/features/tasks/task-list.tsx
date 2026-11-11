@@ -243,6 +243,8 @@ function IconButton({ label, onPress, children }: {
 
 export function TaskList({ mobile = false }: { mobile?: boolean }) {
   const lamp = useWickglow();
+  // Actions never change identity, so they are pulled out once (see logic.tsx).
+  const { addTask, addSubtask, renameTask, setTaskDate, setTaskOpen, removeTask, toggleTask, focusTask } = lamp;
   const tone = useTone(mobile);
   const [text, setText] = useState(''); // new-task title being typed
   const [date, setDate] = useState(''); // new-task due date being chosen
@@ -274,11 +276,11 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
     if (editingRef.current !== id) return;
     editingRef.current = null;
     setEditingId(null);
-    if (keep) lamp.renameTask(id, value);
+    if (keep) renameTask(id, value);
   }
 
   function add() {
-    lamp.addTask(text, date || null);
+    addTask(text, date || null);
     setText('');
     setDate('');
   }
@@ -286,7 +288,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
   function addSub(parentId: number) {
     const draft = subDraft[parentId] ?? '';
     if (!draft.trim()) return;
-    lamp.addSubtask(parentId, draft);
+    addSubtask(parentId, draft);
     setSubDraft((current) => ({ ...current, [parentId]: '' }));
   }
 
@@ -343,7 +345,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                     on={task.done}
                     accent={accent}
                     label={task.done ? `Mark ${task.text} not done` : `Mark ${task.text} done`}
-                    onPress={() => lamp.toggleTask(task.id)}
+                    onPress={() => toggleTask(task.id)}
                   />
                   {/* Title: a text field while editing, otherwise a button that
                       focuses/unfocuses the task. */}
@@ -369,7 +371,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                       accessibilityState={{ selected: active }}
                       accessibilityLabel={active ? `Stop focusing on ${task.text}` : `Focus on ${task.text}`}
                       disabled={task.done}
-                      onPress={() => lamp.focusTask(task.id)}
+                      onPress={() => focusTask(task.id)}
                       style={styles.titleBtn}
                     >
                       <Text style={[styles.title, task.done ? styles.done : null]} numberOfLines={1}>{task.text}</Text>
@@ -378,7 +380,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                   {task.done ? null : (
                     <DueControl
                       value={task.date ?? ''}
-                      onChange={(next) => lamp.setTaskDate(task.id, next || null)}
+                      onChange={(next) => setTaskDate(task.id, next || null)}
                       accent={accent}
                       compact
                       overdue={overdue}
@@ -393,7 +395,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                     accessibilityLabel={subs.length > 0 ? `Subtasks for ${task.text}, ${doneCount} of ${subs.length} done` : `Add a subtask to ${task.text}`}
                     onPress={() => {
                       if (!task.open) setFocusSub(task.id);
-                      lamp.setTaskOpen(task.id, !task.open);
+                      setTaskOpen(task.id, !task.open);
                     }}
                     hitSlop={iconSlop}
                     style={[styles.subBtn, subs.length > 0 ? styles.subBtnOn : null]}
@@ -410,7 +412,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                       on={active}
                       accent={accent}
                       label={active ? `Stop focusing on ${task.text}` : `Focus on ${task.text}`}
-                      onPress={() => lamp.focusTask(task.id)}
+                      onPress={() => focusTask(task.id)}
                     />
                   )}
                   {task.done ? null : (
@@ -418,7 +420,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                       <PencilIcon size={14} color={fade(colors.textPrimary, 0.45)} />
                     </IconButton>
                   )}
-                  <IconButton label={`Delete ${task.text}`} onPress={() => lamp.removeTask(task.id)}>
+                  <IconButton label={`Delete ${task.text}`} onPress={() => removeTask(task.id)}>
                     <TrashIcon size={14} color={fade(colors.textPrimary, 0.45)} />
                   </IconButton>
                 </View>
@@ -432,7 +434,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                           accent={accent}
                           small
                           label={sub.done ? `Mark ${sub.text} not done` : `Mark ${sub.text} done`}
-                          onPress={() => lamp.toggleTask(sub.id)}
+                          onPress={() => toggleTask(sub.id)}
                         />
                         {editingId === sub.id ? (
                           <TextInput
@@ -458,7 +460,7 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                             <PencilIcon size={14} color={fade(colors.textPrimary, 0.45)} />
                           </IconButton>
                         )}
-                        <IconButton label={`Delete ${sub.text}`} onPress={() => lamp.removeTask(sub.id)}>
+                        <IconButton label={`Delete ${sub.text}`} onPress={() => removeTask(sub.id)}>
                           <TrashIcon size={14} color={fade(colors.textPrimary, 0.45)} />
                         </IconButton>
                       </View>

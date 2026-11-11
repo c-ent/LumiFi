@@ -1,4 +1,4 @@
-import { commitDurationMinutes } from '@/src/core/phase';
+import { commitDurationMinutes, MAX_MINUTES } from '@/src/core/phase';
 import { colors } from '@/src/theme/tokens';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Text, TextInput, View } from 'react-native';
@@ -14,6 +14,8 @@ import { useTone } from '@/components/wickglow/features/tone';
  */
 export function TimerSettings({ mobile = false }: { mobile?: boolean }) {
   const lamp = useWickglow();
+  // Actions never change identity, so they are pulled out once (see logic.tsx).
+  const { setAuto, setZenOpt, setMusicEnd, applyPreset, setDuration } = lamp;
   const tone = useTone(mobile);
   // A preset is "selected" only when all three lengths match the current settings.
   const same = (preset: TimerCfg) => preset.focus === lamp.cfg.focus && preset.short === lamp.cfg.short && preset.long === lamp.cfg.long;
@@ -24,19 +26,19 @@ export function TimerSettings({ mobile = false }: { mobile?: boolean }) {
         {PRESETS.map((preset) => {
           const selected = same(preset);
           return (
-            <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${preset.focus} minute focus preset`} key={preset.focus} onPress={() => lamp.applyPreset(preset)} style={[styles.preset, selected && { backgroundColor: tone.solid, borderColor: tone.solid }]}>
+            <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${preset.focus} minute focus preset`} key={preset.focus} onPress={() => applyPreset(preset)} style={[styles.preset, selected && { backgroundColor: tone.solid, borderColor: tone.solid }]}>
               <Text style={[styles.miniText, selected && { color: tone.ink }]}>{preset.focus} / {preset.short}</Text>
             </Pressable>
           );
         })}
       </View>
       <View style={styles.fields}>
-        <DurationField label="Focus (min)" value={lamp.cfg.focus} max={180} onChange={(value) => lamp.setDuration('focus', value)} />
-        <DurationField label="Short break" value={lamp.cfg.short} max={60} onChange={(value) => lamp.setDuration('short', value)} />
-        <DurationField label="Long break" value={lamp.cfg.long} max={90} onChange={(value) => lamp.setDuration('long', value)} />
+        <DurationField label="Focus (min)" value={lamp.cfg.focus} max={MAX_MINUTES.focus} onChange={(value) => setDuration('focus', value)} />
+        <DurationField label="Short break" value={lamp.cfg.short} max={MAX_MINUTES.short} onChange={(value) => setDuration('short', value)} />
+        <DurationField label="Long break" value={lamp.cfg.long} max={MAX_MINUTES.long} onChange={(value) => setDuration('long', value)} />
       </View>
-      <CheckRow label="Start the next session automatically" checked={lamp.auto} onPress={() => lamp.setAuto(!lamp.auto)} accent={tone.accent} />
-      <CheckRow label="Hide the interface while I focus" checked={lamp.zenOpt} onPress={() => lamp.setZenOpt(!lamp.zenOpt)} accent={tone.accent} />
+      <CheckRow label="Start the next session automatically" checked={lamp.auto} onPress={() => setAuto(!lamp.auto)} accent={tone.accent} />
+      <CheckRow label="Hide the interface while I focus" checked={lamp.zenOpt} onPress={() => setZenOpt(!lamp.zenOpt)} accent={tone.accent} />
       <Text style={styles.kicker}>When a session ends</Text>
       <View style={styles.presetRow}>
         {([
@@ -46,7 +48,7 @@ export function TimerSettings({ mobile = false }: { mobile?: boolean }) {
         ] as const).map(([id, label]) => {
           const selected = lamp.musicEnd === id;
           return (
-            <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={label} key={id} onPress={() => lamp.setMusicEnd(id)} style={[styles.preset, selected && { backgroundColor: tone.solid, borderColor: tone.solid }]}>
+            <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={label} key={id} onPress={() => setMusicEnd(id)} style={[styles.preset, selected && { backgroundColor: tone.solid, borderColor: tone.solid }]}>
               <Text style={[styles.miniText, selected && { color: tone.ink }]}>{label}</Text>
             </Pressable>
           );

@@ -257,7 +257,9 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
   }, [clearFade, player, volume]);
 
   const playChime = useCallback(() => {
-    void chime.seekTo(0).then(() => {
+    // A seek that fails (the chime has not finished loading) must not become an
+    // unhandled rejection, and the chime should still be heard, so play anyway.
+    chime.seekTo(0).catch(() => undefined).then(() => {
       chime.play();
     });
   }, [chime]);

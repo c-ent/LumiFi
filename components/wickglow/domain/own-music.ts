@@ -92,10 +92,28 @@ async function copyIntoFolder(
   try {
     const id = newId(safeExtension(name));
     const destination = new File(folder, id);
-    await new File(sourceUri).copy(destination, { overwrite: false });
+    const source = new File(sourceUri);
+    await source.copy(destination, { overwrite: false });
+    dropCacheCopy(source);
     return { id, title: titleFromFileName(name), uri: destination.uri };
   } catch {
     return null;
+  }
+}
+
+/**
+ * The picker hands over a copy it made in the app's cache folder. Once that is
+ * copied into own-tracks it is a second full copy of the song, so it is
+ * removed. Only a file inside the cache folder is ever deleted here: a URI
+ * that points anywhere else could be the user's original, and is left alone.
+ */
+function dropCacheCopy(source: File): void {
+  try {
+    const cache = Paths.cache.uri;
+    if (!cache || !source.uri.startsWith(cache)) return;
+    if (source.exists) source.delete();
+  } catch {
+    // The system clears its cache on its own; a copy left behind is not an error.
   }
 }
 

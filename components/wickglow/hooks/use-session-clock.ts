@@ -1,4 +1,4 @@
-import { sessionRemaining, SessionClock } from '@/src/core/clock';
+import { displaySecond, sessionRemaining, SessionClock } from '@/src/core/clock';
 import { useEffect, useState, type RefObject } from 'react';
 import { AppState } from 'react-native';
 
@@ -14,14 +14,17 @@ import { AppState } from 'react-native';
  * identity changes.
  */
 export function useSessionClock(session: SessionClock, onReachEnd: RefObject<() => void>) {
-  // `now` is state so each tick re-renders the components showing the time.
+  // `now` is state so a tick re-renders the components showing the time.
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (session.status !== 'running') return undefined;
     const tick = () => {
       const next = Date.now();
-      setNow(next);
+      // The provider re-renders every screen when this state changes, so only
+      // store a new sample when the second on screen is a different one. The
+      // interval is faster than that only so the change lands on time.
+      setNow((shown) => (displaySecond(session, shown) === displaySecond(session, next) ? shown : next));
       if (session.endAt != null && next >= session.endAt) onReachEnd.current();
     };
     tick();

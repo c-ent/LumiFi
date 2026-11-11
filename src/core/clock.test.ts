@@ -1,4 +1,4 @@
-import { idleSession, pauseSession, sessionMinutes, sessionRemaining, startSession, takeCompletedSession } from './clock';
+import { displaySecond, idleSession, isSameRun, pauseSession, sessionMinutes, sessionRemaining, startSession, takeCompletedSession } from './clock';
 import { emptyDay } from './history';
 import { ProgressState } from './types';
 
@@ -69,6 +69,34 @@ describe('session clock', () => {
     expect(auto.clock.status).toBe('running');
     expect(auto.clock.mode).toBe('short');
     expect(auto.clock.endAt).toBe(started.endAt! + 5 * 60_000);
+  });
+
+  it('reports the second on screen, so ticks inside one second match', () => {
+    const running = startSession(idleSession('focus', 25 * 60_000), now);
+    expect(displaySecond(running, now)).toBe(1500);
+    expect(displaySecond(running, now + 250)).toBe(1500);
+    expect(displaySecond(running, now + 999)).toBe(1500);
+    expect(displaySecond(running, now + 1000)).toBe(1499);
+    expect(displaySecond(running, now + 1001)).toBe(1499);
+    expect(displaySecond(running, running.endAt! + 5000)).toBe(0);
+    // A sample from before the start cannot show more than the full length.
+    expect(displaySecond(running, now - 60_000)).toBe(1500);
+    const paused = pauseSession(running, now + 60_000);
+    expect(displaySecond(paused, now + 10 * 60_000)).toBe(1440);
+  });
+
+  it('knows when a started run has been overtaken', () => {
+    const idle = idleSession('focus', 25 * 60_000);
+    const started = startSession(idle, now);
+    expect(isSameRun(started, started)).toBe(true);
+    expect(isSameRun({ ...started }, started)).toBe(true);
+    expect(isSameRun(pauseSession(started, now + 1000), started)).toBe(false);
+    expect(isSameRun(idle, started)).toBe(false);
+    expect(isSameRun(startSession(idleSession('short', 5 * 60_000), now), started)).toBe(false);
+    // Paused then resumed later: a new deadline, so the first start's alarm is stale.
+    const resumed = startSession(pauseSession(started, now + 1000), now + 5000);
+    expect(isSameRun(resumed, started)).toBe(false);
+    expect(isSameRun(idle, idle)).toBe(false);
   });
 
   it('leaves a session that is still running unchanged', () => {

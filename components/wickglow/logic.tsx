@@ -1,32 +1,33 @@
 import { calendarKey } from '@/src/core/calendar';
-import { idleSession, pauseSession, startSession, takeCompletedSession } from '@/src/core/clock';
 import type { OwnTrack, PlaylistEntry } from '@/src/core/own-tracks';
+import { activeStreamId as activeStreamOf, LOCAL_SOURCE, MusicSource, MusicSourceEvent, stepMusicSource } from '@/src/core/music-source';
 import { parseStreamLink, playbackFor, StreamLink } from '@/src/core/stream-links';
-import { modeAfterSkip, modeDurationMs } from '@/src/core/phase';
-import { focusEndLine, MusicEnd } from '@/src/core/session-end';
+import type { MusicEnd } from '@/src/core/session-end';
 import { streakCount } from '@/src/core/streak';
 import { colors } from '@/src/theme/tokens';
-import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { addNotificationReceivedListener } from 'expo-notifications';
 import { AppState, Linking, Platform, View } from 'react-native';
 import type { PixelArtId } from '@/components/wickglow/domain/pixel-art-ids';
+import type { VideoId } from '@/components/wickglow/domain/video-ids';
 import { SavedState } from '@/components/wickglow/domain/saved-state';
+import { createSavedStore, SavedStore } from '@/components/wickglow/domain/saved-store';
+import { createSessionRun, SessionEnding, SessionRun, StageChange } from '@/components/wickglow/domain/session-run';
 import { deleteOwnTrackFile, pickOwnTracks } from '@/components/wickglow/domain/own-music';
 import { checkStreamLink } from '@/components/wickglow/domain/stream-check';
+import { timerProgress } from '@/src/core/deadline';
+import { rollToToday } from '@/src/core/history';
+import { addSubtask as addSubtaskState, removeTask as removeTaskState, toggleTask } from '@/src/core/session';
 import {
-  addSubtask as addSubtaskState,
   addTask as addTaskState,
   focusTask as focusTaskState,
-  removeTask as removeTaskState,
   renameTask as renameTaskState,
-  rollToToday,
   setTaskDate as setTaskDateState,
   setTaskOpen as setTaskOpenState,
-  timerProgress,
-  toggleTask,
-} from '@/components/wickglow/domain/session';
+} from '@/src/core/tasks';
 import { silenceAmbientMix } from '@/components/wickglow/domain/silence-ambient';
-import { AMBIENT_KEYS, useAmbient } from '@/components/wickglow/hooks/use-ambient';
+import { AMBIENT_KEYS } from '@/src/core/ambient';
+import { useAmbient } from '@/components/wickglow/hooks/use-ambient';
 import { useBackgroundAudio } from '@/components/wickglow/hooks/use-background-audio';
 import { useMusic } from '@/components/wickglow/hooks/use-music';
 import { useSessionClock } from '@/components/wickglow/hooks/use-session-clock';
@@ -52,36 +53,40 @@ import {
  * How the pieces fit:
  * - `WickglowProvider` loads the saved state from AsyncStorage (async, so it
  *   renders a blank dark view until ready), then mounts `WickglowSession`.
- * - `WickglowSession` owns the live state, wires up the music/ambient audio and
- *   the session clock, and builds one big `value` object for the context.
+ * - `WickglowSession` wires the pieces together and builds one big `value`
+ *   object for the context. It holds little of its own:
+ *   - the saved state lives in a store (domain/saved-store.ts), which is the
+ *     only thing that changes it and decides when it is written;
+ *   - every timer change (start, pause, reset, skip, finish) goes through the
+ *     session run (domain/session-run.ts), which also keeps the one
+ *     session-end alarm in step;
+ *   - which player owns the sound is src/core/music-source.ts.
  * - The actual rules (XP, streaks, quests, deadlines) are NOT here. They are
- *   pure functions in `src/core` and `domain/session.ts`; this file only calls
- *   them and stores the result. That keeps components free of game logic.
+ *   pure functions in `src/core`; this file only calls them and stores the
+ *   result. That keeps components free of game logic.
  *
- * Two patterns you'll see a lot:
- * - `savedRef` mirrors `saved` state. Timers, listeners and notifications fire
- *   later and would otherwise read a stale value from an old render's closure.
- * - `commit(next)` = update state AND write to storage right away. Plain
- *   `setSaved` updates state only; the persist effect saves it afterwards.
+ * Reading and changing the saved state:
+ * - `store.get()` is the newest saved state. Timers, listeners and
+ *   notifications fire later and would otherwise read a stale value from an
+ *   old render's closure, so anything that runs later reads the store.
+ * - `store.commit(next)` = change state AND write to storage right away.
+ *   `store.update(fn)` changes state and writes a moment later, once the
+ *   changes stop coming.
  */
 
-// The "Focus finished" card shown after a session completes (session-end-card.tsx).
-interface SessionEnding {
-  title: string;
-  line: string;
-  actionLabel: string;
-  /** Hide the "Later" button when the next session already auto-started. */
-  showLater: boolean;
-}
+// How long a `store.update` change waits before it is written. A slider drag
+// lands as one write instead of one per step.
+const SAVE_DELAY_MS = 300;
 
-// Everything screens can read or call. Grouped: values first, then actions.
-interface WickglowContextValue {
+// What screens can read. It changes only when something on screen changes: the
+// once-a-second clock is kept out of it, in `WickglowClock` below.
+interface WickglowState {
   cfg: TimerCfg;
   auto: boolean;
   zenOpt: boolean;
   scene: SceneId;
   mood: MoodId;
-  videoBg: boolean;
+  videoBg: VideoId | null;
   pixelBg: PixelArtId | null;
   sceneTheme: (typeof SCENES)[number];
   moodTheme: (typeof MOODS)[number];
@@ -102,9 +107,7 @@ interface WickglowContextValue {
   mode: TimerMode;
   status: SavedState['session']['status'];
   running: boolean;
-  remaining: number;
   total: number;
-  progress: number;
   toast: string | null;
   smoke: boolean;
   dimming: boolean;
@@ -117,10 +120,16 @@ interface WickglowContextValue {
   trackTitle: string;
   trackArtist: string;
   ownTracks: OwnTrack[];
-  addOwnFiles: () => void;
-  removeOwnTrack: (id: string) => void;
   streamLinks: StreamLink[];
   activeStreamId: string | null;
+}
+
+// What screens can call. Every function keeps the same identity for the life of
+// the provider, so a component can destructure one and hand it to a child
+// without causing a re-render.
+interface WickglowActions {
+  addOwnFiles: () => void;
+  removeOwnTrack: (id: string) => void;
   addStreamLink: (raw: string) => Promise<'added' | 'empty' | 'unsupported' | 'private' | 'duplicate' | 'stale'>;
   removeStreamLink: (id: string) => void;
   openStream: (id: string) => void;
@@ -133,7 +142,7 @@ interface WickglowContextValue {
   skip: () => void;
   setScene: (scene: SceneId) => void;
   setMood: (mood: MoodId) => void;
-  setVideoBg: (value: boolean) => void;
+  setVideoBg: (value: VideoId | null) => void;
   setPixelBg: (id: PixelArtId) => void;
   setAuto: (value: boolean) => void;
   setZenOpt: (value: boolean) => void;
@@ -158,10 +167,143 @@ interface WickglowContextValue {
   selectTrack: (index: number) => void;
 }
 
+type WickglowContextValue = WickglowState & WickglowActions;
+
+// The countdown. It changes every second while a session runs, so it has its
+// own context: only the time and the candle read it, and a tick re-renders
+// those two and nothing else.
+interface WickglowClock {
+  remaining: number;
+  /** Time left as 0..1 of the length this session was started at. */
+  progress: number;
+}
+
 const WickglowContext = createContext<WickglowContextValue | null>(null);
+const ClockContext = createContext<WickglowClock | null>(null);
+
+/**
+ * Owns the ticking state, so a tick re-renders this small component and the
+ * clock's readers, not `WickglowSession` and every screen under it.
+ */
+function ClockProvider({
+  session,
+  onReachEnd,
+  children,
+}: {
+  session: SavedState['session'];
+  onReachEnd: React.RefObject<() => void>;
+  children: React.ReactNode;
+}) {
+  const { remaining } = useSessionClock(session, onReachEnd);
+  // The length this session was started at, not the current setting: a length
+  // changed while a session runs applies to the next one, and must not make
+  // the candle and ring jump in this one.
+  const progress = timerProgress(remaining, session.totalMs);
+  const value = useMemo(() => ({ remaining, progress }), [progress, remaining]);
+  return <ClockContext.Provider value={value}>{children}</ClockContext.Provider>;
+}
+
+// Every action name, once. `satisfies` makes this a compile error if an action
+// is added to `WickglowActions` and left out here.
+const ACTION_NAMES = Object.keys({
+  addOwnFiles: true,
+  removeOwnTrack: true,
+  addStreamLink: true,
+  removeStreamLink: true,
+  openStream: true,
+  closeStream: true,
+  setMode: true,
+  toggle: true,
+  startNext: true,
+  dismissEnding: true,
+  reset: true,
+  skip: true,
+  setScene: true,
+  setMood: true,
+  setVideoBg: true,
+  setPixelBg: true,
+  setAuto: true,
+  setZenOpt: true,
+  setMusicEnd: true,
+  applyPreset: true,
+  setDuration: true,
+  addTask: true,
+  addSubtask: true,
+  renameTask: true,
+  setTaskDate: true,
+  setTaskOpen: true,
+  removeTask: true,
+  toggleTask: true,
+  focusTask: true,
+  setMix: true,
+  silenceAmbient: true,
+  toggleMusic: true,
+  play: true,
+  nextTrack: true,
+  prevTrack: true,
+  toggleMusicLoop: true,
+  selectTrack: true,
+} satisfies Record<keyof WickglowActions, true>) as (keyof WickglowActions)[];
+
+/**
+ * Gives each action a wrapper that never changes and calls the newest version.
+ * The actions themselves are rebuilt every render (they close over that
+ * render's music player and helpers); screens get these wrappers instead, so
+ * an action's identity is the same for the life of the provider.
+ */
+function useStableActions(actions: WickglowActions): WickglowActions {
+  const latest = useRef(actions);
+  // useLayoutEffect, so the newest set is in place before anything can be pressed.
+  useLayoutEffect(() => {
+    latest.current = actions;
+  });
+  return useMemo(() => {
+    const bound: Partial<Record<keyof WickglowActions, (...args: never[]) => unknown>> = {};
+    for (const name of ACTION_NAMES) {
+      bound[name] = (...args: never[]) => (latest.current[name] as (...input: never[]) => unknown)(...args);
+    }
+    return bound as WickglowActions;
+  }, []);
+}
+
+// What the provider hands the session run, rebuilt every render.
+interface SessionRunHooks {
+  startMusic: () => void;
+  endMusic: (setting: MusicEnd) => void;
+  chime: () => void;
+  show: (change: StageChange) => void;
+}
+
+/**
+ * Builds the session run once and keeps it for the life of the provider. It
+ * holds which deadline has already paid out, so it must not be rebuilt. The
+ * hooks are rebuilt every render, so the run calls the newest ones through a
+ * ref, the same way `useStableActions` does.
+ */
+function useSessionRun(store: SavedStore<SavedState>, hooks: SessionRunHooks): SessionRun {
+  const latest = useRef(hooks);
+  useLayoutEffect(() => {
+    latest.current = hooks;
+  });
+  // The ref is only read when the run later calls one of these, after a press
+  // or a tick, never while rendering. The rule cannot see into the call.
+  // eslint-disable-next-line react-hooks/refs
+  return useMemo(() => createSessionRun({
+    state: store,
+    alarm: { prepare: prepareNotificationPermission, schedule: scheduleSessionEnd, cancel: cancelSessionEnd },
+    music: {
+      start: () => latest.current.startMusic(),
+      sessionEnded: (setting) => latest.current.endMusic(setting),
+      chime: () => latest.current.chime(),
+    },
+    show: (change) => latest.current.show(change),
+    now: Date.now,
+    random: Math.random,
+  }), [store]);
+}
 
 // Outer shell: just loads the save file. Splitting it from WickglowSession means
-// the session hooks can assume `saved` is never null.
+// the session can build its store from a state that is never null.
 export function WickglowProvider({ children }: { children: React.ReactNode }) {
   const [saved, setSaved] = useState<SavedState | null>(null);
 
@@ -182,50 +324,36 @@ export function WickglowProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <WickglowSession saved={saved} setSaved={setSaved}>
+    <WickglowSession loaded={saved}>
       {children}
     </WickglowSession>
   );
 }
 
-function WickglowSession({
-  saved,
-  setSaved,
-  children,
-}: {
-  saved: SavedState;
-  setSaved: React.Dispatch<React.SetStateAction<SavedState | null>>;
-  children: React.ReactNode;
-}) {
-  // The clock hook calls this when time runs out. It's a ref so the hook can be
-  // set up first; `finish` (defined below) is assigned into it later.
-  const onReachEnd = useRef<() => void>(() => {});
-  // Audio. Sliders store 0..100; the players want 0..1, hence the `/ 100`.
+function WickglowSession({ loaded, children }: { loaded: SavedState; children: React.ReactNode }) {
+  // The saved state, and every write of it. Seeded with the loaded state, so
+  // loading doesn't immediately re-write the file.
+  const [store] = useState(() => createSavedStore<SavedState>(
+    loaded,
+    (state) => {
+      void saveWickglowState(state);
+    },
+    SAVE_DELAY_MS,
+  ));
+  const saved = useSyncExternalStore(store.subscribe, store.get, store.get);
+  // Audio. Sliders store 0..100; the music player wants 0..1, hence the
+  // `/ 100`. The ambient players take the slider levels as they are.
   const music = useMusic(saved.mix.music / 100, saved.ownTracks, saved.musicLoop);
-  const ambient = useAmbient({
-    rain: saved.mix.rain / 100,
-    cafe: saved.mix.cafe / 100,
-    fire: saved.mix.fire / 100,
-    wind: saved.mix.wind / 100,
-    clock: saved.mix.clock / 100,
-    brown: saved.mix.brown / 100,
-    forest: saved.mix.forest / 100,
-    keyboard: saved.mix.keyboard / 100,
-    waves: saved.mix.waves / 100,
-  });
-  useBackgroundAudio(music.player, music.musicPlaying, music.trackTitle, music.trackArtist, ambient);
+  const ambient = useAmbient(saved.mix);
+  useBackgroundAudio(music.player, music.musicPlaying, music.trackTitle, music.trackArtist, ambient, saved.mix);
   // "Latest value" refs. Callbacks created once (timers, listeners) read these
   // instead of the render-time variables, which would be stale by then.
-  const savedRef = useRef(saved);
   const musicRef = useRef(music);
   const ambientRef = useRef(ambient);
   useEffect(() => {
-    savedRef.current = saved;
     musicRef.current = music;
     ambientRef.current = ambient;
   });
-  const clock = useSessionClock(saved.session, onReachEnd);
-
   // Short-lived UI state (not saved): toast text, current time, end-of-session
   // effects, and `swap`, a counter that bumps on a phase change so animations replay.
   const [toast, setToast] = useState<string | null>(null);
@@ -238,37 +366,28 @@ function WickglowSession({
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const smokeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dimTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Skip the first persist run so loading doesn't immediately re-write the file.
-  const persistReady = useRef(false);
-  // Guards against a double tap on Start running `begin` twice.
-  const starting = useRef(false);
-  // The `endAt` already completed, so one session can never pay out twice.
-  const handledEndAt = useRef<number | null>(null);
   // When the chime last played, to avoid a double chime (in-app + notification).
   const chimeAt = useRef(0);
-  const activeStreamIdRef = useRef<string | null>(null);
-  const heldForEmbed = useRef(false);
   // Counts addStreamLink submissions so only the latest one may save.
   const streamRequest = useRef(0);
-  const resumeWhenActive = useRef(false);
-  const leftForStream = useRef(false);
+  // Which player owns the sound: the local one, an embed, or another app. The
+  // rules are in src/core/music-source.ts; `sendSource` is the only writer.
+  const sourceRef = useRef<MusicSource>(LOCAL_SOURCE);
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
 
-  // An external service app pauses the local player. Resume only after Wickglow
-  // has actually been in the background and come back, so the handoff itself
-  // does not count as closing it.
+  const sendSource = (event: MusicSourceEvent) => {
+    const step = stepMusicSource(sourceRef.current, event);
+    sourceRef.current = step.source;
+    setActiveStreamId(activeStreamOf(step.source));
+    if (step.local === 'pause') musicRef.current.pause();
+    else if (step.local === 'play') musicRef.current.play();
+  };
+
+  // Another app pauses the local player. The music source resumes it only
+  // after Wickglow has actually been in the background and come back.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (next) => {
-      if (next !== 'active') {
-        if (resumeWhenActive.current) leftForStream.current = true;
-        return;
-      }
-      if (!resumeWhenActive.current || !leftForStream.current) return;
-      resumeWhenActive.current = false;
-      leftForStream.current = false;
-      const resume = heldForEmbed.current;
-      heldForEmbed.current = false;
-      if (resume) musicRef.current.play();
+      sendSource({ type: next === 'active' ? 'appActive' : 'appBackground' });
     });
     return () => subscription.remove();
   }, []);
@@ -280,40 +399,26 @@ function WickglowSession({
     toastTimer.current = setTimeout(() => setToast(null), 3600);
   };
 
-  // Update state AND save immediately. Used for important changes (session
-  // start/finish) where the ref must be current right away and we don't want to
-  // wait for the effect below. Also sets the ref first so the next read is fresh.
-  const commit = (next: SavedState) => {
-    savedRef.current = next;
-    setSaved(next);
-    void saveWickglowState(next);
+  // A task change that can pay a reward. The rule runs once, outside any React
+  // updater, so its toast cannot fire twice; the last message is the one shown.
+  const step = (change: (current: SavedState) => { state: SavedState; messages: string[] }) => {
+    const result = change(store.get());
+    store.update(() => result.state);
+    const message = result.messages[result.messages.length - 1];
+    if (message) showToast(message);
   };
 
-  // Safety net: any state change made via plain `setSaved` gets persisted here.
+  // A waiting save must not be lost: write it as soon as the app leaves the
+  // foreground (on web, when the tab is hidden or closed) and on unmount.
   useEffect(() => {
-    if (!persistReady.current) {
-      persistReady.current = true;
-      return;
-    }
-    void saveWickglowState(saved);
-  }, [saved]);
-
-  // On app launch: if a session was running when the app closed, re-schedule
-  // its end-of-session notification (the OS may have dropped it).
-  useEffect(() => {
-    const session = savedRef.current.session;
-    if (session.status !== 'running' || session.endAt == null) return undefined;
-    let cancelled = false;
-    void (async () => {
-      const permission = await prepareNotificationPermission(true);
-      const latest = savedRef.current.session;
-      if (cancelled || !permission.granted || latest.status !== 'running' || latest.endAt == null) return;
-      await scheduleSessionEnd(latest.endAt, latest.mode);
-    })();
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') store.flush();
+    });
     return () => {
-      cancelled = true;
+      subscription.remove();
+      store.flush();
     };
-  }, []);
+  }, [store]);
 
   // Every 15s: refresh "now" and roll the day over. `now` only changes when the
   // calendar day changes (so most ticks cause no re-render). `rollToToday`
@@ -325,15 +430,13 @@ function WickglowSession({
       setNow((current) => (
         current != null && calendarKey(current) === calendarKey(nextNow) ? current : nextNow
       ));
-      setSaved((current) => {
-        const base = savedRef.current ?? current;
-        return base ? rollToToday(base, nextNow) : base;
-      });
+      // Returns the same state unless the day changed, which is no change.
+      store.update((current) => rollToToday(current, nextNow));
     };
     tick();
     const id = setInterval(tick, 15000);
     return () => clearInterval(id);
-  }, [setSaved]);
+  }, [store]);
 
   // Unmount cleanup: cancel any pending timeouts.
   useEffect(() => () => {
@@ -362,179 +465,86 @@ function WickglowSession({
     return () => subscription.remove();
   }, []);
 
-  // A session reached its deadline. All reward math happens inside
-  // `takeCompletedSession` (src/core); this function applies the result:
-  // saves the new state, plays the gentle end effects and shows the end card.
-  const finish = () => {
-    const current = savedRef.current;
-    const endAt = current.session.endAt;
-    // Already handled this exact deadline (the clock can fire more than once).
-    if (endAt == null || handledEndAt.current === endAt) return;
-    const outcome = takeCompletedSession(current, current.session, Date.now(), current.auto);
-    if (!outcome.completed) return;
-    handledEndAt.current = endAt;
-    commit({ ...outcome.state, session: outcome.clock });
-    setSwap((value) => value + 1);
-    // Gentle end: smoke wisp for 2.4s, flame dims for 1s, soft chime, then music
-    // is lowered or faded per the user's setting. No harsh alarm.
-    setSmoke(true);
-    setDimming(true);
-    if (smokeTimer.current) clearTimeout(smokeTimer.current);
-    smokeTimer.current = setTimeout(() => setSmoke(false), 2400);
-    if (dimTimer.current) clearTimeout(dimTimer.current);
-    dimTimer.current = setTimeout(() => setDimming(false), 1000);
-    playEndChime();
-    musicRef.current.onSessionEnd(current.musicEnd);
-    if (outcome.completedMode === 'focus') {
-      setEnding({
-        title: 'Focus finished',
-        line: focusEndLine(Math.random),
-        actionLabel: 'Start break',
-        showLater: !outcome.autoStarted,
-      });
-    } else if (outcome.completedMode != null) {
-      setEnding({
-        title: 'Break finished',
-        line: 'Your break is complete.',
-        actionLabel: 'Start focus',
-        showLater: !outcome.autoStarted,
-      });
-    }
-    const message = outcome.messages[outcome.messages.length - 1];
-    if (message) showToast(message);
-    // With auto-start the next phase is already running, so schedule its alarm.
-    if (outcome.clock.status === 'running' && outcome.clock.endAt != null) {
-      void scheduleSessionEnd(outcome.clock.endAt, outcome.clock.mode);
-    } else {
-      void cancelSessionEnd();
-    }
+  // The music a session starts with: full volume again after a session-end
+  // lowering or fade, and the local track playing. A streaming embed is the
+  // music for the session while it is up, so the local player stays out of it.
+  const startSessionMusic = () => {
+    musicRef.current.restoreMusic();
+    sendSource({ type: 'sessionStart' });
   };
 
-  // Point the clock's callback at the latest `finish` after every render.
-  // useLayoutEffect (not useEffect) so it's set before the next timer tick.
-  useLayoutEffect(() => {
-    onReachEnd.current = finish;
+  // What the screen does after a timer change. The gentle end: a smoke wisp
+  // for 2.4s and the flame dimming for 1s. No harsh alarm.
+  const show = (change: StageChange) => {
+    if (change.ending !== undefined) setEnding(change.ending);
+    if (change.settle) setDimming(false);
+    if (change.phaseChanged) setSwap((value) => value + 1);
+    if (change.finished) {
+      setSmoke(true);
+      setDimming(true);
+      if (smokeTimer.current) clearTimeout(smokeTimer.current);
+      smokeTimer.current = setTimeout(() => setSmoke(false), 2400);
+      if (dimTimer.current) clearTimeout(dimTimer.current);
+      dimTimer.current = setTimeout(() => setDimming(false), 1000);
+    }
+    if (change.message) showToast(change.message);
+  };
+
+  // Every timer change goes through here (domain/session-run.ts). It is built
+  // once: everything handed in reads refs or the store, never a render's values.
+  const run = useSessionRun(store, {
+    startMusic: startSessionMusic,
+    endMusic: (setting) => musicRef.current.onSessionEnd(setting),
+    chime: playEndChime,
+    show,
   });
+  // The clock calls this when time runs out.
+  const onReachEnd = useRef(run.reachEnd);
 
-  // Start (or resume) the timer.
-  const begin = async () => {
-    if (starting.current) return;
-    const current = savedRef.current;
-    if (current.session.status === 'running') return;
-    starting.current = true;
-    try {
-      const latest = savedRef.current;
-      if (latest.session.status === 'running') return;
-      const started = startSession(latest.session, Date.now());
-      setEnding(null);
-      musicRef.current.restoreMusic();
-      // Start the track before the notification work below. That work is a
-      // chain of native calls and can take hundreds of milliseconds, so
-      // awaiting it first left the music audibly behind the timer.
-      // A streaming embed is the music for this session. Starting a session
-      // does not also start the local player while an embed is up.
-      if (!activeStreamIdRef.current) {
-        resumeWhenActive.current = false;
-        leftForStream.current = false;
-        heldForEmbed.current = false;
-        musicRef.current.play();
-      }
-      const permission = await prepareNotificationPermission(latest.notificationsAsked);
-      commit({ ...savedRef.current, session: started, notificationsAsked: permission.asked });
-      if (permission.granted && started.endAt != null) await scheduleSessionEnd(started.endAt, started.mode);
-    } finally {
-      starting.current = false;
-    }
-  };
-
-  // Pause keeps the remaining time; the scheduled notification is cancelled
-  // because the old end time no longer applies.
-  const pause = () => {
-    const current = savedRef.current;
-    if (current.session.status !== 'running') return;
-    commit({ ...current, session: pauseSession(current.session, Date.now()) });
-    setEnding(null);
-    void cancelSessionEnd();
-  };
-
-  // Change timer lengths. If the current phase's length changed and it isn't
-  // running, reset it so the new length shows immediately. A running session
-  // keeps its old deadline.
-  const updateCfg = (cfg: TimerCfg) => {
-    const current = savedRef.current;
-    const durationChanged = cfg[current.session.mode] !== current.cfg[current.session.mode];
-    const session = durationChanged && current.session.status !== 'running'
-      ? idleSession(current.session.mode, modeDurationMs(cfg, current.session.mode))
-      : current.session;
-    commit({ ...current, cfg, session });
-  };
+  // On app launch: if a session was running when the app closed, re-schedule
+  // its end-of-session notification (the OS may have dropped it).
+  useEffect(() => run.restoreAlarm(), [run]);
 
   // The user started local music while an embed was up: drop the embed and
   // forget the "resume later" bookkeeping, since local audio now takes over.
-  const releaseStreamForLocal = () => {
-    resumeWhenActive.current = false;
-    leftForStream.current = false;
-    heldForEmbed.current = false;
-    if (!activeStreamIdRef.current) return;
-    activeStreamIdRef.current = null;
-    setActiveStreamId(null);
-  };
+  const releaseStreamForLocal = () => sendSource({ type: 'playLocal' });
 
   // End the stream (unmounts the player) and resume local music if we paused it.
-  const closeStream = () => {
-    activeStreamIdRef.current = null;
-    setActiveStreamId(null);
-    resumeWhenActive.current = false;
-    leftForStream.current = false;
-    const resume = heldForEmbed.current;
-    heldForEmbed.current = false;
-    if (resume) musicRef.current.play();
-  };
+  const closeStream = () => sendSource({ type: 'closeStream' });
 
   // Start a saved streaming link. Embeds show in-app; "open" links (YouTube
   // Music) hand off to the other app. Local music is paused either way, because
   // two things playing at once is never wanted.
   const openStream = (id: string) => {
-    const link = savedRef.current.streamLinks.find((item) => item.id === id);
+    const link = store.get().streamLinks.find((item) => item.id === id);
     if (!link) return;
     const playback = playbackFor(link);
     // On the web, opening YouTube Music leaves this page in place, so the
     // local player keeps going. Native hands the screen to the other app.
     if (playback.kind === 'open' && Platform.OS === 'web') {
-      if (activeStreamIdRef.current) closeStream();
+      if (sourceRef.current.kind === 'embed') closeStream();
       Linking.openURL(link.url).catch(() => showToast('Could not open that link'));
       return;
     }
-    if (!activeStreamIdRef.current) heldForEmbed.current = musicRef.current.musicPlaying;
-    musicRef.current.pause();
+    const localPlaying = musicRef.current.musicPlaying;
     if (playback.kind === 'open') {
-      activeStreamIdRef.current = null;
-      setActiveStreamId(null);
-      resumeWhenActive.current = true;
-      leftForStream.current = false;
+      sendSource({ type: 'handOff', localPlaying });
       Linking.openURL(link.url).catch(() => {
         showToast('Could not open that link');
         closeStream();
       });
       return;
     }
-    resumeWhenActive.current = false;
-    leftForStream.current = false;
-    activeStreamIdRef.current = id;
-    setActiveStreamId(id);
+    sendSource({ type: 'openEmbed', streamId: id, localPlaying });
   };
 
-  // Derived values, computed fresh each render rather than stored.
-  const levels = levelInfo(saved.xp);
-  const total = modeDurationMs(saved.cfg, saved.session.mode);
-  const activeTask = saved.tasks.find((task) => task.id === saved.activeId) ?? null;
-
-  // The context value: what every screen sees through `useWickglow()`. Actions
-  // that touch the timer use `commit` (instant save). Simple setting toggles
-  // use `setSaved((current) => ...)`, the functional form, so two quick changes
-  // can't overwrite each other. The `current ? ... : current` check is only
-  // there to satisfy TypeScript, since `saved` is nullable in the setter type.
-  const value: WickglowContextValue = {
+  // Derived values are computed here rather than stored. The memo keeps the
+  // object's identity until one of its inputs changes, so a render caused by
+  // something screens do not show (the music player's position updates, a
+  // few times a second) does not re-render them.
+  const state: WickglowState = useMemo(() => {
+    const levels = levelInfo(saved.xp);
+    return {
       cfg: saved.cfg,
       auto: saved.auto,
       zenOpt: saved.zenOpt,
@@ -556,16 +566,14 @@ function WickglowSession({
       day: saved.day,
       days: saved.days,
       tasks: saved.tasks,
-      activeTask,
+      activeTask: saved.tasks.find((task) => task.id === saved.activeId) ?? null,
       cycle: saved.cycle,
       mix: saved.mix,
       musicEnd: saved.musicEnd,
       mode: saved.session.mode,
       status: saved.session.status,
-      running: clock.running,
-      remaining: clock.remaining,
-      total,
-      progress: timerProgress(clock.remaining, total),
+      running: saved.session.status === 'running',
+      total: saved.session.totalMs,
       toast,
       smoke,
       dimming,
@@ -580,117 +588,57 @@ function WickglowSession({
       ownTracks: saved.ownTracks,
       streamLinks: saved.streamLinks,
       activeStreamId,
-      setMode: (next) => {
-        const current = savedRef.current;
-        commit({ ...current, session: idleSession(next, modeDurationMs(current.cfg, next)) });
-        setEnding(null);
-        setDimming(false);
-        setSwap((value) => value + 1);
-        void cancelSessionEnd();
-      },
-      toggle: () => {
-        if (savedRef.current.session.status === 'running') pause();
-        else void begin();
-      },
+    };
+  }, [
+    activeStreamId, dimming, ending, music.musicPlaying, music.playlist, music.trackArtist, music.trackIndex,
+    music.trackTitle, now, saved, smoke, swap, toast,
+  ]);
+
+  // Timer actions go to the session run. Everything else changes the saved
+  // state with `store.update((current) => ...)`, or `step` when the change can
+  // show a toast.
+  const actions: WickglowActions = {
+      setMode: run.changeMode,
+      toggle: run.toggle,
       startNext: () => {
-        void begin();
+        void run.start();
       },
       dismissEnding: () => setEnding(null),
-      reset: () => {
-        const current = savedRef.current;
-        commit({
-          ...current,
-          session: idleSession(current.session.mode, modeDurationMs(current.cfg, current.session.mode)),
-        });
-        setEnding(null);
-        setDimming(false);
-        void cancelSessionEnd();
-      },
-      // Skip jumps to the next phase WITHOUT awarding XP (only a completed
-      // session pays out). It keeps running only if auto-start is on.
-      skip: () => {
-        const current = savedRef.current;
-        const nowMs = Date.now();
-        const nextMode = modeAfterSkip(current.session.mode, current.cycle);
-        const duration = modeDurationMs(current.cfg, nextMode);
-        const keepRunning = current.session.status === 'running' && current.auto;
-        const session = keepRunning
-          ? startSession(idleSession(nextMode, duration), nowMs)
-          : idleSession(nextMode, duration);
-        commit({ ...current, session });
-        setEnding(null);
-        setDimming(false);
-        setSwap((count) => count + 1);
-        if (session.status === 'running' && session.endAt != null) void scheduleSessionEnd(session.endAt, session.mode);
-        else void cancelSessionEnd();
-      },
+      reset: run.reset,
+      skip: run.skip,
       // Picking a scene or mood puts the gradient back; the video is its own choice.
-      setScene: (scene) => setSaved((current) => (current ? { ...current, scene, videoBg: false, pixelBg: null } : current)),
-      setMood: (mood) => setSaved((current) => (current ? { ...current, mood, videoBg: false, pixelBg: null } : current)),
-      setVideoBg: (videoBg) => setSaved((current) => (current ? { ...current, videoBg, pixelBg: videoBg ? null : current.pixelBg } : current)),
-      setPixelBg: (pixelBg) => setSaved((current) => (current ? { ...current, pixelBg, videoBg: false } : current)),
-      setAuto: (auto) => setSaved((current) => (current ? { ...current, auto } : current)),
-      setZenOpt: (zenOpt) => setSaved((current) => (current ? { ...current, zenOpt } : current)),
-      setMusicEnd: (musicEnd) => setSaved((current) => (current ? { ...current, musicEnd } : current)),
-      applyPreset: updateCfg,
-      setDuration: (key, minutes) => updateCfg({ ...savedRef.current.cfg, [key]: minutes }),
-      // Task actions delegate to pure functions in domain/session.ts. Those that
+      setScene: (scene) => store.update((current) => ({ ...current, scene, videoBg: null, pixelBg: null })),
+      setMood: (mood) => store.update((current) => ({ ...current, mood, videoBg: null, pixelBg: null })),
+      setVideoBg: (videoBg) => store.update((current) => ({ ...current, videoBg, pixelBg: videoBg ? null : current.pixelBg })),
+      setPixelBg: (pixelBg) => store.update((current) => ({ ...current, pixelBg, videoBg: null })),
+      setAuto: (auto) => store.update((current) => ({ ...current, auto })),
+      setZenOpt: (zenOpt) => store.update((current) => ({ ...current, zenOpt })),
+      setMusicEnd: (musicEnd) => store.update((current) => ({ ...current, musicEnd })),
+      applyPreset: run.changeLengths,
+      setDuration: (key, minutes) => run.changeLengths({ ...store.get().cfg, [key]: minutes }),
+      // Task actions delegate to pure functions in src/core. Those that
       // can earn a reward return `messages`; the last one is shown as a toast.
-      addTask: (text, date) => setSaved((current) => (
-        current ? addTaskState(current, text, date, Date.now()) : current
-      )),
-      addSubtask: (parentId, text) => {
-        setSaved((current) => {
-          if (!current) return current;
-          const result = addSubtaskState(current, parentId, text, Date.now());
-          const message = result.messages[result.messages.length - 1];
-          if (message) showToast(message);
-          return result.state;
-        });
-      },
-      renameTask: (id, text) => setSaved((current) => (
-        current ? renameTaskState(current, id, text) : current
-      )),
-      setTaskDate: (id, date) => setSaved((current) => (
-        current ? setTaskDateState(current, id, date) : current
-      )),
-      setTaskOpen: (id, open) => setSaved((current) => (
-        current ? setTaskOpenState(current, id, open) : current
-      )),
-      removeTask: (id) => {
-        setSaved((current) => {
-          if (!current) return current;
-          const result = removeTaskState(current, id, Date.now());
-          const message = result.messages[result.messages.length - 1];
-          if (message) showToast(message);
-          return result.state;
-        });
-      },
-      toggleTask: (id) => {
-        setSaved((current) => {
-          if (!current) return current;
-          const result = toggleTask(current, id, Date.now());
-          const message = result.messages[result.messages.length - 1];
-          if (message) showToast(message);
-          return result.state;
-        });
-      },
-      focusTask: (id) => setSaved((current) => (current ? focusTaskState(current, id) : current)),
+      addTask: (text, date) => store.update((current) => (addTaskState(current, text, date, Date.now()))),
+      addSubtask: (parentId, text) => step((current) => addSubtaskState(current, parentId, text, Date.now())),
+      renameTask: (id, text) => store.update((current) => (renameTaskState(current, id, text))),
+      setTaskDate: (id, date) => store.update((current) => (setTaskDateState(current, id, date))),
+      setTaskOpen: (id, open) => store.update((current) => (setTaskOpenState(current, id, open))),
+      removeTask: (id) => step((current) => removeTaskState(current, id, Date.now())),
+      toggleTask: (id) => step((current) => toggleTask(current, id, Date.now())),
+      focusTask: (id) => store.update((current) => (focusTaskState(current, id))),
       // A volume slider moved. Ambient sounds are pushed to the player right away
       // (`sync`) so dragging feels live; then the value is saved in state.
       setMix: (key, amount) => {
         if (key === 'music') {
           musicRef.current.restoreMusic();
         } else {
-          ambientRef.current.sync(key, amount / 100);
+          ambientRef.current.sync(key, amount);
         }
-        setSaved((current) => (
-          current ? { ...current, mix: { ...current.mix, [key]: amount } } : current
-        ));
+        store.update((current) => ({ ...current, mix: { ...current.mix, [key]: amount } }));
       },
       silenceAmbient: () => {
         for (const key of AMBIENT_KEYS) ambientRef.current.sync(key, 0);
-        setSaved((current) => (current ? { ...current, mix: silenceAmbientMix(current.mix) } : current));
+        store.update((current) => ({ ...current, mix: silenceAmbientMix(current.mix) }));
       },
       toggleMusic: () => {
         releaseStreamForLocal();
@@ -708,9 +656,7 @@ function WickglowSession({
         if (musicRef.current.musicPlaying) releaseStreamForLocal();
         music.prevTrack();
       },
-      toggleMusicLoop: () => setSaved((current) => (
-        current ? { ...current, musicLoop: !current.musicLoop } : current
-      )),
+      toggleMusicLoop: () => store.update((current) => ({ ...current, musicLoop: !current.musicLoop })),
       selectTrack: (index) => {
         releaseStreamForLocal();
         music.selectTrack(index);
@@ -720,27 +666,21 @@ function WickglowSession({
       addOwnFiles: () => {
         void pickOwnTracks().then((picked) => {
           if (!picked || picked.length === 0) return;
-          setSaved((current) => (
-            current ? { ...current, ownTracks: [...current.ownTracks, ...picked] } : current
-          ));
+          store.update((current) => ({ ...current, ownTracks: [...current.ownTracks, ...picked] }));
           showToast(picked.length === 1 ? '1 file added' : `${picked.length} files added`);
         }).catch(() => {
           showToast('Could not add those files');
         });
       },
       removeOwnTrack: (id) => {
-        // Delete the file once, here, not inside the updater: React may run an
-        // updater twice, and a file-system call is a side effect.
-        // Read the rendered state the remove button came from; `savedRef` is only
-        // synced in an effect and can lag a render behind.
-        const track = saved.ownTracks.find((item) => item.id === id);
+        // Delete the file here, not inside the change function, which should
+        // stay free of side effects.
+        const track = store.get().ownTracks.find((item) => item.id === id);
         if (track) deleteOwnTrackFile(track.id);
-        setSaved((current) => (
-          current ? { ...current, ownTracks: current.ownTracks.filter((item) => item.id !== id) } : current
-        ));
+        store.update((current) => ({ ...current, ownTracks: current.ownTracks.filter((item) => item.id !== id) }));
       },
       // Validate a pasted link, check it isn't private, and save it. Returns a
-      // string code the UI turns into a message. Re-reads `savedRef` after the
+      // string code the UI turns into a message. Re-reads the store after the
       // network check because state may have changed while we awaited.
       addStreamLink: async (raw) => {
         const parsed = parseStreamLink(raw);
@@ -750,33 +690,52 @@ function WickglowSession({
         // Count this submission before the duplicate check, so re-submitting the
         // saved link also supersedes any older check still in flight.
         const requestId = ++streamRequest.current;
-        if (isSaved(savedRef.current.streamLinks)) return 'duplicate';
+        if (isSaved(store.get().streamLinks)) return 'duplicate';
         const visibility = await checkStreamLink(parsed.link);
         // A newer submission started while this check ran: drop this result.
         if (requestId !== streamRequest.current) return 'stale';
         if (visibility === 'private') return 'private';
-        const current = savedRef.current;
+        const current = store.get();
         if (isSaved(current.streamLinks)) return 'duplicate';
-        commit({ ...current, streamLinks: [parsed.link] });
+        store.commit({ ...current, streamLinks: [parsed.link] });
         showToast('Link added');
         return 'added';
       },
       removeStreamLink: (id) => {
-        if (activeStreamIdRef.current === id) closeStream();
-        setSaved((current) => (
-          current ? { ...current, streamLinks: current.streamLinks.filter((item) => item.id !== id) } : current
-        ));
+        if (activeStreamOf(sourceRef.current) === id) closeStream();
+        store.update((current) => ({ ...current, streamLinks: current.streamLinks.filter((item) => item.id !== id) }));
       },
       openStream,
       closeStream,
   };
 
-  // Wait for the first clock tick so no screen ever renders with an unknown date.
-  if (now == null) {
-    return <View style={{ flex: 1, backgroundColor: colors.bgBase }} />;
-  }
+  // Screens get wrappers with a fixed identity that call the newest actions.
+  const stableActions = useStableActions(actions);
 
-  return <WickglowContext.Provider value={value}>{children}</WickglowContext.Provider>;
+  // What every screen sees through `useWickglow()`.
+  const value: WickglowContextValue = useMemo(() => ({ ...state, ...stableActions }), [stableActions, state]);
+
+  // The providers are mounted from the first render, so the clock starts (and a
+  // session that ended while the app was closed is completed) in the same
+  // order as before. Only the screens wait for the first day tick, so none
+  // ever renders with an unknown date.
+  return (
+    <WickglowContext.Provider value={value}>
+      <ClockProvider session={saved.session} onReachEnd={onReachEnd}>
+        {now == null ? <View style={{ flex: 1, backgroundColor: colors.bgBase }} /> : children}
+      </ClockProvider>
+    </WickglowContext.Provider>
+  );
+}
+
+/**
+ * The countdown: time left and progress. Only the time and the candle should
+ * call this, because whatever does re-renders every second while a session runs.
+ */
+export function useWickglowClock() {
+  const value = useContext(ClockContext);
+  if (!value) throw new Error('useWickglowClock must be used inside WickglowProvider');
+  return value;
 }
 
 /** Read app state and actions. Throws if used outside `WickglowProvider`. */

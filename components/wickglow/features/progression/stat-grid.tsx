@@ -1,4 +1,4 @@
-import { colors, fonts } from '@/src/theme/tokens';
+import { colors, fonts, rounded } from '@/src/theme/tokens';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useWickglow } from '@/components/wickglow/logic';
@@ -52,7 +52,7 @@ const deskStyles = StyleSheet.create({
     paddingTop: 9,
     paddingHorizontal: 10,
     paddingBottom: 8,
-    borderRadius: 11,
+    ...rounded(11),
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.09)',

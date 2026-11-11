@@ -5,7 +5,7 @@ import {
   StreamService,
 } from '@/src/core/stream-links';
 import React, { useEffect, useRef, useState, type ComponentType, type Ref } from 'react';
-import { AppState, Linking, Platform, Pressable, Text, View } from 'react-native';
+import { AppState, Linking, Pressable, Text, View } from 'react-native';
 import { WebView, type WebViewNavigation, type WebViewProps } from 'react-native-webview';
 import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles';
 
@@ -48,8 +48,6 @@ export function StreamPlayer({
   flush?: boolean;
 }) {
   const webRef = useRef<StreamWebViewHandle>(null);
-  // Make sure we open the external app only once per failure.
-  const handedOff = useRef(false);
   // False while the app is in the background; the WebView is removed then.
   const [active, setActive] = useState(AppState.currentState === 'active');
   const [failed, setFailed] = useState(false);
@@ -72,14 +70,6 @@ export function StreamPlayer({
     });
     return () => subscription.remove();
   }, []);
-
-  // On Android a failed embed (e.g. a private link) falls back to opening the
-  // link in that service's own app.
-  useEffect(() => {
-    if (!failed || Platform.OS !== 'android' || handedOff.current) return;
-    handedOff.current = true;
-    Linking.openURL(pageUrl).catch(() => undefined);
-  }, [failed, pageUrl]);
 
   // Called before the WebView loads any URL. Returning false blocks it.
   // 'external' links (e.g. "open in app") go to the OS instead of the WebView.
@@ -131,17 +121,18 @@ export function StreamPlayer({
   );
 }
 
-// Shown instead of the WebView when the app is in the background or the link failed.
+// Shown instead of the WebView when the app is in the background or the link
+// failed. A failed link is never opened in another app on its own: a load can
+// fail just because the device is offline, and leaving Wickglow is the user's
+// choice, so every platform gets the same "Open link" button.
 function StreamFallback({ failed, pageUrl }: { failed: boolean; pageUrl: string }) {
-  const message = !failed
-    ? 'The player pauses while Wickglow is in the background.'
-    : Platform.OS === 'android'
-      ? 'This link could not play here, so it was opened in the app. It may be private.'
-      : 'This link could not be played. It may be private.';
+  const message = failed
+    ? 'This link could not be played here. It may be private, or you may be offline.'
+    : 'The player pauses while Wickglow is in the background.';
   return (
     <View style={styles.streamPaused}>
       <Text style={styles.meta}>{message}</Text>
-      {failed && Platform.OS !== 'android' ? (
+      {failed ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open link"

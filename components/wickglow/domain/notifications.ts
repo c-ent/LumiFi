@@ -54,43 +54,52 @@ function enqueueMutation(operation: () => Promise<void>): Promise<void> {
   return next;
 }
 
+// True once the channel has been set up in this run of the app. The set-up is
+// three native calls, and repeating them on every Start only delayed the alarm.
+let channelReady = false;
+
+/**
+ * Sets up the session-end channel, once per run of the app. Android freezes
+ * the sound of a channel the first time it is created. Two older channels
+ * shipped silent, so they are deleted and replaced by one that plays the chime
+ * on the alarm stream, which stays audible while music and ambient hold audio
+ * focus. A failure leaves `channelReady` false, so the next Start tries again.
+ */
+async function ensureChannel(): Promise<void> {
+  if (channelReady) return;
+  for (const id of PREVIOUS_CHANNEL_IDS) {
+    try {
+      await deleteNotificationChannelAsync(id);
+    } catch (error) {
+      reportNotificationError(`Could not remove notification channel ${id}.`, error, true);
+    }
+  }
+  await setNotificationChannelAsync(CHANNEL_ID, {
+    name: 'Session end',
+    importance: AndroidImportance.HIGH,
+    sound: SOUND,
+    audioAttributes: {
+      usage: AndroidAudioUsage.ALARM,
+      contentType: AndroidAudioContentType.SONIFICATION,
+      flags: { enforceAudibility: true, requestHardwareAudioVideoSynchronization: false },
+    },
+    vibrationPattern: [0],
+    enableVibrate: false,
+    lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
+  });
+  channelReady = true;
+}
+
 /**
  * Creates the Android channel and gets the permission, returning early on web
  * where there is nothing to schedule. `alreadyAsked` stops a second prompt: the
  * caller persists that flag, so a user who declined is not asked on the next
  * session. This runs when a session starts, not on launch.
- *
- * The channel is rebuilt on every call because Android freezes the sound of a
- * channel the first time it is created. Two older channels shipped silent, so
- * they are deleted and replaced by one that plays the chime on the alarm
- * stream, which stays audible while music and ambient hold audio focus.
  */
 export async function prepareNotificationPermission(alreadyAsked: boolean): Promise<{ granted: boolean; asked: boolean }> {
   if (Platform.OS === 'web') return { granted: false, asked: alreadyAsked };
   try {
-    // Android keeps the sound from the first time a channel is created. The earlier
-    // channels were silent, so they are replaced by one that plays the chime on the
-    // alarm stream, which is still audible while music and ambient hold audio focus.
-    for (const id of PREVIOUS_CHANNEL_IDS) {
-      try {
-        await deleteNotificationChannelAsync(id);
-      } catch (error) {
-        reportNotificationError(`Could not remove notification channel ${id}.`, error, true);
-      }
-    }
-    await setNotificationChannelAsync(CHANNEL_ID, {
-      name: 'Session end',
-      importance: AndroidImportance.HIGH,
-      sound: SOUND,
-      audioAttributes: {
-        usage: AndroidAudioUsage.ALARM,
-        contentType: AndroidAudioContentType.SONIFICATION,
-        flags: { enforceAudibility: true, requestHardwareAudioVideoSynchronization: false },
-      },
-      vibrationPattern: [0],
-      enableVibrate: false,
-      lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
-    });
+    await ensureChannel();
     const current = await getPermissionsAsync();
     if (current.granted) return { granted: true, asked: true };
     if (alreadyAsked) return { granted: false, asked: true };

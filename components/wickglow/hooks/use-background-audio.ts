@@ -1,5 +1,6 @@
 import { AudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { useEffect } from 'react';
+import { AMBIENT_KEYS, AmbientMix, firstAudible } from '@/src/core/ambient';
 import { AmbientPlayback } from './use-ambient';
 
 /**
@@ -21,6 +22,7 @@ export function useBackgroundAudio(
   trackTitle: string,
   trackArtist: string,
   ambient: AmbientPlayback,
+  mix: AmbientMix,
 ) {
   // One-time global audio setup. `shouldPlayInBackground` is the key flag for
   // screen-off playback; `allowsRecording: false` keeps the microphone
@@ -34,26 +36,20 @@ export function useBackgroundAudio(
     });
   }, []);
 
-  const { rain, cafe, fire, wind, clock, brown, forest, keyboard, waves, levels } = ambient;
+  const { playerFor } = ambient;
+  // The ambient sound that would hold the card. Only a change of this, not
+  // every slider step, needs the card re-picked.
+  const audible = firstAudible(mix);
 
-  // Re-pick who owns the lock-screen card whenever music or a level changes.
+  // Re-pick who owns the lock-screen card whenever music or the audible sound
+  // changes. This effect runs after the one in `useAmbient` that builds a
+  // player for a level above zero, so the audible sound's player exists by now.
   useEffect(() => {
-    const voices = [
-      { player: rain, level: levels.rain },
-      { player: cafe, level: levels.cafe },
-      { player: fire, level: levels.fire },
-      { player: wind, level: levels.wind },
-      { player: clock, level: levels.clock },
-      { player: brown, level: levels.brown },
-      { player: forest, level: levels.forest },
-      { player: keyboard, level: levels.keyboard },
-      { player: waves, level: levels.waves },
-    ];
-    const ambientHolder = voices.find((voice) => voice.level > 0)?.player ?? null;
+    const ambientHolder = audible ? playerFor(audible) : null;
     const holder = musicPlaying ? music : ambientHolder;
     if (!holder) {
       music.clearLockScreenControls();
-      for (const voice of voices) voice.player.clearLockScreenControls();
+      for (const key of AMBIENT_KEYS) playerFor(key)?.clearLockScreenControls();
       return;
     }
     holder.setActiveForLockScreen(
@@ -63,5 +59,5 @@ export function useBackgroundAudio(
         : { title: 'Ambient', artist: 'Wickglow' },
       musicPlaying ? LOCK_SCREEN_OPTIONS : AMBIENT_LOCK_SCREEN_OPTIONS,
     );
-  }, [brown, cafe, clock, fire, forest, keyboard, levels.brown, levels.cafe, levels.clock, levels.fire, levels.forest, levels.keyboard, levels.rain, levels.waves, levels.wind, music, musicPlaying, rain, trackArtist, trackTitle, waves, wind]);
+  }, [audible, music, musicPlaying, playerFor, trackArtist, trackTitle]);
 }

@@ -256,18 +256,28 @@ export const panelStyles = StyleSheet.create({
   sceneGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 14,
   },
   sceneBtn: {
     width: '47%',
     borderWidth: 2,
     borderColor: 'transparent',
     ...rounded(radius.md),
-    padding: 2,
+    padding: 4,
   },
   swatch: {
     height: 68,
     ...rounded(radius.sm),
+  },
+  // A video thumbnail, the same size as the color `swatch` above so every tile
+  // in the scene grid lines up. Use with contentFit="cover" so the image fills
+  // the tile and crops instead of stretching.
+  sceneThumb: {
+    width: '100%',
+    height: 68,
+    ...rounded(radius.sm),
+    overflow: 'hidden',
+    backgroundColor: colors.bgInset,
   },
   sceneName: {
     color: colors.textMuted,

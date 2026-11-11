@@ -38,6 +38,24 @@ export function sessionRemaining(clock: SessionClock, now: number): number {
   return Math.max(0, clock.remainingMs);
 }
 
+/**
+ * The whole second the timer shows for `now`, rounded up the same way the
+ * display rounds. The clock ticks faster than once a second, so it compares
+ * this to decide whether the screen has anything new to draw.
+ */
+export function displaySecond(clock: SessionClock, now: number): number {
+  return Math.ceil(sessionRemaining(clock, now) / 1000);
+}
+
+/**
+ * True while `clock` is still the run that `started` began. A pause, reset,
+ * skip, mode change or a later start all move or clear `endAt`, so work that
+ * finishes after a wait (scheduling the alarm) can tell it has been overtaken.
+ */
+export function isSameRun(clock: SessionClock, started: SessionClock): boolean {
+  return clock.status === 'running' && started.endAt != null && clock.endAt === started.endAt;
+}
+
 export function sessionAwaitingCompletion(clock: SessionClock, now: number): boolean {
   return clock.status === 'running' && clock.endAt != null && clock.endAt <= now;
 }

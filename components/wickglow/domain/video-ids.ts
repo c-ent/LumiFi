@@ -10,8 +10,7 @@ export const VIDEO_IDS = [
   'flower_hill_girl',
   'cyberpunk_desk',
   'rainy_cottage',
-  'cozy_lofi_room',
-  'turtle_lily_pond',
+  'frog_lily_pond',
   'twilight_skyline',
 ] as const;
 

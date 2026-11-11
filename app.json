@@ -26,7 +26,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/logo.png"
     },
     "plugins": [
       "expo-router",
@@ -59,11 +59,26 @@
           "enableRemoteNotifications": false
         }
       ],
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./node_modules/@expo-google-fonts/outfit/200ExtraLight/Outfit_200ExtraLight.ttf",
+            "./node_modules/@expo-google-fonts/outfit/300Light/Outfit_300Light.ttf",
+            "./node_modules/@expo-google-fonts/outfit/400Regular/Outfit_400Regular.ttf",
+            "./node_modules/@expo-google-fonts/outfit/500Medium/Outfit_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/figtree/400Regular/Figtree_400Regular.ttf",
+            "./node_modules/@expo-google-fonts/figtree/500Medium/Figtree_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/figtree/600SemiBold/Figtree_600SemiBold.ttf"
+          ]
+        }
+      ],
       "expo-status-bar",
       "expo-asset",
       "./plugins/with-cmake-staging",
-      "expo-video"
+      "./plugins/with-exact-alarm-max-sdk",
+      "expo-video",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

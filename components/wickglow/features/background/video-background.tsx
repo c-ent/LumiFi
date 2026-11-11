@@ -37,6 +37,10 @@ export function VideoBackground({ source = DEFAULT_SOURCE, onReady }: { source?:
         player={player}
         style={styles.video}
         contentFit="cover"
+        // Android's default SurfaceView ignores a parent's opacity, so the
+        // crossfade would pop instead of fade. TextureView honours it. The prop
+        // is Android-only and ignored elsewhere.
+        surfaceType="textureView"
         nativeControls={false}
         allowsPictureInPicture={false}
         onFirstFrameRender={onReady}

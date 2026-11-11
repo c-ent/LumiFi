@@ -1,4 +1,4 @@
-import React, { ReactNode, useCallback, useEffect, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet } from 'react-native';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 
@@ -28,20 +28,25 @@ export function Crossfade({ id, render }: { id: string; render: (id: string, onR
 
   // A new id adds a layer on top, during render rather than in an effect so
   // the old background never shows for a frame without it. Layers in between
-  // are trimmed, and the one left at the bottom is made fully opaque so
-  // nothing shows through it.
+  // are trimmed.
   if (lastId !== id) {
     setLastId(id);
     setLayers((current) => {
       // Back to the base before anything above it showed: just drop the rest.
       if (current[0].id === id && current.slice(1).every((layer) => !layer.ready)) return [current[0]];
-      const next = [...current.filter((layer) => layer.id !== id), { id, opacity: new Animated.Value(0), ready: false }].slice(-MAX_LAYERS);
-      next[0].opacity.stopAnimation();
-      next[0].opacity.setValue(1);
-      return next;
+      return [...current.filter((layer) => layer.id !== id), { id, opacity: new Animated.Value(0), ready: false }].slice(-MAX_LAYERS);
     });
   }
   const top = layers[layers.length - 1];
+
+  // The layer left at the bottom is made fully opaque so nothing shows through
+  // it. Done after commit, before paint, so the updater above stays pure and a
+  // discarded render never touches a visible layer.
+  const baseOpacity = layers[0].opacity;
+  useLayoutEffect(() => {
+    baseOpacity.stopAnimation();
+    baseOpacity.setValue(1);
+  }, [baseOpacity]);
 
   const markReady = useCallback((layerId: string) => {
     setLayers((current) => {

@@ -46,15 +46,17 @@ export function createSavedStore<T>(loaded: T, write: (state: T) => void, delayM
         listeners.delete(listener);
       };
     },
+    // Queue before notifying, so a change a listener makes in response is
+    // queued after this one and is not overwritten by it.
     commit: (next) => {
-      set(next);
       queue.now(next);
+      set(next);
     },
     update: (change) => {
       const next = change(state);
       if (next === state) return;
-      set(next);
       queue.later(next);
+      set(next);
     },
     flush: queue.flush,
   };

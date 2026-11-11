@@ -72,10 +72,11 @@ export function stepMusicSource(source: MusicSource, event: MusicSourceEvent): M
   }
 }
 
-// An embed that is already up keeps what it remembered when it first took
-// over: the local player is paused by then, so asking again would forget it.
+// An embed or hand-off that is already up keeps what it remembered when it
+// first took over: the local player is paused by then, so asking again would
+// forget it.
 function heldLocal(source: MusicSource, localPlaying: boolean): boolean {
-  return source.kind === 'embed' ? source.resumeLocal : localPlaying;
+  return source.kind === 'local' ? localPlaying : source.resumeLocal;
 }
 
 function resumesLocal(source: MusicSource): boolean {

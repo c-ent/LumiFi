@@ -28,6 +28,8 @@ Moved to [completed.md](completed.md). Add new entries there.
 - Architecture fixes from the same file (owner request, 2026-11-11). A1 to A5 are done: `domain/session-run.ts` (timer changes and the alarm), `domain/saved-store.ts` (saved state and writes), `src/core/music-source.ts` (which player owns the sound), `src/core/session-face.ts` with `hooks/use-zen.ts` (what the shells show), `src/core/ambient.ts` (the sound list). A6 put the timer limits in `src/core/phase.ts` and deleted `domain/session.ts`; `theme.ts` stays. None of these should change behaviour; they need the same device and browser checks as H1 to H5.
 - Best-practice fixes from the same file (owner request, 2026-11-11). B1 to B6 are done. Two new dependencies were approved by the owner and added: `@shopify/flash-list` and `expo-image`. Remake the development build before testing on a device, since `expo-image` is a native module. The task list is still a plain mapped list on purpose (see B2).
 
+- PR review fixes (owner request, 2026-11-11): the error screen and web scrollbar moved out of `app/` into `components/wickglow/shared/`; `saved-store` queues a write before notifying; `Crossfade` sets the base layer's opacity in a layout effect rather than inside a state updater; video backgrounds use `surfaceType="textureView"` so the crossfade fades on Android; a second hand-off keeps the first one's resume state; the spec now describes the "Open link" button (M7); `270983_medium.mp4` has a licence row. Check the crossfade on an Android device.
+
 ## Next up
 
 Google Play release, in this order:

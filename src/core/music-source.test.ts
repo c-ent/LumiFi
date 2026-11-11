@@ -91,6 +91,16 @@ describe('music source', () => {
     expect(back.local).toBe('play');
   });
 
+  it('keeps what the first hand-off remembered when a second one follows', () => {
+    const back = run([
+      { type: 'handOff', localPlaying: true },
+      { type: 'handOff', localPlaying: false },
+      { type: 'appBackground' },
+      { type: 'appActive' },
+    ]);
+    expect(back.local).toBe('play');
+  });
+
   it('resumes when a hand-off fails and the stream is closed', () => {
     const failed = run([{ type: 'handOff', localPlaying: true }, { type: 'closeStream' }]);
     expect(failed).toEqual({ source: LOCAL_SOURCE, local: 'play' });

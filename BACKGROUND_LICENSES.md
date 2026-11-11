@@ -40,6 +40,10 @@ That licence (checked 2026-11-11), for free assets: use in any number of persona
 
 Who made the animated versions is not recorded. If someone other than the owner animated them, the CraftPix licence still covers the art; note the source of the animation here if known.
 
-## Existing cleared video
+## Classic video
 
-`270983_medium.mp4` in `assets/backgrounds/videos/` — licensing status same as above, not yet recorded here.
+| File | Length | License | Source / artist |
+| :--- | :----- | :------ | :--------------- |
+| `270983_medium.mp4` (the "Classic" scene) | Not recorded | Pixabay Content License, no attribution needed (as supplied by the owner, 2026-11-09). Pixabay page URL not on file yet; add it | "Video by MrBones03 from Pixabay". Pixabay video id 270983, inferred from the filename and not checked against the page |
+
+**Status.** Recorded from the owner's note when the file was added (see `docs/agent/completed.md`, 2026-11-09). Not yet checked against the Pixabay page: add the page URL and confirm the artist before release.

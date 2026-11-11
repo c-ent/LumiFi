@@ -16,6 +16,7 @@ No hardcoded hex values. React Native has no CSS variables, so tokens are keys i
 | Surface (sheet and modal) | `colors.bgSurface` | `#180E14` at 93% opacity |
 | Surface, opaque | `colors.bgSurfaceSolid` | `#140F1C` |
 | Card fill | `colors.bgCard` | white at 6% opacity |
+| Scene control fill | `colors.bgControl` | white at 20% opacity, so it holds up over bright video backgrounds. Desktop top pills, mode tabs, timer round buttons and dock buttons |
 | Inset field | `colors.bgInset` | black at 28% opacity |
 | Primary text | `colors.textPrimary` | `#F8F1E8` |
 | Muted text | `colors.textMuted` | `#F8F1E8` at 62% opacity |
@@ -31,7 +32,7 @@ Streaming badges use `streamMark`: Spotify `#7BE8B0`, YouTube and YouTube Music 
 
 ### Moods
 
-A mood replaces the background, flame and accent tokens only. Moonlit is stored as `moon`. Wax, dish and glow stay on each mood in `components/lumifi/theme.ts`; they are candle illustration colors. The current build still keeps the four desktop scenes (Dusk, Midnight, Forest, Ember) separate from the three phone moods. The decided direction is one shared set of about five or six themes, with near-duplicates merged, and each platform choosing its default. The exact mapping is still open.
+A mood replaces the background, flame and accent tokens only. Moonlit is stored as `moon`. Wax, dish and glow stay on each mood in `components/wickglow/theme.ts`; they are candle illustration colors. The current build still keeps the four desktop scenes (Dusk, Midnight, Forest, Ember) separate from the three phone moods. The decided direction is one shared set of about five or six themes, with near-duplicates merged, and each platform choosing its default. The exact mapping is still open.
 
 | Mood | Background top, mid, glow | Flame core, mid, outer | Accent |
 | --- | --- | --- | --- |
@@ -41,7 +42,7 @@ A mood replaces the background, flame and accent tokens only. Moonlit is stored 
 
 ### Room lights
 
-A mood also carries the candle illustration colors: `wax`, `waxS`, `melt`, `dish` and `dishHi` for the wax and dish. They live beside each mood in `components/lumifi/theme.ts`, so the room art reads from `MOODS` alone. The candle is the only light; the unlocked oil lamp and the window glow were removed with roadmap #2 on 2026-11-04.
+A mood also carries the candle illustration colors: `wax`, `waxS`, `melt`, `dish` and `dishHi` for the wax and dish. They live beside each mood in `components/wickglow/theme.ts`, so the room art reads from `MOODS` alone. The candle is the only light; the unlocked oil lamp and the window glow were removed with roadmap #2 on 2026-11-04.
 
 Break wax (`breakWax`) is separate and stays cool on every mood.
 

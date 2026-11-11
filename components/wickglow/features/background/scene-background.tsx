@@ -3,7 +3,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import Svg, { Defs, Rect, Stop, LinearGradient as SvgGradient } from 'react-native-svg';
 import { SceneOrb } from '@/components/wickglow/features/background/soft-orb';
 import { PixelBackground } from '@/components/wickglow/features/background/pixel-background';
-import { VideoBackground } from '@/components/wickglow/features/background/video-background';
+import { SelectedVideoBackground } from '@/components/wickglow/features/background/selected-video-background';
 import { useFillSize } from '@/components/wickglow/features/background/fill-gradient';
 import { useAnimatedValue } from '@/components/wickglow/hooks/use-animated-value';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
@@ -81,7 +81,7 @@ export function SceneBackground() {
     // collapsable={false}: on Android, RN may flatten a View that only lays out
     // children, which would remove the native view `onLayout` needs.
     <View collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout}>
-      {videoBg ? <VideoBackground /> : null}
+      {videoBg ? <SelectedVideoBackground /> : null}
       {pixelBg ? <PixelBackground /> : null}
       {/* Wait for a real size before drawing, otherwise the gradient is 0x0. */}
       {!picture && size.width > 0 && size.height > 0 ? (

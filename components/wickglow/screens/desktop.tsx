@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -9,11 +9,13 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { sessionFace } from '@/src/core/session-face';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import { glassPanel } from '@/components/wickglow/shared/panel-styles';
 import { useFullscreen } from '@/components/wickglow/hooks/use-fullscreen';
+import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
-import { formatTime, hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
+import { hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
 import { RainOverlay } from '@/components/wickglow/features/background/rain';
 import { SceneBackground } from '@/components/wickglow/features/background/scene-background';
 import { LevelCard } from '@/components/wickglow/features/progression/level-card';
@@ -29,6 +31,7 @@ import { MixerBlock } from '@/components/wickglow/features/audio/mixer-block';
 import { MusicBlock } from '@/components/wickglow/features/audio/music-block';
 import { StreamStage } from '@/components/wickglow/features/audio/stream-stage';
 import { SessionEndCard } from '@/components/wickglow/features/timer/session-end-card';
+import { TimeText } from '@/components/wickglow/features/timer/time-text';
 import { LogoMark } from '@/components/wickglow/shared/logo';
 import { PanelHeading } from '@/components/wickglow/shared/panel-heading';
 import {
@@ -82,36 +85,23 @@ const PANEL_TITLE: Record<PanelId, string> = {
 
 export function DesktopWickglow() {
   const lamp = useWickglow();
+  // Actions never change identity, so they are pulled out once (see logic.tsx).
+  const { setMode, toggle, startNext, dismissEnding, reset, skip } = lamp;
   const insets = useSafeAreaInsets();
   const fullscreen = useFullscreen();
   const { width, height } = useWindowDimensions();
   const [panel, setPanel] = useState<PanelId | null>(null);
-  // Zen: while focusing, the whole UI fades out after 3.5s without input.
-  const [zen, setZen] = useState(false);
+  // Zen: while focusing with no panel open, the whole UI fades out after 3.5s
+  // without input.
+  const { zen, poke } = useZen(lamp.running && lamp.mode === 'focus' && lamp.zenOpt && !panel, 3500);
   // The empty "slot" box inside the Music card, and its measured position on
   // screen. The stream player floats over the scene (so it survives the card
   // closing) and is moved to sit exactly on top of this slot.
   const embedSlotRef = useRef<React.ComponentRef<typeof View>>(null);
   const [embedFrame, setEmbedFrame] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const lastAct = useRef(0);
   const theme = lamp.sceneTheme;
   // Big timer digits scale with the window but never pass 280px.
   const timeSize = Math.min(width * 0.23, height * 0.36, 280);
-
-  const poke = useCallback(() => {
-    lastAct.current = Date.now();
-    setZen(false);
-  }, []);
-
-  // Zen check, 2.5x per second. Never hides while a panel is open.
-  useEffect(() => {
-    lastAct.current = Date.now();
-    const id = setInterval(() => {
-      const hide = lamp.running && lamp.mode === 'focus' && lamp.zenOpt && !panel && Date.now() - lastAct.current > 3500;
-      setZen(hide);
-    }, 400);
-    return () => clearInterval(id);
-  }, [lamp.mode, lamp.running, lamp.zenOpt, panel]);
 
   // Web only: a mouse (unlike a touch) moves without pressing, so listen to the
   // window directly. `onTouchStart` on the root view covers touches.
@@ -132,34 +122,43 @@ export function DesktopWickglow() {
     setPanel((current) => (current === id ? null : id));
   };
 
-  // Measure where the embed slot is in the window and remember it. Skips
-  // zero-size results (not laid out yet) and identical results (avoids a
-  // pointless re-render loop).
-  const placeEmbed = useCallback(() => {
-    embedSlotRef.current?.measureInWindow((x, y, width, height) => {
-      const frame = { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
-      if (frame.width < 2 || frame.height < 2) return;
-      setEmbedFrame((prev) => (
-        prev && prev.x === frame.x && prev.y === frame.y && prev.width === frame.width && prev.height === frame.height
-          ? prev
-          : frame
-      ));
-    });
+  // Remember where the embed slot is in the window. Skips zero-size results
+  // (not laid out yet) and identical results (avoids a pointless re-render).
+  const applyEmbedFrame = useCallback((x: number, y: number, slotWidth: number, slotHeight: number) => {
+    const frame = { x: Math.round(x), y: Math.round(y), width: Math.round(slotWidth), height: Math.round(slotHeight) };
+    if (frame.width < 2 || frame.height < 2) return false;
+    setEmbedFrame((prev) => (
+      prev && prev.x === frame.x && prev.y === frame.y && prev.width === frame.width && prev.height === frame.height
+        ? prev
+        : frame
+    ));
+    return true;
   }, []);
 
-  // Re-measure when the music card opens or the window resizes. Wait one frame
-  // (requestAnimationFrame) so the card has finished laying out first.
-  useEffect(() => {
+  // The asynchronous measure, used when the slot's own layout changes later.
+  const placeEmbed = useCallback(() => {
+    embedSlotRef.current?.measureInWindow((x, y, slotWidth, slotHeight) => {
+      applyEmbedFrame(x, y, slotWidth, slotHeight);
+    });
+  }, [applyEmbedFrame]);
+
+  // When the music card opens or the window resizes, measure the slot in the
+  // same pass the card is laid out, so the player is on the slot in the first
+  // frame instead of hidden for one. If the synchronous read is not there or
+  // has no size yet, fall back to measuring a frame later.
+  useLayoutEffect(() => {
     if (panel !== 'music') return undefined;
+    const slot = embedSlotRef.current as { getBoundingClientRect?: () => { x: number; y: number; width: number; height: number } } | null;
+    const rect = slot?.getBoundingClientRect?.();
+    if (rect && applyEmbedFrame(rect.x, rect.y, rect.width, rect.height)) return undefined;
     const id = requestAnimationFrame(() => placeEmbed());
     return () => cancelAnimationFrame(id);
-  }, [height, panel, placeEmbed, width]);
+  }, [applyEmbedFrame, height, panel, placeEmbed, width]);
 
-  const taskLine = lamp.mode === 'focus'
-    ? (lamp.activeTask?.text ?? 'Pick a task to focus on')
-    : 'Stretch, drink some water, look away from the screen';
-  const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
-  const startLabel = lamp.running ? 'Pause' : lamp.status === 'paused' ? 'Resume' : 'Start';
+  const face = sessionFace(
+    { mode: lamp.mode, status: lamp.status, cycle: lamp.cycle, activeTask: lamp.activeTask?.text ?? null },
+    'plain',
+  );
   // Dot on the Quests button while any daily quest is unclaimed.
   const questOpen = hasOpenQuests(lamp.day);
   // Music card height: up to 720px, or whatever fits above the dock.
@@ -205,29 +204,29 @@ export function DesktopWickglow() {
           {(['focus', 'short', 'long'] as TimerMode[]).map((item) => {
             const selected = lamp.mode === item;
             return (
-              <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${MODE_LABEL[item]} timer`} key={item} onPress={() => lamp.setMode(item)} style={[styles.tab, selected && styles.tabOn]}>
+              <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${MODE_LABEL[item]} timer`} key={item} onPress={() => setMode(item)} style={[styles.tab, selected && styles.tabOn]}>
                 <Text style={[styles.tabText, selected && styles.tabTextOn]}>{MODE_LABEL[item]}</Text>
               </Pressable>
             );
           })}
         </View>
-        <Text style={[styles.time, { fontSize: timeSize }]}>{formatTime(lamp.remaining)}</Text>
+        <TimeText style={[styles.time, { fontSize: timeSize }]} />
         <FocusLine
-          mode={lamp.mode === 'focus' ? (lamp.activeTask ? 'task' : 'empty') : 'break'}
-          text={taskLine}
+          mode={face.chip.kind}
+          text={face.chip.text}
           accent={theme.accent}
           zen={zen}
           onPress={lamp.mode === 'focus' ? () => togglePanel('tasks') : undefined}
         />
         <View style={styles.pips}>
           {[0, 1, 2, 3].map((index) => (
-            <View key={index} style={[styles.pip, index < pipsLit && styles.pipOn]} />
+            <View key={index} style={[styles.pip, index < face.pipsLit && styles.pipOn]} />
           ))}
         </View>
         <View style={[styles.controls, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={styles.round} onPress={lamp.reset}><ResetIcon /></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={startLabel} style={styles.start} onPress={lamp.toggle}><Text style={styles.startText}>{startLabel}</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={styles.round} onPress={lamp.skip}><SkipIcon /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={styles.round} onPress={reset}><ResetIcon /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={styles.start} onPress={toggle}><Text style={styles.startText}>{face.startLabel}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={styles.round} onPress={skip}><SkipIcon /></Pressable>
         </View>
       </View>
 
@@ -277,7 +276,7 @@ export function DesktopWickglow() {
           <View style={[styles.progressScroll, styles.musicScroll, { height: musicHeight }]}>
             <View style={[styles.progressCard, styles.musicCard]}>
               <PanelHeading title={PANEL_TITLE.music} onClose={() => setPanel(null)} />
-              <MusicBlock wide embedSlotRef={embedSlotRef} onEmbedLayout={placeEmbed} />
+              <MusicBlock embedSlotRef={embedSlotRef} onEmbedLayout={placeEmbed} />
             </View>
           </View>
         </View>
@@ -317,8 +316,8 @@ export function DesktopWickglow() {
           actionLabel={lamp.ending.actionLabel}
           accent={theme.accent}
           showLater={lamp.ending.showLater}
-          onStart={lamp.startNext}
-          onDismiss={lamp.dismissEnding}
+          onStart={startNext}
+          onDismiss={dismissEnding}
         />
       ) : null}
 
@@ -404,7 +403,7 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: 14,
     ...rounded(radius.pill),
-    backgroundColor: colors.bgCard,
+    backgroundColor: colors.bgControl,
     borderWidth: 1,
     borderColor: colors.border,
     flexDirection: 'row',
@@ -437,7 +436,7 @@ const styles = StyleSheet.create({
     gap: 6,
     padding: 4,
     ...rounded(radius.pill),
-    backgroundColor: colors.bgCard,
+    backgroundColor: colors.bgControl,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -461,7 +460,7 @@ const styles = StyleSheet.create({
   },
   time: {
     color: colors.textPrimary,
-    fontFamily: fonts.time,
+    fontFamily: fonts.timeRegular,
     marginVertical: 18,
     fontVariant: ['tabular-nums'],
   },
@@ -490,7 +489,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: colors.bgCard,
+    backgroundColor: colors.bgControl,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
@@ -528,7 +527,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.bgCard,
+    backgroundColor: colors.bgControl,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',

@@ -1,7 +1,9 @@
 import { colors } from '@/src/theme/tokens';
 import React from 'react';
+import { Image } from 'expo-image';
 import { Pressable, Text, View } from 'react-native';
 import { PIXEL_ART } from '@/components/wickglow/features/background/pixel-art';
+import { VIDEOS } from '@/components/wickglow/features/background/video-art';
 import { useWickglow } from '@/components/wickglow/logic';
 import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles';
 import { SCENES } from '@/components/wickglow/theme';
@@ -33,7 +35,7 @@ export function ScenePicker() {
           const selected = item.id === pixelBg;
           return (
             <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${item.name} pixel art background`} key={item.id} onPress={() => setPixelBg(item.id)} style={[styles.sceneBtn, selected && { borderColor: colors.textPrimary }]}>
-              <View style={[styles.swatch, { backgroundColor: colors.textMuted }]} />
+              <Image source={item.thumb} style={styles.sceneThumb} contentFit="cover" />
               <Text style={[styles.sceneName, selected && { color: colors.textPrimary }]}>{item.name}</Text>
             </Pressable>
           );
@@ -41,10 +43,15 @@ export function ScenePicker() {
       </View>
       <Text style={styles.kicker}>Videos</Text>
       <View style={styles.sceneGrid}>
-        <Pressable accessibilityRole="button" accessibilityState={{ selected: videoBg }} accessibilityLabel="Video background" onPress={() => setVideoBg(true)} style={[styles.sceneBtn, videoBg && { borderColor: colors.textPrimary }]}>
-          <View style={[styles.swatch, { backgroundColor: colors.textMuted }]} />
-          <Text style={[styles.sceneName, videoBg && { color: colors.textPrimary }]}>Video</Text>
-        </Pressable>
+        {VIDEOS.map((item) => {
+          const selected = item.id === videoBg;
+          return (
+            <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${item.name} video background`} key={item.id} onPress={() => setVideoBg(item.id)} style={[styles.sceneBtn, selected && { borderColor: colors.textPrimary }]}>
+              <Image source={item.thumb} style={styles.sceneThumb} contentFit="cover" />
+              <Text style={[styles.sceneName, selected && { color: colors.textPrimary }]}>{item.name}</Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );

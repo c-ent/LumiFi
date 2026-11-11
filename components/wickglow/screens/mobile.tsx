@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -10,13 +10,15 @@ import {
 import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
+import { sessionFace } from '@/src/core/session-face';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset';
+import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
-import { formatTime, hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
+import { hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
 import { FillGradient } from '@/components/wickglow/features/background/fill-gradient';
 import { RainOverlay } from '@/components/wickglow/features/background/rain';
-import { Candle } from '@/components/wickglow/features/clock/candle';
+import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { LevelCard } from '@/components/wickglow/features/progression/level-card';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
 import { StatGrid } from '@/components/wickglow/features/progression/stat-grid';
@@ -27,9 +29,10 @@ import { TimerSettings } from '@/components/wickglow/features/settings/timer-set
 import { TaskList } from '@/components/wickglow/features/tasks/task-list';
 import { FocusLine } from '@/components/wickglow/features/tasks/focus-line';
 import { MixerBlock } from '@/components/wickglow/features/audio/mixer-block';
-import { MusicBlock } from '@/components/wickglow/features/audio/music-block';
+import { SoundsScroller } from '@/components/wickglow/features/audio/music-block';
 import { openStreamEmbed, StreamStage, streamCardHeight } from '@/components/wickglow/features/audio/stream-stage';
 import { SessionEndCard } from '@/components/wickglow/features/timer/session-end-card';
+import { TimeText } from '@/components/wickglow/features/timer/time-text';
 import { BarsIcon, ClockIcon, FlameIcon, MusicIcon, ResetIcon, SkipIcon, StarIcon, TaskIcon, TimerIcon } from '@/components/wickglow/shared/icons';
 
 /**
@@ -50,6 +53,8 @@ type SheetTab = 'tasks' | 'sounds' | 'quests' | 'stats' | 'timer';
 
 export function MobileWickglow() {
   const lamp = useWickglow();
+  // Actions never change identity, so they are pulled out once (see logic.tsx).
+  const { setMode, toggle, startNext, dismissEnding, reset, skip } = lamp;
   // Safe-area insets = the notch / status bar / home-indicator sizes in px.
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -57,9 +62,9 @@ export function MobileWickglow() {
   const keyboard = useKeyboardInset();
   const [open, setOpen] = useState(false); // sheet expanded?
   const [tab, setTab] = useState<SheetTab>('tasks');
-  // "Zen": while focusing, the UI fades away after 4s of no touches.
-  const [zen, setZen] = useState(false);
-  const lastAct = useRef(0); // timestamp of the last touch
+  // "Zen": while focusing with the sheet closed, the UI fades away after 4s
+  // of no touches. Any touch counts as activity (`poke`).
+  const { zen, poke } = useZen(lamp.running && lamp.mode === 'focus' && lamp.zenOpt && !open, 4000);
   // Reanimated shared value driving the sheet's slide (runs on the UI thread).
   const sheetOffset = useSharedValue(0);
   const mood = lamp.moodTheme;
@@ -78,45 +83,21 @@ export function MobileWickglow() {
     ? Math.min(height * 0.84, 760, available, Math.max(collapsed, fittedSheet))
     : Math.min(height * 0.84, 760, available);
 
-  // Any touch counts as activity: record the time and bring the UI back.
-  const poke = useCallback(() => {
-    lastAct.current = Date.now();
-    setZen(false);
-  }, []);
-
   // Slide the sheet up/down whenever it opens, closes or resizes.
   useEffect(() => {
     sheetOffset.set(withTiming(open ? 0 : expanded - collapsed, { duration: 380 }));
   }, [collapsed, expanded, open, sheetOffset]);
-
-  // Zen timer: check 2.5x a second whether to hide the UI. It only hides during
-  // a running focus session, with the setting on and the sheet closed.
-  useEffect(() => {
-    lastAct.current = Date.now();
-    const id = setInterval(() => {
-      const hide = lamp.running && lamp.mode === 'focus' && lamp.zenOpt && !open && Date.now() - lastAct.current > 4000;
-      setZen(hide);
-    }, 400);
-    return () => clearInterval(id);
-  }, [lamp.mode, lamp.running, lamp.zenOpt, open]);
 
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: sheetOffset.get() }],
   }));
   // idle = nothing started; "paused" is not idle (it has time already spent).
   const idle = lamp.status === 'idle';
-  const startLabel = lamp.running
-    ? 'Pause'
-    : idle
-      ? (lamp.mode === 'focus' ? 'Light the candle' : 'Start break')
-      : 'Resume';
-  // "Focus · 2 of 4": every 4th focus session leads to a long break.
-  const phase = lamp.mode === 'focus' ? `Focus · ${(lamp.cycle % 4) + 1} of 4` : MODE_LABEL[lamp.mode];
-  const taskLine = lamp.mode === 'focus'
-    ? (lamp.activeTask?.text ?? 'Pick a task to focus on')
-    : 'Stretch, sip some water, look away';
-  // How many of the four little candles under the timer are lit.
-  const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
+  // The start label, "Focus · 2 of 4", the lit pips and the focus chip.
+  const face = sessionFace(
+    { mode: lamp.mode, status: lamp.status, cycle: lamp.cycle, activeTask: lamp.activeTask?.text ?? null },
+    'candle',
+  );
   // Dot on the Quests tab while any daily quest is unclaimed.
   const questOpen = hasOpenQuests(lamp.day);
 
@@ -168,9 +149,8 @@ export function MobileWickglow() {
       {/* Stage: the candle IS the start/pause button. Bottom padding keeps it
           clear of the collapsed sheet. */}
       <View style={[styles.stage, { paddingBottom: collapsed + 8, paddingTop: playerReserve }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel={startLabel} style={styles.candleBtn} onPress={lamp.toggle}>
-          <Candle
-            progress={lamp.progress}
+        <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={styles.candleBtn} onPress={toggle}>
+          <SessionCandle
             lit={lamp.running}
             paused={!lamp.running && !idle}
             idle={idle}
@@ -181,11 +161,11 @@ export function MobileWickglow() {
             swap={lamp.swap}
           />
         </Pressable>
-        <Text style={styles.time}>{formatTime(lamp.remaining)}</Text>
-        <Text style={styles.phase}>{phase}</Text>
+        <TimeText style={styles.time} />
+        <Text style={styles.phase}>{face.cycleLine}</Text>
         <FocusLine
-          mode={lamp.mode === 'focus' ? (lamp.activeTask ? 'task' : 'empty') : 'break'}
-          text={taskLine}
+          mode={face.chip.kind}
+          text={face.chip.text}
           accent={mood.accent}
           zen={zen}
           onPress={lamp.mode === 'focus' ? () => openTab('tasks') : undefined}
@@ -194,8 +174,8 @@ export function MobileWickglow() {
         <View style={styles.pips}>
           {[0, 1, 2, 3].map((index) => (
             <View key={index} style={styles.miniCandle}>
-              <View style={[styles.wickFlame, index < pipsLit && { opacity: 1, backgroundColor: mood.flame2 }]} />
-              <View style={[styles.waxBit, index < pipsLit && { backgroundColor: mood.wax }]} />
+              <View style={[styles.wickFlame, index < face.pipsLit && { opacity: 1, backgroundColor: mood.flame2 }]} />
+              <View style={[styles.waxBit, index < face.pipsLit && { backgroundColor: mood.wax }]} />
             </View>
           ))}
         </View>
@@ -215,18 +195,18 @@ export function MobileWickglow() {
           {(['focus', 'short', 'long'] as TimerMode[]).map((item) => {
             const selected = lamp.mode === item;
             return (
-              <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${MODE_LABEL[item]} timer`} key={item} onPress={() => lamp.setMode(item)} style={[styles.mode, selected && styles.modeOn]}>
+              <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${MODE_LABEL[item]} timer`} key={item} onPress={() => setMode(item)} style={[styles.mode, selected && styles.modeOn]}>
                 <Text style={[styles.modeText, selected && styles.modeTextOn]}>{MODE_LABEL[item]}</Text>
               </Pressable>
             );
           })}
         </View>
         <View style={styles.actions}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={lamp.reset}><ResetIcon color={colors.textPrimary} /></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={startLabel} style={[styles.start, { backgroundColor: mood.accent }]} onPress={lamp.toggle}>
-            <Text style={styles.startText}>{startLabel}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={reset}><ResetIcon color={colors.textPrimary} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={[styles.start, { backgroundColor: mood.accent }]} onPress={toggle}>
+            <Text style={styles.startText}>{face.startLabel}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={lamp.skip}><SkipIcon color={colors.textPrimary} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={skip}><SkipIcon color={colors.textPrimary} /></Pressable>
         </View>
         <View style={[styles.dock, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
           <DockItem label="Tasks" active={open && tab === 'tasks'} color={mood.accent} onPress={() => openTab('tasks')}><TaskIcon size={20} /></DockItem>
@@ -235,7 +215,13 @@ export function MobileWickglow() {
           <DockItem label="Stats" active={open && tab === 'stats'} color={mood.accent} onPress={() => openTab('stats')}><BarsIcon size={20} /></DockItem>
           <DockItem label="Timer" active={open && tab === 'timer'} color={mood.accent} onPress={() => openTab('timer')}><TimerIcon size={20} /></DockItem>
         </View>
-        {open ? (
+        {/* The Sounds tab is a virtualised list (the track rows), so it is the
+            scroller itself rather than a block inside the ScrollView below. */}
+        {open && tab === 'sounds' ? (
+          <View style={styles.body}>
+            <SoundsScroller mobile before={<MoodPicker />} after={<MixerBlock mobile />} contentContainerStyle={styles.bodyContent} />
+          </View>
+        ) : open ? (
           <ScrollView
             style={styles.body}
             contentContainerStyle={styles.bodyContent}
@@ -244,7 +230,6 @@ export function MobileWickglow() {
             keyboardShouldPersistTaps="handled"
           >
             {tab === 'tasks' ? <TaskList mobile /> : null}
-            {tab === 'sounds' ? <View><MoodPicker /><MusicBlock mobile /><MixerBlock mobile /></View> : null}
             {tab === 'quests' ? <QuestList mobile /> : null}
             {tab === 'stats' ? <View><LevelCard mobile /><StatGrid /><WeekChart mobile /><MonthCalendar mobile /></View> : null}
             {tab === 'timer' ? <TimerSettings mobile /> : null}
@@ -260,8 +245,8 @@ export function MobileWickglow() {
           actionLabel={lamp.ending.actionLabel}
           accent={mood.accent}
           showLater={lamp.ending.showLater}
-          onStart={lamp.startNext}
-          onDismiss={lamp.dismissEnding}
+          onStart={startNext}
+          onDismiss={dismissEnding}
         />
       ) : null}
 
@@ -406,7 +391,7 @@ const styles = StyleSheet.create({
   },
   time: {
     color: colors.textPrimary,
-    fontFamily: fonts.time,
+    fontFamily: fonts.timeRegular,
     fontSize: 64,
     fontVariant: ['tabular-nums'],
   },

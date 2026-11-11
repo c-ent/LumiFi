@@ -1,23 +1,26 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { sessionFace } from '@/src/core/session-face';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset';
+import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
-import { formatTime, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
+import { MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
 import { FillGradient } from '@/components/wickglow/features/background/fill-gradient';
-import { VideoBackground } from '@/components/wickglow/features/background/video-background';
+import { SelectedVideoBackground } from '@/components/wickglow/features/background/selected-video-background';
 import { RainOverlay } from '@/components/wickglow/features/background/rain';
-import { Candle } from '@/components/wickglow/features/clock/candle';
+import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
 import { MoodPicker } from '@/components/wickglow/features/settings/mood-picker';
 import { TaskList } from '@/components/wickglow/features/tasks/task-list';
 import { FocusLine } from '@/components/wickglow/features/tasks/focus-line';
 import { MixerBlock } from '@/components/wickglow/features/audio/mixer-block';
-import { MusicBlock } from '@/components/wickglow/features/audio/music-block';
+import { SoundsScroller } from '@/components/wickglow/features/audio/music-block';
 import { openStreamEmbed, StreamStage, streamCardHeight } from '@/components/wickglow/features/audio/stream-stage';
 import { SessionEndCard } from '@/components/wickglow/features/timer/session-end-card';
+import { TimeText } from '@/components/wickglow/features/timer/time-text';
 import { ClockIcon, FlameIcon, ResetIcon, SkipIcon } from '@/components/wickglow/shared/icons';
 
 /**
@@ -28,50 +31,31 @@ import { ClockIcon, FlameIcon, ResetIcon, SkipIcon } from '@/components/wickglow
  */
 export function TabletWickglow() {
   const lamp = useWickglow();
+  // Actions never change identity, so they are pulled out once (see logic.tsx).
+  const { setMode, toggle, startNext, dismissEnding, reset, skip } = lamp;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const keyboard = useKeyboardInset();
   // Zen mode, as on the phone: hide the UI after 4s without a touch during focus.
-  const [zen, setZen] = useState(false);
-  const lastAct = useRef(0);
+  const { zen, poke } = useZen(lamp.running && lamp.mode === 'focus' && lamp.zenOpt, 4000);
   const mood = lamp.moodTheme;
   // Timer digits scale with the window, clamped to 48..72px.
   const timeSize = Math.min(72, Math.max(48, width * 0.08));
-
-  const poke = useCallback(() => {
-    lastAct.current = Date.now();
-    setZen(false);
-  }, []);
-
-  useEffect(() => {
-    lastAct.current = Date.now();
-    const id = setInterval(() => {
-      const hide = lamp.running && lamp.mode === 'focus' && lamp.zenOpt && Date.now() - lastAct.current > 4000;
-      setZen(hide);
-    }, 400);
-    return () => clearInterval(id);
-  }, [lamp.mode, lamp.running, lamp.zenOpt]);
 
   // Room to leave at the top of the left column for a playing stream embed.
   const embed = openStreamEmbed(lamp.streamLinks, lamp.activeStreamId);
   const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
 
   const idle = lamp.status === 'idle';
-  const startLabel = lamp.running
-    ? 'Pause'
-    : idle
-      ? (lamp.mode === 'focus' ? 'Light the candle' : 'Start break')
-      : 'Resume';
-  const phase = lamp.mode === 'focus' ? `Focus · ${(lamp.cycle % 4) + 1} of 4` : MODE_LABEL[lamp.mode];
-  const taskLine = lamp.mode === 'focus'
-    ? (lamp.activeTask?.text ?? 'Pick a task to focus on')
-    : 'Stretch, sip some water, look away';
-  const pipsLit = lamp.mode === 'long' ? 4 : lamp.cycle % 4;
+  const face = sessionFace(
+    { mode: lamp.mode, status: lamp.status, cycle: lamp.cycle, activeTask: lamp.activeTask?.text ?? null },
+    'candle',
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: mood.bgBase }]} onTouchStart={poke}>
       {lamp.videoBg ? (
-        <VideoBackground />
+        <SelectedVideoBackground />
       ) : (
         <FillGradient
           id="room"
@@ -103,9 +87,8 @@ export function TabletWickglow() {
             </View>
           </View>
 
-          <Pressable accessibilityRole="button" accessibilityLabel={startLabel} style={[styles.candleBtn, { minHeight: Math.max(120, Math.min(420, height - 300)) }]} onPress={lamp.toggle}>
-            <Candle
-              progress={lamp.progress}
+          <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={[styles.candleBtn, { minHeight: Math.max(120, Math.min(420, height - 300)) }]} onPress={toggle}>
+            <SessionCandle
               lit={lamp.running}
               paused={!lamp.running && !idle}
               idle={idle}
@@ -116,21 +99,21 @@ export function TabletWickglow() {
               swap={lamp.swap}
             />
           </Pressable>
-          <Text style={[styles.time, { fontSize: timeSize }]}>{formatTime(lamp.remaining)}</Text>
-          <Text style={styles.phase}>{phase}</Text>
+          <TimeText style={[styles.time, { fontSize: timeSize }]} />
+          <Text style={styles.phase}>{face.cycleLine}</Text>
           {/* No onPress here: the task list is already visible in the right
               column, so the chip is a plain label on tablet. */}
           <FocusLine
-            mode={lamp.mode === 'focus' ? (lamp.activeTask ? 'task' : 'empty') : 'break'}
-            text={taskLine}
+            mode={face.chip.kind}
+            text={face.chip.text}
             accent={mood.accent}
             zen={zen}
           />
           <View style={styles.pips}>
             {[0, 1, 2, 3].map((index) => (
               <View key={index} style={styles.miniCandle}>
-                <View style={[styles.wickFlame, index < pipsLit && { opacity: 1, backgroundColor: mood.flame2 }]} />
-                <View style={[styles.waxBit, index < pipsLit && { backgroundColor: mood.wax }]} />
+                <View style={[styles.wickFlame, index < face.pipsLit && { opacity: 1, backgroundColor: mood.flame2 }]} />
+                <View style={[styles.waxBit, index < face.pipsLit && { backgroundColor: mood.wax }]} />
               </View>
             ))}
           </View>
@@ -138,38 +121,47 @@ export function TabletWickglow() {
             {(['focus', 'short', 'long'] as TimerMode[]).map((item) => {
               const selected = lamp.mode === item;
               return (
-                <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${MODE_LABEL[item]} timer`} key={item} onPress={() => lamp.setMode(item)} style={[styles.mode, selected && styles.modeOn]}>
+                <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${MODE_LABEL[item]} timer`} key={item} onPress={() => setMode(item)} style={[styles.mode, selected && styles.modeOn]}>
                   <Text style={[styles.modeText, selected && styles.modeTextOn]}>{MODE_LABEL[item]}</Text>
                 </Pressable>
               );
             })}
           </View>
           <View style={styles.actions}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={lamp.reset}><ResetIcon color={colors.textPrimary} /></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={startLabel} style={[styles.start, { backgroundColor: mood.accent }]} onPress={lamp.toggle}>
-              <Text style={styles.startText}>{startLabel}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={reset}><ResetIcon color={colors.textPrimary} /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={[styles.start, { backgroundColor: mood.accent }]} onPress={toggle}>
+              <Text style={styles.startText}>{face.startLabel}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={lamp.skip}><SkipIcon color={colors.textPrimary} /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={skip}><SkipIcon color={colors.textPrimary} /></Pressable>
           </View>
         </ScrollView>
 
-        {/* Right: everything the phone keeps in its bottom sheet, stacked.
-            Extra bottom padding lifts the content above the on-screen keyboard. */}
-        <ScrollView
-          style={[styles.side, { opacity: zen ? 0 : 1 }]}
-          pointerEvents={zen ? 'none' : 'auto'}
-          contentContainerStyle={[styles.sideContent, keyboard > 0 ? { paddingBottom: keyboard + 28 } : null]}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.kicker}>Tasks</Text>
-          <TaskList mobile />
-          <Text style={styles.kicker}>Sounds</Text>
-          <MoodPicker video />
-          <MusicBlock mobile />
-          <MixerBlock mobile />
-          <QuestList mobile />
-          <MonthCalendar mobile />
-        </ScrollView>
+        {/* Right: everything the phone keeps in its bottom sheet, stacked in
+            one scrolling column. The column is the track list's own scroller
+            (so the tracks can be virtualised); the rest rides along above and
+            below the tracks. Extra bottom padding lifts the content above the
+            on-screen keyboard. */}
+        <View style={[styles.side, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
+          <SoundsScroller
+            mobile
+            contentContainerStyle={[styles.sideContent, keyboard > 0 ? { paddingBottom: keyboard + 28 } : null]}
+            before={(
+              <>
+                <Text style={styles.kicker}>Tasks</Text>
+                <TaskList mobile />
+                <Text style={styles.kicker}>Sounds</Text>
+                <MoodPicker video />
+              </>
+            )}
+            after={(
+              <>
+                <MixerBlock mobile />
+                <QuestList mobile />
+                <MonthCalendar mobile />
+              </>
+            )}
+          />
+        </View>
       </View>
 
       {/* Floating stream player over the left column. */}
@@ -182,8 +174,8 @@ export function TabletWickglow() {
           actionLabel={lamp.ending.actionLabel}
           accent={mood.accent}
           showLater={lamp.ending.showLater}
-          onStart={lamp.startNext}
-          onDismiss={lamp.dismissEnding}
+          onStart={startNext}
+          onDismiss={dismissEnding}
         />
       ) : null}
 
@@ -261,7 +253,7 @@ const styles = StyleSheet.create({  root: {
   },
   time: {
     color: colors.textPrimary,
-    fontFamily: fonts.time,
+    fontFamily: fonts.timeRegular,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },

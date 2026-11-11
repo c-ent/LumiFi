@@ -1,8 +1,9 @@
 import { colors, fade, fonts, radius, rounded } from '@/src/theme/tokens';
 import { openStreamEmbed } from '@/components/wickglow/features/audio/stream-stage';
 import Slider from '@react-native-community/slider';
-import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import type { PlaylistEntry } from '@/src/core/own-tracks';
@@ -19,86 +20,170 @@ import { useTone } from '@/components/wickglow/features/tone';
  * - "Streaming": a pasted Spotify/YouTube/Apple Music link (see stream-block.tsx).
  *
  * It renders in two shapes from the same pieces:
- * - phone / tablet / narrow panel: tabs, one source at a time.
- * - `wide` (the desktop Music card): tracks on the left, streaming on the
+ * - `SoundsScroller` (phone and tablet): tabs, one source at a time. It is the
+ *   page's scroller, not a block inside one, so the track list can be
+ *   virtualised (see the note on it below).
+ * - `MusicBlock` (the desktop Music card): tracks on the left, streaming on the
  *   right, and an empty "slot" that the floating stream player is positioned over.
  *
- * The small components below (NowPlaying, TrackRows, ...) each take `wide` and
+ * The small components below (NowPlaying, TrackRow, ...) each take `wide` and
  * `mobile` flags instead of being duplicated per layout.
+ *
+ * The track list is a FlashList in both shapes. Bundled tracks are few, but a
+ * user can add hundreds of their own files, and a plain mapped list would
+ * mount every row (each with an SVG tile) at once.
  */
 type MusicSource = 'tracks' | 'streaming';
 
 // Tile washes for playlist rows. These are art, not theme accents.
 const ART = ['#FFB454', '#FF8246', '#F06E6E', '#96C878', '#AA8CF0'] as const;
 
+/** The desktop Music card's contents. Phone and tablet use `SoundsScroller`. */
 export function MusicBlock({
-  mobile = false,
-  wide = false,
   embedSlotRef,
   onEmbedLayout,
 }: {
-  mobile?: boolean;
-  wide?: boolean;
-  /** (wide only) Lets the desktop screen measure where the embed slot is. */
+  /** Lets the desktop screen measure where the embed slot is. */
   embedSlotRef?: React.RefObject<React.ComponentRef<typeof View> | null>;
-  /** (wide only) Called when the slot moves/resizes so the player can follow. */
+  /** Called when the slot moves/resizes so the player can follow. */
   onEmbedLayout?: () => void;
+}) {
+  return (
+    <View style={wideStyles.row}>
+      <View style={wideStyles.tracksPane}>
+        <NowPlaying wide />
+        <PlaylistHead wide />
+        <View style={wideStyles.playlistBox}>
+          <WideTrackGrid />
+        </View>
+        <FilesNote wide />
+      </View>
+      <View style={wideStyles.streamCol}>
+        <View style={wideStyles.stream}>
+          <Text style={[styles.kicker, wideStyles.cardLabel]}>Streaming</Text>
+          <StreamBlock wide>
+            <View style={wideStyles.playerBox}>
+              <EmbedSlot slotRef={embedSlotRef} onLayout={onEmbedLayout} />
+            </View>
+          </StreamBlock>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// Streaming shows no track rows. A constant, so the list's data keeps one identity.
+const NO_TRACKS: PlaylistEntry[] = [];
+
+/**
+ * The Sounds page on phone and tablet, as one virtualised list. The track rows
+ * are the list's items; everything else on the page rides along as the list's
+ * header and footer: `before` (the mood picker, and on tablet the tasks), the
+ * Tracks / Streaming tabs, the player, and `after` (the mixer, and on tablet
+ * the quests and calendar). It looks like the single scrolling page it
+ * replaced, but only the rows near the screen are mounted.
+ *
+ * It has to be the scroller itself: a virtualised list placed inside another
+ * vertical ScrollView is given unlimited height and mounts every row anyway.
+ * So the screen renders this in place of its ScrollView, not inside it.
+ */
+export function SoundsScroller({
+  mobile = false,
+  before,
+  after,
+  contentContainerStyle,
+}: {
+  mobile?: boolean;
+  /** Rendered above the Tracks / Streaming tabs. */
+  before?: React.ReactNode;
+  /** Rendered below the track list (or below the streaming block). */
+  after?: React.ReactNode;
+  contentContainerStyle?: StyleProp<ViewStyle>;
 }) {
   const tone = useTone(mobile);
   const [source, setSource] = useState<MusicSource>('tracks');
-  const selectedStyle = { backgroundColor: tone.solid, borderColor: tone.solid };
-  const selectedText = { color: tone.ink };
-
-  if (wide) {
-    return (
-      <View style={wideStyles.row}>
-        <View style={wideStyles.tracksPane}>
-          <NowPlaying wide />
-          <PlaylistHead wide />
-          <View style={wideStyles.playlistBox}>
-            <ScrollView style={wideStyles.playlistScroll} contentContainerStyle={wideStyles.trackContent}>
-              <TrackRows wide />
-            </ScrollView>
-          </View>
-          <FilesNote wide />
-        </View>
-        <View style={wideStyles.streamCol}>
-          <View style={wideStyles.stream}>
-            <Text style={[styles.kicker, wideStyles.cardLabel]}>Streaming</Text>
-            <StreamBlock wide>
-              <View style={wideStyles.playerBox}>
-                <EmbedSlot slotRef={embedSlotRef} onLayout={onEmbedLayout} />
-              </View>
-            </StreamBlock>
-          </View>
-        </View>
-      </View>
-    );
-  }
+  const { playlist, trackIndex, musicPlaying, ownTracks, selectTrack, removeOwnTrack } = useWickglow();
+  const accent = tone.accent;
+  // The list re-renders its visible rows when this changes. Without it a row
+  // would keep showing the old "selected" state after the track changes.
+  const extra = useMemo(() => ({ trackIndex, musicPlaying, ownTracks, accent }), [accent, musicPlaying, ownTracks, trackIndex]);
 
   return (
-    <View>
-      <View style={styles.presetRow}>
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: source === 'tracks' }}
-          accessibilityLabel="Tracks"
-          onPress={() => setSource('tracks')}
-          style={[styles.preset, styles.sourceTab, source === 'tracks' ? selectedStyle : null]}
-        >
-          <Text style={[styles.miniText, source === 'tracks' ? selectedText : null]}>Tracks</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: source === 'streaming' }}
-          accessibilityLabel="Streaming"
-          onPress={() => setSource('streaming')}
-          style={[styles.preset, styles.sourceTab, source === 'streaming' ? selectedStyle : null]}
-        >
-          <Text style={[styles.miniText, source === 'streaming' ? selectedText : null]}>Streaming</Text>
-        </Pressable>
-      </View>
-      {source === 'tracks' ? <TrackList mobile={mobile} /> : <StreamBlock mobile={mobile} />}
+    <FlashList
+      data={source === 'tracks' ? playlist : NO_TRACKS}
+      extraData={extra}
+      keyExtractor={(entry) => entry.key}
+      contentContainerStyle={contentContainerStyle}
+      // "handled": a tap on a button while the keyboard is open works on the
+      // first tap, instead of only dismissing the keyboard.
+      keyboardShouldPersistTaps="handled"
+      ItemSeparatorComponent={RowGap}
+      ListHeaderComponent={(
+        <View>
+          {before}
+          <SourceTabs source={source} onChange={setSource} mobile={mobile} />
+          {source === 'tracks' ? (
+            <>
+              <NowPlaying mobile={mobile} />
+              <PlaylistHead />
+            </>
+          ) : (
+            <StreamBlock mobile={mobile} />
+          )}
+        </View>
+      )}
+      ListFooterComponent={(
+        <View>
+          {source === 'tracks' ? <FilesNote /> : null}
+          {after}
+        </View>
+      )}
+      renderItem={({ item, index }) => (
+        <TrackRow
+          entry={item}
+          index={index}
+          selected={index === trackIndex}
+          playing={musicPlaying}
+          accent={accent}
+          onSelect={selectTrack}
+          onRemove={removeOwnTrack}
+          ownId={ownId(ownTracks, item)}
+        />
+      )}
+    />
+  );
+}
+
+// The space between two track rows (the mapped list used `gap: 8`).
+function RowGap() {
+  return <View style={wideStyles.rowGap} />;
+}
+
+// The Tracks / Streaming switch above the player on phone and tablet.
+function SourceTabs({ source, onChange, mobile = false }: { source: MusicSource; onChange: (next: MusicSource) => void; mobile?: boolean }) {
+  const tone = useTone(mobile);
+  const selectedStyle = { backgroundColor: tone.solid, borderColor: tone.solid };
+  const selectedText = { color: tone.ink };
+  return (
+    <View style={styles.presetRow}>
+      <Pressable
+        accessibilityRole="tab"
+        accessibilityState={{ selected: source === 'tracks' }}
+        accessibilityLabel="Tracks"
+        onPress={() => onChange('tracks')}
+        style={[styles.preset, styles.sourceTab, source === 'tracks' ? selectedStyle : null]}
+      >
+        <Text style={[styles.miniText, source === 'tracks' ? selectedText : null]}>Tracks</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="tab"
+        accessibilityState={{ selected: source === 'streaming' }}
+        accessibilityLabel="Streaming"
+        onPress={() => onChange('streaming')}
+        style={[styles.preset, styles.sourceTab, source === 'streaming' ? selectedStyle : null]}
+      >
+        <Text style={[styles.miniText, source === 'streaming' ? selectedText : null]}>Streaming</Text>
+      </Pressable>
     </View>
   );
 }
@@ -156,17 +241,19 @@ function LoopButton({
 // `lamp` is just the name for the app context (the app was once called Lamp).
 function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?: boolean }) {
   const lamp = useWickglow();
+  // Actions never change identity, so they are pulled out once (see logic.tsx).
+  const { setMix, toggleMusic, nextTrack, prevTrack, toggleMusicLoop } = lamp;
   const tone = useTone(mobile);
   const icon = tone.ink;
   // Built once and reused by both the compact and wide layouts below.
   const transport = (
     <>
-      <Pressable accessibilityRole="button" accessibilityLabel="Previous track" style={wide ? wideStyles.round : styles.round} onPress={lamp.prevTrack}><PrevIcon color={colors.textPrimary} size={16} /></Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={lamp.musicPlaying ? 'Pause music' : 'Play music'} style={[wide ? wideStyles.play : styles.roundLg, { backgroundColor: wide ? tone.accent : tone.solid }]} onPress={lamp.toggleMusic}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Previous track" style={wide ? wideStyles.round : styles.round} onPress={prevTrack}><PrevIcon color={colors.textPrimary} size={16} /></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={lamp.musicPlaying ? 'Pause music' : 'Play music'} style={[wide ? wideStyles.play : styles.roundLg, { backgroundColor: wide ? tone.accent : tone.solid }]} onPress={toggleMusic}>
         {lamp.musicPlaying ? <PauseIcon color={icon} size={wide ? 16 : 18} /> : <PlayIcon color={icon} size={wide ? 16 : 18} />}
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Next track" style={wide ? wideStyles.round : styles.round} onPress={lamp.nextTrack}><NextIcon color={colors.textPrimary} size={16} /></Pressable>
-      <LoopButton on={lamp.musicLoop} onPress={lamp.toggleMusicLoop} accent={tone.accent} size={16} style={wide ? wideStyles.round : styles.round} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Next track" style={wide ? wideStyles.round : styles.round} onPress={nextTrack}><NextIcon color={colors.textPrimary} size={16} /></Pressable>
+      <LoopButton on={lamp.musicLoop} onPress={toggleMusicLoop} accent={tone.accent} size={16} style={wide ? wideStyles.round : styles.round} />
     </>
   );
 
@@ -183,7 +270,7 @@ function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?:
             minimumValue={0}
             maximumValue={100}
             value={lamp.mix.music}
-            onValueChange={(value) => lamp.setMix('music', Math.round(value))}
+            onValueChange={(value) => setMix('music', Math.round(value))}
             minimumTrackTintColor={tone.accent}
             maximumTrackTintColor={colors.border}
             thumbTintColor={tone.accent}
@@ -209,7 +296,7 @@ function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?:
               minimumValue={0}
               maximumValue={100}
               value={lamp.mix.music}
-              onValueChange={(value) => lamp.setMix('music', Math.round(value))}
+              onValueChange={(value) => setMix('music', Math.round(value))}
               minimumTrackTintColor={tone.accent}
               maximumTrackTintColor={'rgba(255, 255, 255, 0.16)'}
               thumbTintColor={tone.accent}
@@ -221,22 +308,12 @@ function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?:
   );
 }
 
-// The "Tracks" tab contents for the non-wide layouts.
-function TrackList({ mobile = false }: { mobile?: boolean }) {
-  return (
-    <View>
-      <NowPlaying mobile={mobile} />
-      <PlaylistHead />
-      <TrackRows mobile={mobile} />
-      <FilesNote />
-    </View>
-  );
-}
-
 // "Playlist" heading with the Add files button. Picking device files only works
 // on Android/iOS; on `wide` the button lives in FilesNote at the bottom instead.
 function PlaylistHead({ wide = false }: { wide?: boolean }) {
   const lamp = useWickglow();
+  // Actions never change identity, so they are pulled out once (see logic.tsx).
+  const { addOwnFiles } = lamp;
   const canAddFiles = Platform.OS !== 'web' && !wide;
   return (
     <View style={wide ? wideStyles.labelRow : styles.mixHead}>
@@ -245,7 +322,7 @@ function PlaylistHead({ wide = false }: { wide?: boolean }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Add audio files from this device"
-          onPress={lamp.addOwnFiles}
+          onPress={addOwnFiles}
           style={styles.mini}
         >
           <Text style={styles.miniText}>Add files</Text>
@@ -255,41 +332,38 @@ function PlaylistHead({ wide = false }: { wide?: boolean }) {
   );
 }
 
-// The track list. Phone: one column. Wide: a two-column grid, built by chunking
-// the playlist into pairs (an odd last row gets an empty cell so widths match).
-function TrackRows({ wide = false, mobile = false }: { wide?: boolean; mobile?: boolean }) {
-  const lamp = useWickglow();
-  const tone = useTone(mobile);
-  if (!wide) {
-    return (
-      <View style={wideStyles.phoneList}>
-        {lamp.playlist.map((entry, index) => (
-          <TrackRow key={entry.key} entry={entry} index={index} selected={index === lamp.trackIndex} playing={lamp.musicPlaying} accent={tone.accent} onSelect={lamp.selectTrack} onRemove={lamp.removeOwnTrack} ownId={ownId(lamp.ownTracks, entry)} />
-        ))}
-      </View>
-    );
-  }
-
-  const rows: { entry: PlaylistEntry; index: number }[][] = [];
-  lamp.playlist.forEach((entry, index) => {
-    const row = rows[rows.length - 1];
-    if (!row || row.length === 2) rows.push([{ entry, index }]);
-    else row.push({ entry, index });
-  });
-
+// The desktop card's track list: a two-column grid that scrolls inside its box.
+// FlashList lays out the columns; each cell pads itself to make the 8px gutters
+// the old hand-built grid had (a list has no `gap` between its cells).
+function WideTrackGrid() {
+  const tone = useTone(false);
+  const { playlist, trackIndex, musicPlaying, ownTracks, selectTrack, removeOwnTrack } = useWickglow();
+  const accent = tone.accent;
+  const extra = useMemo(() => ({ trackIndex, musicPlaying, ownTracks, accent }), [accent, musicPlaying, ownTracks, trackIndex]);
   return (
-    <View style={wideStyles.grid}>
-      {rows.map((pair) => (
-        <View key={pair[0].entry.key} style={wideStyles.pair}>
-          {pair.map(({ entry, index }) => (
-            <View key={entry.key} style={wideStyles.cell}>
-              <TrackRow wide entry={entry} index={index} selected={index === lamp.trackIndex} playing={lamp.musicPlaying} accent={tone.accent} onSelect={lamp.selectTrack} onRemove={lamp.removeOwnTrack} ownId={ownId(lamp.ownTracks, entry)} />
-            </View>
-          ))}
-          {pair.length === 1 ? <View style={wideStyles.cell} /> : null}
+    <FlashList
+      style={wideStyles.playlistScroll}
+      contentContainerStyle={wideStyles.trackContent}
+      data={playlist}
+      extraData={extra}
+      numColumns={2}
+      keyExtractor={(entry) => entry.key}
+      renderItem={({ item, index }) => (
+        <View style={index % 2 === 0 ? wideStyles.cellLeft : wideStyles.cellRight}>
+          <TrackRow
+            wide
+            entry={item}
+            index={index}
+            selected={index === trackIndex}
+            playing={musicPlaying}
+            accent={accent}
+            onSelect={selectTrack}
+            onRemove={removeOwnTrack}
+            ownId={ownId(ownTracks, item)}
+          />
         </View>
-      ))}
-    </View>
+      )}
+    />
   );
 }
 
@@ -364,6 +438,8 @@ function TrackRow({
 // private app folder to copy them into), so it explains that instead.
 function FilesNote({ wide = false }: { wide?: boolean }) {
   const lamp = useWickglow();
+  // Actions never change identity, so they are pulled out once (see logic.tsx).
+  const { addOwnFiles } = lamp;
   const canAddFiles = Platform.OS !== 'web';
   if (!wide) {
     return canAddFiles ? (
@@ -379,7 +455,7 @@ function FilesNote({ wide = false }: { wide?: boolean }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Add audio files from this device"
-          onPress={lamp.addOwnFiles}
+          onPress={addOwnFiles}
           style={styles.mini}
         >
           <Text style={styles.miniText}>Add files</Text>
@@ -496,9 +572,10 @@ const wideStyles = StyleSheet.create({
     bottom: 0,
     left: 0,
   },
+  // Each grid cell adds 8 below itself, so the bottom needs only 2 more to make 10.
   trackContent: {
     paddingTop: 10,
-    paddingBottom: 10,
+    paddingBottom: 2,
     paddingLeft: 10,
     paddingRight: 8,
   },
@@ -533,19 +610,17 @@ const wideStyles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1.4,
   },
-  phoneList: {
-    gap: 8,
+  rowGap: {
+    height: 8,
   },
-  grid: {
-    gap: 8,
+  // Two columns with an 8px gutter: 4 on the inner side of each cell.
+  cellLeft: {
+    paddingRight: 4,
+    paddingBottom: 8,
   },
-  pair: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  cell: {
-    flex: 1,
-    minWidth: 0,
+  cellRight: {
+    paddingLeft: 4,
+    paddingBottom: 8,
   },
   trackRow: {
     alignItems: 'stretch',
@@ -560,7 +635,7 @@ const wideStyles = StyleSheet.create({
     paddingLeft: 8,
     paddingRight: 12,
     borderWidth: 1,
-    borderRadius: 14,
+    ...rounded(14),
   },
   track: {
     flex: 1,
@@ -572,7 +647,7 @@ const wideStyles = StyleSheet.create({
     paddingLeft: 8,
     paddingRight: 10,
     borderWidth: 1,
-    borderRadius: 12,
+    ...rounded(12),
   },
   trackTitle: {
     color: colors.textPrimary,

@@ -5,7 +5,7 @@ import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion
 const FADE_MS = 700;
 // A layer that never reports ready (a video whose first-frame event does not
 // fire on some platform) still fades in after this long.
-const READY_FALLBACK_MS = 1500;
+const READY_FALLBACK_MS = 500;
 // Each layer can hold a video player, so rapid switching keeps at most this many.
 const MAX_LAYERS = 3;
 

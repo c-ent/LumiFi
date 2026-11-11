@@ -1,18 +1,5 @@
-export function remainingMs(endAt: number, now: number): number {
-  return endAt - now;
-}
-
-export function hasReachedDeadline(endAt: number, now: number): boolean {
-  return remainingMs(endAt, now) <= 0;
-}
-
-export function pausedRemaining(endAt: number, now: number): number {
-  return Math.max(0, remainingMs(endAt, now));
-}
-
-export function resumeEndAt(now: number, remaining: number): number {
-  return now + remaining;
-}
+// The session clock itself (remaining time, pause, resume, the deadline) lives
+// in `clock.ts`. This is the one piece of deadline math the screens read.
 
 export function timerProgress(remaining: number, total: number): number {
   if (total <= 0) return 0;

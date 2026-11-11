@@ -1,4 +1,4 @@
-# LumiFi
+# Wickglow
 
 Calm lofi Pomodoro study app with XP and streaks. Android and web from one Expo codebase.
 
@@ -21,7 +21,7 @@ Status: Expo SDK 58 app. Commands below match this repo.
 ## Conventions the code does not show
 - Timer: store `endAt` and compute `remaining = endAt - now`. Do not decrement a counter, because background JS timers are throttled.
 - Session end: keep exactly one scheduled local notification at `endAt`, and cancel and reschedule it on every pause, resume, reset, skip and mode change. Do not add a foreground service for the countdown. The only one is the media playback service that `expo-audio` uses.
-- Audio: use `expo-audio`, not `expo-av` (removed). Do not request microphone permission, LumiFi never records. A pasted streaming link plays in that service's own player and never enters `expo-audio`.
+- Audio: use `expo-audio`, not `expo-av` (removed). Do not request microphone permission, Wickglow never records. A pasted streaming link plays in that service's own player and never enters `expo-audio`.
 - Navigation: import from `expo-router`, not `@react-navigation/*`, which fails at bundle time since SDK 56.
 - Packages: run `npx expo install`, not `npm install`, for Expo packages so versions match the SDK.
 - Native folders: edit `app.json` or `app.config.ts`, not `android/` or `ios/`, which prebuild generates.
@@ -37,7 +37,7 @@ Status: Expo SDK 58 app. Commands below match this repo.
 | Icons            | Lucide, stroke width 1.8, size 20. `lucide-react-native` on Android and iOS, `lucide-react` on web                  | Chosen 2026-11-03. Not installed yet; the hand-drawn icons stay until that swap is current |
 | Styling          | `StyleSheet` plus tokens in `src/theme`                                                                             | React Native has no CSS variables                                                          |
 | Session end      | Flame dims softly, soft chime, short message. No harsh alarm                                                        | Competitor research: users like a gentle end                                               |
-| Name in code     | Display name is "LumiFi". Package ids, slugs and URL schemes use `lumifi`                                           | Package id rules                                                                           |
+| Name in code     | Display name is "Wickglow". Package ids, slugs and URL schemes use `wickglow`                                           | Package id rules                                                                           |
 
 ## Boundaries
 

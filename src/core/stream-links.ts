@@ -33,6 +33,9 @@ export type StreamPlayback = StreamEmbed | { kind: 'open' };
 
 export type StreamNavigation = 'allow' | 'block' | 'external';
 
+// A bound on how many stored rows are read back, so a hand-edited save cannot
+// hold an unbounded list. It is not the product limit: `addStreamLink` in
+// `logic.tsx` keeps one saved link at a time.
 export const MAX_STREAM_LINKS = 30;
 
 const MAX_INPUT_LENGTH = 2000;

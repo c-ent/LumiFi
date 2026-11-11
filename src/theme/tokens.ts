@@ -8,6 +8,9 @@ export const colors = {
   bgSurface: 'rgba(24, 14, 20, 0.93)',
   bgSurfaceSolid: '#140F1C',
   bgCard: 'rgba(255, 255, 255, 0.06)',
+  // Buttons and pills that float on the desktop scene. A little more solid
+  // than bgCard so they hold up over bright video backgrounds.
+  bgControl: 'rgba(255, 255, 255, 0.2)',
   bgInset: 'rgba(0, 0, 0, 0.28)',
   textPrimary: '#F8F1E8',
   textMuted: 'rgba(248, 241, 232, 0.62)',
@@ -46,6 +49,7 @@ export const fonts = {
   bodySemibold: 'Figtree_600SemiBold',
   time: 'Outfit_200ExtraLight',
   timeLight: 'Outfit_300Light',
+  timeRegular: 'Outfit_400Regular',
   timeMedium: 'Outfit_500Medium',
 } as const;
 

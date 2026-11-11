@@ -1,4 +1,4 @@
-# LumiFi
+# Wickglow
 
 Calm lofi Pomodoro study app with XP and streaks. Android and web from one Expo codebase.
 
@@ -36,7 +36,7 @@ Run the build, typecheck and tests before finishing a change.
 ## Project layout
 
 - `app/`: Expo Router routes. Thin files that render a screen.
-- `components/lumifi/`: the UI, grouped by feature.
+- `components/wickglow/`: the UI, grouped by feature.
 - `src/core/`: pure logic — timer math, XP, levels, streaks, quests. No React or Expo imports.
 - `src/theme/`: color, font and radius tokens.
 - `assets/audio/`: third-party audio. Read `MUSIC_LICENSES.md` before adding audio; every bundled file is covered there, and all of it is cleared.

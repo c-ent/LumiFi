@@ -431,9 +431,9 @@ function WickglowSession({
       // Start the track before the notification work below. That work is a
       // chain of native calls and can take hundreds of milliseconds, so
       // awaiting it first left the music audibly behind the timer.
-      // A streaming embed is the music for this session. Starting focus does
-      // not also start the local player, and the session still runs.
-      if (started.mode === 'focus' && !activeStreamIdRef.current) {
+      // A streaming embed is the music for this session. Starting a session
+      // does not also start the local player while an embed is up.
+      if (!activeStreamIdRef.current) {
         resumeWhenActive.current = false;
         leftForStream.current = false;
         heldForEmbed.current = false;

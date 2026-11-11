@@ -1,6 +1,8 @@
 import { colors } from '@/src/theme/tokens';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useLoadingBackground } from '@/components/wickglow/features/background/background-loading';
+import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 import { useWickglow } from '@/components/wickglow/logic';
 import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles';
 import { MOODS } from '@/components/wickglow/theme';
@@ -12,6 +14,8 @@ import { MOODS } from '@/components/wickglow/theme';
 // passes it and the phone does not.
 export function MoodPicker({ video = false }: { video?: boolean }) {
   const { mood, setMood, videoBg, setVideoBg } = useWickglow();
+  const loading = useLoadingBackground();
+  const reduced = useReducedMotion();
   return (
     <View>
       <Text style={styles.kicker}>Mood</Text>
@@ -27,7 +31,12 @@ export function MoodPicker({ video = false }: { video?: boolean }) {
         })}
         {video ? (
           <Pressable accessibilityRole="button" accessibilityState={{ selected: videoBg !== null }} accessibilityLabel="Video background" onPress={() => setVideoBg('classic')} style={[styles.moodBtn, videoBg && { borderColor: colors.textPrimary }]}>
-            <View style={[styles.moodFlame, { backgroundColor: colors.textMuted }]} />
+            {/* While the video loads, a spinner takes the dot's place. */}
+            {loading?.startsWith('video:') && !reduced ? (
+              <ActivityIndicator size="small" color={colors.textPrimary} accessibilityLabel="Loading" />
+            ) : (
+              <View style={[styles.moodFlame, { backgroundColor: colors.textMuted }]} />
+            )}
             <Text style={[styles.sceneName, videoBg && { color: colors.textPrimary }]}>Video</Text>
           </Pressable>
         ) : null}

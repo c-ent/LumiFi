@@ -3,7 +3,20 @@ import React, { act, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 // @ts-expect-error react-dom has no type package in this project.
 import { flushSync } from 'react-dom';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Crossfade } from './crossfade';
+import { setLoadingBackground } from './background-loading';
+
+// The shared loading value, read the way the pickers read it.
+let mockLoading: string | null = null;
+jest.mock('./background-loading', () => ({
+  setLoadingBackground: jest.fn((id: string | null) => {
+    mockLoading = id;
+  }),
+}));
+// jsdom has no matchMedia, which the reduced-motion hook needs on web.
+jest.mock('@/components/wickglow/hooks/use-reduced-motion', () => ({ useReducedMotion: () => false }));
+const cue = (container: HTMLElement) => container.textContent?.includes('Loading scene') ?? false;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -35,6 +48,8 @@ suite('Crossfade', () => {
   let root: { render: (node: React.ReactNode) => void; unmount: () => void };
   beforeEach(() => {
     jest.useFakeTimers();
+    jest.clearAllMocks();
+    mockLoading = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -46,10 +61,12 @@ suite('Crossfade', () => {
   });
 
   const element = (id: string, kind: 'instant' | 'manual') => (
-    <Crossfade
-      id={id}
-      render={(layerId, onReady) => (kind === 'instant' ? <Instant id={layerId} onReady={onReady} /> : <Manual id={layerId} onReady={onReady} />)}
-    />
+    <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 1280, height: 800 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } }}>
+      <Crossfade
+        id={id}
+        render={(layerId, onReady) => (kind === 'instant' ? <Instant id={layerId} onReady={onReady} /> : <Manual id={layerId} onReady={onReady} />)}
+      />
+    </SafeAreaProvider>
   );
   // A normal-priority render, like the first one after loading.
   const draw = (id: string, kind: 'instant' | 'manual') => act(() => root.render(element(id, kind)));
@@ -64,7 +81,7 @@ suite('Crossfade', () => {
   it('first click after mount, gradient to gradient', () => {
     draw('a', 'instant');
     click('b', 'instant');
-    wait(600);
+    wait(4100);
     expect(shown(container)).toEqual(['b@1']);
   });
 
@@ -72,18 +89,18 @@ suite('Crossfade', () => {
     draw('a', 'manual');
     act(() => fire.a());
     click('b', 'manual');
-    wait(600);
+    wait(4100);
     expect(shown(container)).toEqual(['b@1']);
   });
 
   it('a click after a late first frame', () => {
     draw('a', 'manual');
     click('b', 'manual');
-    wait(600);
+    wait(4100);
     expect(shown(container)).toEqual(['b@1']);
     act(() => fire.b());
     click('c', 'manual');
-    wait(600);
+    wait(4100);
     expect(shown(container)).toEqual(['c@1']);
   });
 
@@ -97,5 +114,27 @@ suite('Crossfade', () => {
     click('c', 'manual');
     act(() => fire.c());
     expect(shown(container)).toEqual(['c@1']);
+  });
+
+  it('shows the loading cue while a slow background loads, and clears it once ready', () => {
+    draw('a', 'manual');
+    click('b', 'manual');
+    wait(100);
+    expect(cue(container)).toBe(false);
+    expect(mockLoading).toBe(null);
+    wait(200);
+    expect(cue(container)).toBe(true);
+    expect(mockLoading).toBe('b');
+    act(() => fire.b());
+    expect(cue(container)).toBe(false);
+    expect(mockLoading).toBe(null);
+  });
+
+  it('shows no cue for a background that is ready at once', () => {
+    draw('a', 'instant');
+    click('b', 'instant');
+    wait(1000);
+    expect(cue(container)).toBe(false);
+    expect(setLoadingBackground).not.toHaveBeenCalledWith('b');
   });
 });

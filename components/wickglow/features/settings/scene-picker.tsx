@@ -1,7 +1,9 @@
-import { colors } from '@/src/theme/tokens';
+import { colors, radius, rounded } from '@/src/theme/tokens';
 import React from 'react';
 import { Image } from 'expo-image';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLoadingBackground } from '@/components/wickglow/features/background/background-loading';
+import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 import { PIXEL_ART } from '@/components/wickglow/features/background/pixel-art';
 import { VIDEOS } from '@/components/wickglow/features/background/video-art';
 import { useWickglow } from '@/components/wickglow/logic';
@@ -15,6 +17,8 @@ import { SCENES } from '@/components/wickglow/theme';
 // instead (the two systems are still separate; see progress.md).
 export function ScenePicker() {
   const { scene, setScene, videoBg, setVideoBg, pixelBg, setPixelBg } = useWickglow();
+  // The background that is still loading, e.g. `video:rainy_cottage`.
+  const loading = useLoadingBackground();
   return (
     <View>
       <Text style={styles.kicker}>Scenes</Text>
@@ -35,7 +39,10 @@ export function ScenePicker() {
           const selected = item.id === pixelBg;
           return (
             <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${item.name} pixel art background`} key={item.id} onPress={() => setPixelBg(item.id)} style={[styles.sceneBtn, selected && { borderColor: colors.textPrimary }]}>
-              <Image source={item.thumb} style={styles.sceneThumb} contentFit="cover" />
+              <View>
+                <Image source={item.thumb} style={styles.sceneThumb} contentFit="cover" />
+                {loading === `pixel:${item.id}` ? <TileSpinner /> : null}
+              </View>
               <Text style={[styles.sceneName, selected && { color: colors.textPrimary }]}>{item.name}</Text>
             </Pressable>
           );
@@ -47,7 +54,10 @@ export function ScenePicker() {
           const selected = item.id === videoBg;
           return (
             <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${item.name} video background`} key={item.id} onPress={() => setVideoBg(item.id)} style={[styles.sceneBtn, selected && { borderColor: colors.textPrimary }]}>
-              <Image source={item.thumb} style={styles.sceneThumb} contentFit="cover" />
+              <View>
+                <Image source={item.thumb} style={styles.sceneThumb} contentFit="cover" />
+                {loading === `video:${item.id}` ? <TileSpinner /> : null}
+              </View>
               <Text style={[styles.sceneName, selected && { color: colors.textPrimary }]}>{item.name}</Text>
             </Pressable>
           );
@@ -56,3 +66,24 @@ export function ScenePicker() {
     </View>
   );
 }
+
+// Dims the picked tile and spins over it while its background loads. Under
+// reduced motion the dimming alone shows it, with the pill on the background.
+function TileSpinner() {
+  const reduced = useReducedMotion();
+  return (
+    <View style={tile.cover} pointerEvents="none" accessibilityLabel="Loading">
+      {reduced ? null : <ActivityIndicator size="small" color={colors.textPrimary} />}
+    </View>
+  );
+}
+
+const tile = StyleSheet.create({
+  cover: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bgInset,
+    ...rounded(radius.sm),
+  },
+});

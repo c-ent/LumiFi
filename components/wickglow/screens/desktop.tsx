@@ -181,15 +181,15 @@ export function DesktopWickglow() {
           <Text style={styles.brandText}>Wickglow</Text>
         </View>
         <View style={styles.pills}>
-          <Pressable style={styles.pill} onPress={() => togglePanel('progress')}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Streak ${lamp.streak} days. Open progress`} style={styles.pill} onPress={() => togglePanel('progress')}>
             <FlameIcon size={15} color={colors.error} />
             <Text style={styles.pillText}>{lamp.streak}</Text>
           </Pressable>
-          <Pressable style={styles.pill} onPress={() => togglePanel('progress')}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${lamp.day.minutes} minutes today. Open progress`} style={styles.pill} onPress={() => togglePanel('progress')}>
             <ClockIcon size={15} color={colors.textPrimary} />
             <Text style={styles.pillText}>{lamp.day.minutes}m</Text>
           </Pressable>
-          <Pressable style={styles.pill} onPress={() => togglePanel('progress')}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Level ${lamp.level}. Open progress`} style={styles.pill} onPress={() => togglePanel('progress')}>
             <Text style={styles.pillText}>Lv {lamp.level}</Text>
             <View style={styles.miniXp}>
               <View style={[styles.miniXpFill, { width: `${(lamp.xpInLevel / lamp.xpNeeded) * 100}%`, backgroundColor: theme.accent }]} />
@@ -223,10 +223,11 @@ export function DesktopWickglow() {
             <View key={index} style={[styles.pip, index < face.pipsLit && styles.pipOn]} />
           ))}
         </View>
-        <View style={[styles.controls, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={styles.round} onPress={reset}><ResetIcon /></Pressable>
+        {/* Zen hides Reset and Skip; the main button stays, as on phone and tablet. */}
+        <View style={styles.controls}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'} onPress={reset}><ResetIcon /></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={styles.start} onPress={toggle}><Text style={styles.startText}>{face.startLabel}</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={styles.round} onPress={skip}><SkipIcon /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'} onPress={skip}><SkipIcon /></Pressable>
         </View>
       </View>
 

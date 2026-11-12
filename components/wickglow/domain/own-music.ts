@@ -60,9 +60,10 @@ function ensureOwnTracksFolder(): Directory {
  * folder. A file that cannot be copied is dropped rather than failing the whole
  * batch, so one bad pick cannot lose the rest. Returns the saved entries in the
  * order they were picked, or null when the user cancelled, so the caller can
- * tell a real pick from a dismissed one.
+ * tell a real pick from a dismissed one. At most `room` files are copied, so
+ * the saved list never holds more than a restart reads back.
  */
-export async function pickOwnTracks(): Promise<OwnTrack[] | null> {
+export async function pickOwnTracks(room: number): Promise<OwnTrack[] | null> {
   if (!ownTracksSupported()) return null;
   const result = await getDocumentAsync({
     type: AUDIO_TYPES,
@@ -73,9 +74,19 @@ export async function pickOwnTracks(): Promise<OwnTrack[] | null> {
 
   const folder = ensureOwnTracksFolder();
   const tracks: OwnTrack[] = [];
-  for (const asset of result.assets) {
+  const limit = Math.max(0, room);
+  for (const asset of result.assets.slice(0, limit)) {
     const saved = await copyIntoFolder(folder, asset.uri, asset.name);
     if (saved) tracks.push(saved);
+  }
+  // Picks past the limit are not copied, but the picker already made a cache
+  // copy of each; those go through the same cache-only guard.
+  for (const asset of result.assets.slice(limit)) {
+    try {
+      dropCacheCopy(new File(asset.uri));
+    } catch {
+      // A URI that cannot be opened has nothing to remove.
+    }
   }
   return tracks;
 }
@@ -89,15 +100,18 @@ async function copyIntoFolder(
   sourceUri: string,
   name: string,
 ): Promise<OwnTrack | null> {
+  let source: File | null = null;
   try {
+    source = new File(sourceUri);
     const id = newId(safeExtension(name));
     const destination = new File(folder, id);
-    const source = new File(sourceUri);
     await source.copy(destination, { overwrite: false });
-    dropCacheCopy(source);
     return { id, title: titleFromFileName(name), uri: destination.uri };
   } catch {
     return null;
+  } finally {
+    // The picker's cache copy is not needed after a success or a failure.
+    if (source) dropCacheCopy(source);
   }
 }
 

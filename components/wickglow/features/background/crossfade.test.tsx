@@ -40,7 +40,8 @@ function shown(container: HTMLElement) {
 }
 
 // Needs a DOM, which the default preset does not have, so it is skipped there.
-// Run it with: npx jest --config '{"preset":"jest-expo/web"}' components/wickglow/features/background/crossfade.test.tsx
+// `npm test` also runs it under the web preset (jest.web.config.js), or run it
+// alone with: npm run test:web
 const suite = typeof document === 'undefined' ? describe.skip : describe;
 
 suite('Crossfade', () => {
@@ -81,6 +82,8 @@ suite('Crossfade', () => {
   it('first click after mount, gradient to gradient', () => {
     draw('a', 'instant');
     click('b', 'instant');
+    // Ready at once, so it shows before the fallback could have run.
+    expect(shown(container)).toEqual(['b@1']);
     wait(4100);
     expect(shown(container)).toEqual(['b@1']);
   });
@@ -89,6 +92,10 @@ suite('Crossfade', () => {
     draw('a', 'manual');
     act(() => fire.a());
     click('b', 'manual');
+    expect(shown(container)).toEqual(['a@1', 'b@0']);
+    act(() => fire.b());
+    // Its first frame shows it, well before the fallback.
+    expect(shown(container)).toEqual(['b@1']);
     wait(4100);
     expect(shown(container)).toEqual(['b@1']);
   });

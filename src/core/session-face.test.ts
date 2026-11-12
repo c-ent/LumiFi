@@ -27,6 +27,9 @@ describe('session face', () => {
     expect(sessionFace({ ...idleFocus, mode: 'short', cycle: 3 }, 'candle').pipsLit).toBe(3);
     expect(sessionFace({ ...idleFocus, mode: 'long', cycle: 4 }, 'candle').pipsLit).toBe(4);
     expect(sessionFace({ ...idleFocus, cycle: 4 }, 'candle').pipsLit).toBe(0);
+    // A long break picked by hand mid-cycle shows the sessions done, not four.
+    expect(sessionFace({ ...idleFocus, mode: 'long', cycle: 1 }, 'candle').pipsLit).toBe(1);
+    expect(sessionFace({ ...idleFocus, mode: 'long', cycle: 0 }, 'candle').pipsLit).toBe(0);
   });
 
   it('shows the task, an empty prompt, or the break line in the chip', () => {

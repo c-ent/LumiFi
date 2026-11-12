@@ -77,4 +77,53 @@ describe('save queue', () => {
     jest.advanceTimersByTime(1000);
     expect(write).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps a failed write and retries it', async () => {
+    const write = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const queue = createSaveQueue(write, 300, loaded);
+    const state = { n: 1 };
+    queue.now(state);
+    await Promise.resolve();
+    // The persist effect hands the same state back; it must not count as saved.
+    queue.later(state);
+    jest.advanceTimersByTime(300);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith(state);
+  });
+
+  it('retries a failed write after a pause when nothing else changes', async () => {
+    const write = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const queue = createSaveQueue(write, 300, loaded);
+    queue.now({ n: 1 });
+    await Promise.resolve();
+    expect(write).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(2000);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith({ n: 1 });
+  });
+
+  it('does not retry a failed write once a newer state was written', async () => {
+    const write = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const queue = createSaveQueue(write, 300, loaded);
+    queue.now({ n: 1 });
+    queue.now({ n: 2 });
+    await Promise.resolve();
+    jest.advanceTimersByTime(60000);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith({ n: 2 });
+  });
+
+  it('queues a failed state again when it comes back while a newer one waits', async () => {
+    const write = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const queue = createSaveQueue(write, 300, loaded);
+    const first = { n: 1 };
+    queue.now(first);
+    queue.later({ n: 2 });
+    await Promise.resolve();
+    // The change is undone back to the state whose write failed.
+    queue.later(first);
+    jest.advanceTimersByTime(300);
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith(first);
+  });
 });

@@ -32,7 +32,7 @@ export function SessionEndCard({ title, line, actionLabel, accent, showLater, on
       <Pressable
         accessible={!showLater}
         accessibilityRole={showLater ? undefined : 'button'}
-        accessibilityLabel={showLater ? undefined : 'Dismiss'}
+        accessibilityLabel={showLater ? undefined : `${title}. ${line}. Dismiss`}
         onPress={showLater ? (event) => event.stopPropagation() : onDismiss}
         style={styles.card}
       >

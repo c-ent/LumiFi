@@ -135,9 +135,9 @@ export function StreamBlock({
             setDraft(value);
             setNotice(null);
           }}
-          placeholder={wide ? 'Paste a Spotify, YouTube or Apple Music link' : 'Paste a public playlist link'}
+          placeholder={wide ? 'Paste a Spotify, YouTube or Apple Music link' : 'Paste a public streaming link'}
           placeholderTextColor={wide ? fade(colors.textPrimary, 0.55) : colors.textMuted}
-          accessibilityLabel="Public playlist link"
+          accessibilityLabel="Public streaming link"
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"

@@ -30,7 +30,7 @@ export interface PlaylistEntry {
 }
 
 // A hand-edited save could hold an unbounded array. Far above any real playlist.
-const MAX_OWN_TRACKS = 500;
+export const MAX_OWN_TRACKS = 500;
 
 /**
  * The display title for a picked file: its name without the final extension.

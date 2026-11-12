@@ -275,4 +275,22 @@ describe('saved day history', () => {
     expect(state.xp).toBe(20);
     expect(state.streak.n).toBe(3);
   });
+
+  it('pulls in a deadline further off than the session, and keeps a valid one', () => {
+    const totalMs = 25 * 60_000;
+    const far = parseSavedState(JSON.stringify({
+      session: { mode: 'focus', status: 'running', endAt: now + 10 * totalMs, remainingMs: totalMs, totalMs },
+    }), now);
+    expect(far.session.endAt).toBe(now + totalMs);
+    const valid = parseSavedState(JSON.stringify({
+      session: { mode: 'focus', status: 'running', endAt: now + 60_000, remainingMs: 60_000, totalMs },
+    }), now);
+    expect(valid.session.endAt).toBe(now + 60_000);
+  });
+
+  it('reads a task session count as a whole number, never below zero', () => {
+    const task = (id: number, pomos: number) => ({ id, text: `t${id}`, done: false, pomos });
+    const state = parseSavedState(JSON.stringify({ tasks: [task(1, -3), task(2, 2.7)] }), now);
+    expect(state.tasks.map((item) => item.pomos)).toEqual([0, 2]);
+  });
 });

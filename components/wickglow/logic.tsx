@@ -1,5 +1,5 @@
 import { calendarKey } from '@/src/core/calendar';
-import type { OwnTrack, PlaylistEntry } from '@/src/core/own-tracks';
+import { MAX_OWN_TRACKS, type OwnTrack, type PlaylistEntry } from '@/src/core/own-tracks';
 import { activeStreamId as activeStreamOf, LOCAL_SOURCE, MusicSource, MusicSourceEvent, stepMusicSource } from '@/src/core/music-source';
 import { parseStreamLink, playbackFor, StreamLink } from '@/src/core/stream-links';
 import type { MusicEnd } from '@/src/core/session-end';
@@ -335,9 +335,7 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
   // loading doesn't immediately re-write the file.
   const [store] = useState(() => createSavedStore<SavedState>(
     loaded,
-    (state) => {
-      void saveWickglowState(state);
-    },
+    (state) => saveWickglowState(state),
     SAVE_DELAY_MS,
   ));
   const saved = useSyncExternalStore(store.subscribe, store.get, store.get);
@@ -370,6 +368,12 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
   const chimeAt = useRef(0);
   // Counts addStreamLink submissions so only the latest one may save.
   const streamRequest = useRef(0);
+  // True while a file pick and copy is running, so a second press cannot start
+  // another one against the same free room.
+  const importing = useRef(false);
+  // Counts hand-offs to another app, so a late failure of an old one cannot
+  // close a stream that has taken over since.
+  const handOffCount = useRef(0);
   // Which player owns the sound: the local one, an embed, or another app. The
   // rules are in src/core/music-source.ts; `sendSource` is the only writer.
   const sourceRef = useRef<MusicSource>(LOCAL_SOURCE);
@@ -519,22 +523,28 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
     const link = store.get().streamLinks.find((item) => item.id === id);
     if (!link) return;
     const playback = playbackFor(link);
-    // On the web, opening YouTube Music leaves this page in place, so the
-    // local player keeps going. Native hands the screen to the other app.
+    // On the web, YouTube Music opens in another tab and plays there, so the
+    // local player is paused to keep one thing playing. It is not resumed on
+    // its own: there is no telling when that tab stops. Native hands the
+    // screen to the other app.
     if (playback.kind === 'open' && Platform.OS === 'web') {
-      if (sourceRef.current.kind === 'embed') closeStream();
+      sendSource({ type: 'playLocal' });
+      musicRef.current.pause();
       Linking.openURL(link.url).catch(() => showToast('Could not open that link'));
       return;
     }
     const localPlaying = musicRef.current.musicPlaying;
     if (playback.kind === 'open') {
+      const handOff = ++handOffCount.current;
       sendSource({ type: 'handOff', localPlaying });
       Linking.openURL(link.url).catch(() => {
         showToast('Could not open that link');
-        closeStream();
+        // Only undo this hand-off if it is still the one in charge.
+        if (handOff === handOffCount.current && sourceRef.current.kind === 'handoff') closeStream();
       });
       return;
     }
+    handOffCount.current += 1;
     sendSource({ type: 'openEmbed', streamId: id, localPlaying });
   };
 
@@ -664,12 +674,30 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
       // Own music files (native only): open the file picker, copy the picks into
       // the app's private folder, then add them to the saved list.
       addOwnFiles: () => {
-        void pickOwnTracks().then((picked) => {
+        if (importing.current) return;
+        const room = MAX_OWN_TRACKS - store.get().ownTracks.length;
+        if (room <= 0) {
+          showToast(`Your list is full (${MAX_OWN_TRACKS} files)`);
+          return;
+        }
+        importing.current = true;
+        void pickOwnTracks(room).then((picked) => {
           if (!picked || picked.length === 0) return;
-          store.update((current) => ({ ...current, ownTracks: [...current.ownTracks, ...picked] }));
-          showToast(picked.length === 1 ? '1 file added' : `${picked.length} files added`);
+          // Re-read the room: the list can have changed while the files copied.
+          // A copied file that no longer fits is deleted, never left orphaned.
+          const free = Math.max(0, MAX_OWN_TRACKS - store.get().ownTracks.length);
+          const accepted = picked.slice(0, free);
+          for (const extra of picked.slice(free)) deleteOwnTrackFile(extra.id);
+          if (accepted.length === 0) {
+            showToast(`Your list is full (${MAX_OWN_TRACKS} files)`);
+            return;
+          }
+          store.update((current) => ({ ...current, ownTracks: [...current.ownTracks, ...accepted] }));
+          showToast(accepted.length === 1 ? '1 file added' : `${accepted.length} files added`);
         }).catch(() => {
           showToast('Could not add those files');
+        }).finally(() => {
+          importing.current = false;
         });
       },
       removeOwnTrack: (id) => {

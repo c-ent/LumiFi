@@ -12,6 +12,9 @@ import { RainOverlay } from '@/components/wickglow/features/background/rain';
 import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
+import { StatGrid } from '@/components/wickglow/features/progression/stat-grid';
+import { WeekChart } from '@/components/wickglow/features/progression/week-chart';
+import { TimerSettings } from '@/components/wickglow/features/settings/timer-settings';
 import { MoodPicker } from '@/components/wickglow/features/settings/mood-picker';
 import { TaskList } from '@/components/wickglow/features/tasks/task-list';
 import { FocusLine } from '@/components/wickglow/features/tasks/focus-line';
@@ -36,7 +39,9 @@ export function TabletWickglow() {
   const { width, height } = useWindowDimensions();
   const keyboard = useKeyboardInset();
   // Zen mode, as on the phone: hide the UI after 4s without a touch during focus.
-  const { zen, poke } = useZen(lamp.running && lamp.mode === 'focus' && lamp.zenOpt, 4000);
+  // Not while the keyboard is up: typing a task or a link is activity, and the
+  // side column holding the field must not fade out under it.
+  const { zen, poke } = useZen(lamp.running && lamp.mode === 'focus' && lamp.zenOpt && keyboard === 0, 4000);
   const mood = lamp.moodTheme;
   // Timer digits scale with the window, clamped to 48..72px.
   const timeSize = Math.min(72, Math.max(48, width * 0.08));
@@ -116,11 +121,11 @@ export function TabletWickglow() {
             })}
           </View>
           <View style={styles.actions}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={reset}><ResetIcon color={colors.textPrimary} /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'} onPress={reset}><ResetIcon color={colors.textPrimary} /></Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={[styles.start, { backgroundColor: mood.accent }]} onPress={toggle}>
               <Text style={styles.startText}>{face.startLabel}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={skip}><SkipIcon color={colors.textPrimary} /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'} onPress={skip}><SkipIcon color={colors.textPrimary} /></Pressable>
           </View>
         </ScrollView>
 
@@ -145,7 +150,12 @@ export function TabletWickglow() {
               <>
                 <MixerBlock mobile />
                 <QuestList mobile />
+                <Text style={styles.kicker}>Stats</Text>
+                <StatGrid />
+                <WeekChart mobile />
                 <MonthCalendar mobile />
+                <Text style={styles.kicker}>Timer settings</Text>
+                <TimerSettings mobile />
               </>
             )}
           />

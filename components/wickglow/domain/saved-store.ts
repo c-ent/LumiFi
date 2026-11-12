@@ -1,4 +1,4 @@
-import { createSaveQueue } from './save-queue';
+import { createSaveQueue, WriteResult } from './save-queue';
 
 // Holds the newest saved state and is the only thing that changes it. Timers,
 // listeners and notifications fire long after the render that created them, so
@@ -27,7 +27,7 @@ export interface SavedStore<T> {
 }
 
 /** `loaded` is the state already in storage, so it is not written back. */
-export function createSavedStore<T>(loaded: T, write: (state: T) => void, delayMs: number): SavedStore<T> {
+export function createSavedStore<T>(loaded: T, write: (state: T) => WriteResult, delayMs: number): SavedStore<T> {
   let state = loaded;
   const listeners = new Set<() => void>();
   const queue = createSaveQueue<T>(write, delayMs, loaded);

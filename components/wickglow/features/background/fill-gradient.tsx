@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import Svg, { Defs, Rect, Stop, LinearGradient as SvgGradient } from 'react-native-svg';
 
@@ -22,8 +22,14 @@ export function useFillSize() {
 }
 
 // `x2`/`y2` set the gradient direction: default is top to bottom.
-export function FillGradient({ id, stops, x2 = '0', y2 = '1' }: { id: string; stops: StopColor[]; x2?: string; y2?: string }) {
+// `onReady` fires once the gradient has a real size and is drawn, so a swap can
+// keep the old background on screen until then.
+export function FillGradient({ id, stops, x2 = '0', y2 = '1', onReady }: { id: string; stops: StopColor[]; x2?: string; y2?: string; onReady?: () => void }) {
   const { size, onLayout } = useFillSize();
+  const drawn = size.width > 0 && size.height > 0;
+  useEffect(() => {
+    if (drawn) onReady?.();
+  }, [drawn, onReady]);
   return (
     <View collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none" onLayout={onLayout}>
       {size.width > 0 && size.height > 0 ? (

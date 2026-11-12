@@ -253,7 +253,17 @@ export function MobileWickglow() {
 
       {/* The sheet: a one-line timer, then the open tab's content. It slides up
           from behind the tab bar, and rides above the keyboard while typing. */}
-      <Reanimated.View style={[styles.sheet, { height: sheetHeight, bottom: sheetBottom }, sheetStyle]} pointerEvents={open ? 'auto' : 'none'}>
+      {/* Closed, the sheet is hidden from screen readers, and its controls are
+          not rendered at all once it has slid away, so none can take focus. */}
+      <Reanimated.View
+        style={[styles.sheet, { height: sheetHeight, bottom: sheetBottom }, sheetStyle]}
+        pointerEvents={open ? 'auto' : 'none'}
+        accessibilityElementsHidden={!open}
+        importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
+        aria-hidden={!open}
+      >
+        {shown ? (
+        <>
         <Pressable accessibilityRole="button" accessibilityLabel="Close panel" style={styles.grab} onPress={close}>
           <View style={styles.grabBar} />
         </Pressable>
@@ -268,6 +278,8 @@ export function MobileWickglow() {
             <CloseIcon color={colors.textMuted} size={18} />
           </Pressable>
         </View>
+        </>
+        ) : null}
         {/* The Sounds tab is a virtualised list (the track rows), so it is the
             scroller itself rather than a block inside the ScrollView below. */}
         {shown && tab === 'sounds' ? (

@@ -69,20 +69,23 @@ async function readWickglowState(): Promise<SavedState> {
 
 /**
  * Writes the state, unless the last load failed. Storage can be unavailable in
- * private browsing, and a failed write is dropped rather than surfaced: the
- * in-memory state is still correct, so the next successful write catches up.
+ * private browsing. Resolves false when the write itself failed, so the save
+ * queue keeps the state and retries it; a save skipped after a failed read
+ * resolves true, since retrying it would be skipped the same way.
  */
-export async function saveWickglowState(state: SavedState): Promise<void> {
+export async function saveWickglowState(state: SavedState): Promise<boolean> {
   if (readFailed) {
     if (!warnedSkippedSave) {
       warnedSkippedSave = true;
       console.warn('Wickglow: the saved state could not be read, so changes are not being saved this session.');
     }
-    return;
+    return true;
   }
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
   } catch {
-    // Storage can be unavailable in private browsing.
+    // Storage can be unavailable in private browsing. The queue retries.
+    return false;
   }
 }

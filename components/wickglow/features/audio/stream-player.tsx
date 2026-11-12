@@ -100,22 +100,24 @@ export function StreamPlayer({
           javaScriptEnabled
           mediaPlaybackRequiresUserAction
           nestedScrollEnabled
-          // https only; popups are disabled above and below.
-          originWhitelist={['https://*', 'about:blank']}
+          // Every origin reaches onNavigate, which allows https on the service's
+          // own hosts and hands only its app links to the OS. A narrower list
+          // would send a non-matching URL straight to the OS, unchecked.
+          // Popups are disabled above and below.
+          originWhitelist={['*']}
           setSupportMultipleWindows={false}
           onError={() => setFailed(true)}
-          // Only treat "not allowed / not found" on the embed page itself as a
-          // failure; errors for sub-resources (images, ads) are ignored.
+          // Any HTTP error on the embed page itself is a failure; errors for
+          // sub-resources (images, ads) are ignored.
           onHttpError={(event) => {
-            const status = event.nativeEvent.statusCode;
-            if (status !== 401 && status !== 403 && status !== 404) return;
+            if (event.nativeEvent.statusCode < 400) return;
             if (!sameStreamDocument(event.nativeEvent.url, embedUrl)) return;
             setFailed(true);
           }}
           onShouldStartLoadWithRequest={onNavigate}
         />
       ) : (
-        <StreamFallback failed={failed} pageUrl={pageUrl} />
+        <StreamFallback failed={failed} pageUrl={pageUrl} onRetry={() => setFailed(false)} />
       )}
     </View>
   );
@@ -125,13 +127,19 @@ export function StreamPlayer({
 // failed. A failed link is never opened in another app on its own: a load can
 // fail just because the device is offline, and leaving Wickglow is the user's
 // choice, so every platform gets the same "Open link" button.
-function StreamFallback({ failed, pageUrl }: { failed: boolean; pageUrl: string }) {
+// "Try again" clears the failure, which mounts a fresh WebView on the embed.
+function StreamFallback({ failed, pageUrl, onRetry }: { failed: boolean; pageUrl: string; onRetry: () => void }) {
   const message = failed
     ? 'This link could not be played here. It may be private, or you may be offline.'
     : 'The player pauses while Wickglow is in the background.';
   return (
     <View style={styles.streamPaused}>
       <Text style={styles.meta}>{message}</Text>
+      {failed ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Try again" onPress={onRetry} style={styles.mini}>
+          <Text style={styles.miniText}>Try again</Text>
+        </Pressable>
+      ) : null}
       {failed ? (
         <Pressable
           accessibilityRole="button"

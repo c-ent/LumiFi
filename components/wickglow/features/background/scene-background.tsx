@@ -29,10 +29,13 @@ const PHASE_OUT = PHASE_IN.map((p) => (1 - Math.cos(p * 2 * Math.PI)) / 2);
  */
 export function SceneBackground() {
   const { sceneTheme, videoBg, pixelBg } = useWickglow();
+  // The orbs and the core belong to the gradient. With a video or a picture
+  // chosen they are not drawn, so their loops stop rather than run unseen.
+  const gradient = !videoBg && !pixelBg;
   // Three drift loops with different lengths so the orbs never move in sync.
-  const driftA = useLoop(38000);
-  const driftB = useLoop(46000);
-  const driftC = useLoop(30000);
+  const driftA = useLoop(38000, gradient);
+  const driftB = useLoop(46000, gradient);
+  const driftC = useLoop(30000, gradient);
   // The core's breathing moves whenever the timer runs (focus or a break).
   // `phase` is the position in one breath (0..1, linear); `breathe` is the
   // eased size derived from it, so pausing can store and resume a plain phase.
@@ -48,7 +51,7 @@ export function SceneBackground() {
     // The core moves whenever `running` is true, in any mode including breaks.
     // Paused or idle: do nothing, so the previous run's cleanup leaves the core frozen
     // at its current size instead of snapping back. Resume continues from there.
-    if (!running) return undefined;
+    if (!running || !gradient) return undefined;
     if (reduced) {
       // Stop mid-breathe so the core stays lit without pulsing.
       phase.setValue(0.25);
@@ -79,7 +82,7 @@ export function SceneBackground() {
       // stopAnimation syncs the native value back, so the next resume starts here.
       phase.stopAnimation();
     };
-  }, [phase, reduced, running]);
+  }, [gradient, phase, reduced, running]);
 
   // Which background is showing. A change of id swaps to the new one.
   const look = videoBg ? `video:${videoBg}` : pixelBg ? `pixel:${pixelBg}` : `scene:${sceneTheme.id}`;
@@ -152,12 +155,13 @@ function GradientScene({ theme, size, drifts, breathe, onReady }: {
 }
 
 // A back-and-forth loop (0 -> 1 -> 0) turned into an x/y offset in px.
-// Each orb gets its own duration, so the drift looks organic.
-function useLoop(duration: number) {
+// Each orb gets its own duration, so the drift looks organic. `active` false
+// stops the loop where it is; it resumes from there.
+function useLoop(duration: number, active: boolean) {
   const value = useAnimatedValue(0);
   const reduced = useReducedMotion();
   useEffect(() => {
-    if (reduced) return undefined;
+    if (reduced || !active) return undefined;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(value, { toValue: 1, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -166,7 +170,7 @@ function useLoop(duration: number) {
     );
     loop.start();
     return () => loop.stop();
-  }, [duration, reduced, value]);
+  }, [active, duration, reduced, value]);
   return {
     x: value.interpolate({ inputRange: [0, 1], outputRange: [0, 70] }),
     y: value.interpolate({ inputRange: [0, 1], outputRange: [0, 48] }),

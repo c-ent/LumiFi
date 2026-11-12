@@ -12,6 +12,15 @@ export const colors = {
   // than bgCard so they hold up over bright video backgrounds.
   bgControl: 'rgba(255, 255, 255, 0.2)',
   bgInset: 'rgba(0, 0, 0, 0.28)',
+  // Phone glass: a faint frost over a dark tint, so the scene shows through
+  // without the controls reading as white. Native has no blur, so its bars
+  // and sheet use the stronger `glassTintSolid`.
+  glassFill: 'rgba(255, 255, 255, 0.07)',
+  glassFillOn: 'rgba(255, 255, 255, 0.16)',
+  glassEdge: 'rgba(255, 255, 255, 0.12)',
+  glassEdgeOn: 'rgba(255, 255, 255, 0.3)',
+  glassTint: 'rgba(16, 10, 24, 0.5)',
+  glassTintSolid: 'rgba(16, 10, 24, 0.86)',
   textPrimary: '#F8F1E8',
   textMuted: 'rgba(248, 241, 232, 0.62)',
   textInverse: '#1D1205',

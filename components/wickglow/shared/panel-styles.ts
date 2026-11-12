@@ -519,6 +519,9 @@ export const panelStyles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 16,
   },
+  sourceRowFirst: {
+    marginTop: 0,
+  },
   fields: {
     flexDirection: 'row',
     gap: 10,

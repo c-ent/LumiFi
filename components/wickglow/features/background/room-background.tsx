@@ -8,8 +8,8 @@ import { MOODS, MoodTheme } from '@/components/wickglow/theme';
 
 /**
  * The phone and tablet backdrop: the mood gradient, or on tablet the chosen
- * video. Switching mood or turning the video on or off crossfades (see
- * crossfade.tsx). Phones pass `video={false}`, since they never play one.
+ * video. Switching mood or turning the video on or off swaps at once, with
+ * no transition (see crossfade.tsx). Phones pass `video={false}`, since they never play one.
  */
 export function RoomBackground({ video = true }: { video?: boolean }) {
   const { moodTheme, videoBg } = useWickglow();
@@ -31,7 +31,7 @@ function MoodGradient({ mood, onReady }: { mood: MoodTheme; onReady: () => void 
   useEffect(() => onReady(), [onReady]);
   return (
     <FillGradient
-      // Two moods can be on screen during a crossfade, so each gradient id is unique.
+      // Two moods can be mounted while switching, so each gradient id is unique.
       id={`room-${mood.id}`}
       stops={[
         { offset: '0', color: mood.bgBase },

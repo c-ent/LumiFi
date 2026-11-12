@@ -1,96 +1,127 @@
-import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import { Animated, Easing, StyleSheet } from 'react-native';
+import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { setLoadingBackground } from '@/components/wickglow/features/background/background-loading';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
+import { colors, fonts, radius } from '@/src/theme/tokens';
 
-const FADE_MS = 700;
-// A layer that never reports ready (a video whose first-frame event does not
-// fire on some platform) still fades in after this long.
-const READY_FALLBACK_MS = 1500;
-// Each layer can hold a video player, so rapid switching keeps at most this many.
-const MAX_LAYERS = 3;
-
-type Layer = { id: string; opacity: Animated.Value; ready: boolean };
+// A layer that never reports ready (a video that fails to load) still replaces
+// the old one after this long. It is only a safety net: a video normally
+// reports ready on its first frame, and showing it before then is a black
+// flash, so this must stay longer than a large video takes to load.
+const READY_FALLBACK_MS = 4000;
+// The loading cue waits this long, so a cached video or a gradient, which are
+// ready almost at once, swap without a cue flickering in and out.
+const LOADING_CUE_MS = 250;
 
 /**
- * Crossfades between backgrounds. When `id` changes, the new background is
- * mounted on top at opacity 0 and fades in once it reports ready (a video
- * after its first frame), while the old one keeps playing underneath. When the
- * fade ends, everything below it is unmounted. The first background, and every
- * change under reduced motion, appears without a fade.
+ * Switches between backgrounds without a transition. When `id` changes, the
+ * new background is mounted hidden on top while the old one keeps showing.
+ * Once the new one reports ready (a video after its first frame), it replaces
+ * the old one at once and the old one is unmounted, so there is no black
+ * flash and no fade. While a slow one loads, a small "Loading scene" pill
+ * shows over the old background and the picker's tile shows a spinner (see
+ * background-loading.ts).
  *
  * `render` draws one background and must call `onReady` once it has something
  * on screen; a gradient can call it straight away.
  */
 export function Crossfade({ id, render }: { id: string; render: (id: string, onReady: () => void) => ReactNode }) {
-  const reduced = useReducedMotion();
-  const [layers, setLayers] = useState<Layer[]>(() => [{ id, opacity: new Animated.Value(1), ready: true }]);
-  const [lastId, setLastId] = useState(id);
-
-  // A new id adds a layer on top, during render rather than in an effect so
-  // the old background never shows for a frame without it. Layers in between
-  // are trimmed.
-  if (lastId !== id) {
-    setLastId(id);
-    setLayers((current) => {
-      // Back to the base before anything above it showed: just drop the rest.
-      if (current[0].id === id && current.slice(1).every((layer) => !layer.ready)) return [current[0]];
-      return [...current.filter((layer) => layer.id !== id), { id, opacity: new Animated.Value(0), ready: false }].slice(-MAX_LAYERS);
-    });
-  }
-  const top = layers[layers.length - 1];
-
-  // The layer left at the bottom is made fully opaque so nothing shows through
-  // it. Done after commit, before paint, so the updater above stays pure and a
-  // discarded render never touches a visible layer.
-  const baseOpacity = layers[0].opacity;
+  // The background on screen. `id` is the one asked for; while the two differ,
+  // the asked-for one loads hidden on top.
+  //
+  // The layers are worked out from `id` and `shown` on every render. Do not
+  // keep them in state and add the new one with a `setState` during render: a
+  // ready call that changes nothing (the first background's own first frame)
+  // waits in React's queue, a click renders at a higher priority and skips it,
+  // and when React replays it the layer added during render is lost. The pick
+  // then never shows until the next one.
+  const [shown, setShown] = useState(id);
+  const wanted = useRef(id);
   useLayoutEffect(() => {
-    baseOpacity.stopAnimation();
-    baseOpacity.setValue(1);
-  }, [baseOpacity]);
+    wanted.current = id;
+  });
 
+  // Only the asked-for background may take over; a late call from any other is ignored.
   const markReady = useCallback((layerId: string) => {
-    setLayers((current) => {
-      const index = current.findIndex((layer) => layer.id === layerId);
-      if (index < 0 || current[index].ready) return current;
-      return current.map((layer, i) => (i === index ? { ...layer, ready: true } : layer));
-    });
+    if (layerId === wanted.current) setShown(layerId);
   }, []);
 
-  // Fallback in case the top layer never reports ready.
+  // Fallback in case the new background never reports ready.
   useEffect(() => {
-    if (top.ready) return undefined;
-    const timer = setTimeout(() => markReady(top.id), READY_FALLBACK_MS);
+    if (id === shown) return undefined;
+    const timer = setTimeout(() => markReady(id), READY_FALLBACK_MS);
     return () => clearTimeout(timer);
-  }, [markReady, top.id, top.ready]);
+  }, [id, markReady, shown]);
 
-  // Fade the top layer in once it is ready, then drop the layers below it.
-  const fading = layers.length > 1 && top.ready ? top : null;
+  // Show the loading cue once the new background has taken a moment.
+  const [slow, setSlow] = useState<string | null>(null);
   useEffect(() => {
-    if (!fading) return undefined;
-    const dropBelow = () => setLayers((current) => {
-      const index = current.findIndex((layer) => layer.id === fading.id);
-      return index > 0 ? current.slice(index) : current;
-    });
-    // Under reduced motion the new background simply replaces the old one.
-    const animation = Animated.timing(fading.opacity, {
-      toValue: 1,
-      duration: reduced ? 0 : FADE_MS,
-      easing: Easing.inOut(Easing.quad),
-      useNativeDriver: true,
-    });
-    animation.start(({ finished }) => {
-      if (finished) dropBelow();
-    });
-    return () => animation.stop();
-  }, [fading, reduced]);
+    if (id === shown) return undefined;
+    const timer = setTimeout(() => setSlow(id), LOADING_CUE_MS);
+    return () => clearTimeout(timer);
+  }, [id, shown]);
+  const loadingId = slow === id && id !== shown ? id : null;
+  useEffect(() => {
+    setLoadingBackground(loadingId);
+  }, [loadingId]);
+  useEffect(() => () => setLoadingBackground(null), []);
 
+  // Only the bottom layer is visible; the one above is loading. Picking again
+  // while one loads replaces the loading one, so there are never more than two.
+  const layers = id === shown ? [shown] : [shown, id];
+  // `markReady` reads the ref only when a background later reports ready, never
+  // while rendering. The rule cannot see into the call.
+  const drawn = layers.map((layerId, i) => (
+    <View key={layerId} style={[StyleSheet.absoluteFill, { opacity: i === 0 ? 1 : 0 }]} pointerEvents="none">
+      {/* eslint-disable-next-line react-hooks/refs */}
+      {render(layerId, () => markReady(layerId))}
+    </View>
+  ));
   return (
     <>
-      {layers.map((layer) => (
-        <Animated.View key={layer.id} style={[StyleSheet.absoluteFill, { opacity: layer.opacity }]} pointerEvents="none">
-          {render(layer.id, () => markReady(layer.id))}
-        </Animated.View>
-      ))}
+      {drawn}
+      {loadingId ? <LoadingCue /> : null}
     </>
   );
 }
+
+// A small pill near the top of the screen, clear of the timer in the middle.
+function LoadingCue() {
+  const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
+  return (
+    <View style={[styles.cueRow, { top: insets.top + 72 }]} pointerEvents="none">
+      <View style={styles.cue} accessible accessibilityLiveRegion="polite" accessibilityLabel="Loading scene">
+        {/* Under reduced motion the words alone say it, without a spinner. */}
+        {reduced ? null : <ActivityIndicator size="small" color={colors.textPrimary} />}
+        <Text style={styles.cueText}>Loading scene…</Text>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  cueRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  cue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.bgSurface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cueText: {
+    color: colors.textPrimary,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+  },
+});

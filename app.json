@@ -13,7 +13,10 @@
     "android": {
       "permissions": [
         "USE_EXACT_ALARM",
-        "SCHEDULE_EXACT_ALARM"
+        "SCHEDULE_EXACT_ALARM",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#130b0e",
@@ -85,10 +88,15 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
       "eas": {
-        "projectId": "3e2ae212-b802-4e0f-8179-756a125bb46d"
+        "projectId": "5f98b8b9-57e7-4794-9490-8e2ce9230074"
       }
-    }
+    },
+    "owner": "cent_1214"
   }
 }

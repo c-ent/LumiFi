@@ -6,6 +6,4 @@ import type { PixelArtId } from '@/components/wickglow/domain/pixel-art-ids';
 // never has to decode the 4K video.
 export const PIXEL_ART: { id: PixelArtId; name: string; source: number; thumb: number }[] = [
   { id: 'aurora', name: 'Aurora', source: require('../../../../assets/backgrounds/pixel-art/aurora_4k.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/pixel_aurora.jpg') },
-  { id: 'meadow', name: 'Meadow', source: require('../../../../assets/backgrounds/pixel-art/meadow_4k.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/pixel_meadow.jpg') },
-  { id: 'mountain', name: 'Mountain', source: require('../../../../assets/backgrounds/pixel-art/mountain_4k.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/pixel_mountain.jpg') },
-];
+  { id: 'meadow', name: 'Meadow', source: require('../../../../assets/backgrounds/pixel-art/meadow_4k.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/pixel_meadow.jpg') },];

@@ -17,7 +17,7 @@ import { SCENES } from '@/components/wickglow/theme';
 // instead (the two systems are still separate; see progress.md).
 export function ScenePicker() {
   const { scene, setScene, videoBg, setVideoBg, pixelBg, setPixelBg } = useWickglow();
-  // The background that is still loading, e.g. `video:rainy_cottage`.
+  // The background that is still loading, e.g. `video:snowy_sled`.
   const loading = useLoadingBackground();
   return (
     <View>

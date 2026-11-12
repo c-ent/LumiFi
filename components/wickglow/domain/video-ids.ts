@@ -5,13 +5,11 @@
 // stored it as the boolean `true`, which parseSavedState maps to 'classic'.
 export const VIDEO_IDS = [
   'classic',
-  'flower_hill_girl',
   'cyberpunk_desk',
   'frog_lily_pond',
   'snowy_sled',
   'mossy_branch',
   'night_hills',
-  'moonlit_city',
 ] as const;
 
 export type VideoId = (typeof VIDEO_IDS)[number];

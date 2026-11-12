@@ -129,8 +129,13 @@ export function MobileWickglow() {
           </View>
         </Pressable>
         <View style={styles.pills}>
-          <View style={styles.pill}><FlameIcon size={14} color={colors.error} /><Text style={styles.pillText}>{lamp.streak}</Text></View>
-          <View style={styles.pill}><ClockIcon size={14} color={colors.textPrimary} /><Text style={styles.pillText}>{lamp.day.minutes}m</Text></View>
+          {/* Both pills open Stats, as they open the progress card on desktop. */}
+          <Pressable accessibilityRole="button" accessibilityLabel={`Streak ${lamp.streak} days. Open stats`} hitSlop={6} style={styles.pill} onPress={() => openTab('stats')}>
+            <FlameIcon size={14} color={colors.error} /><Text style={styles.pillText}>{lamp.streak}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${lamp.day.minutes} minutes today. Open stats`} hitSlop={6} style={styles.pill} onPress={() => openTab('stats')}>
+            <ClockIcon size={14} color={colors.textPrimary} /><Text style={styles.pillText}>{lamp.day.minutes}m</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -311,9 +316,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     zIndex: 5,
   },
+  // Dims the candle and time behind the open sheet so the two never blend.
   backdrop: {
     ...StyleSheet.absoluteFill,
     zIndex: 4,
+    backgroundColor: 'rgba(5, 3, 10, 0.55)',
   },
   levelBtn: {
     flexDirection: 'row',
@@ -430,7 +437,8 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 6,
-    backgroundColor: colors.bgSurface,
+    // Solid, so the candle and time behind never show through the controls.
+    backgroundColor: colors.bgSurfaceSolid,
     borderTopWidth: 1,
     borderColor: colors.border,
     borderTopLeftRadius: radius.sheet,
@@ -478,7 +486,7 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 10,
+    marginTop: 12,
     marginHorizontal: 16,
   },
   round: {
@@ -505,7 +513,7 @@ const styles = StyleSheet.create({
   },
   dock: {
     flexDirection: 'row',
-    marginTop: 8,
+    marginTop: 10,
     marginHorizontal: 8,
   },
   dockBtn: {

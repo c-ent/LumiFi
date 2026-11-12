@@ -293,7 +293,8 @@ export const panelStyles = StyleSheet.create({
   moodBtn: {
     flex: 1,
     borderWidth: 2,
-    borderColor: 'transparent',
+    // A faint edge so each card reads on its own; selected turns it white.
+    borderColor: colors.border,
     backgroundColor: colors.bgCard,
     ...rounded(radius.md),
     alignItems: 'center',
@@ -512,6 +513,11 @@ export const panelStyles = StyleSheet.create({
   },
   sourceTab: {
     flex: 1,
+  },
+  // The Tracks / Streaming row: clear of the mood cards above and the player below.
+  sourceRow: {
+    marginTop: 16,
+    marginBottom: 16,
   },
   fields: {
     flexDirection: 'row',

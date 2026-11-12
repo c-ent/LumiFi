@@ -165,7 +165,7 @@ function SourceTabs({ source, onChange, mobile = false }: { source: MusicSource;
   const selectedStyle = { backgroundColor: tone.solid, borderColor: tone.solid };
   const selectedText = { color: tone.ink };
   return (
-    <View style={styles.presetRow}>
+    <View style={[styles.presetRow, styles.sourceRow]}>
       <Pressable
         accessibilityRole="tab"
         accessibilityState={{ selected: source === 'tracks' }}

@@ -23,7 +23,7 @@ const PHASE_OUT = PHASE_IN.map((p) => (1 - Math.cos(p * 2 * Math.PI)) / 2);
  * blurred orbs that drift slowly, a soft pulsing "core" and a dark shade on
  * top so the UI stays readable. Colors come from the selected scene theme.
  * A chosen video or pixel-art picture replaces all of that, and switching
- * between any two backgrounds crossfades (see crossfade.tsx).
+ * between any two backgrounds swaps at once, with no transition (see crossfade.tsx).
  *
  * It is purely decorative, so the whole thing ignores touches.
  */
@@ -81,7 +81,7 @@ export function SceneBackground() {
     };
   }, [phase, reduced, running]);
 
-  // Which background is showing. A change of id crossfades to the new one.
+  // Which background is showing. A change of id swaps to the new one.
   const look = videoBg ? `video:${videoBg}` : pixelBg ? `pixel:${pixelBg}` : `scene:${sceneTheme.id}`;
 
   const renderLook = (id: string, onReady: () => void) => {
@@ -117,7 +117,7 @@ function GradientScene({ theme, size, drifts, breathe, onReady }: {
 }) {
   // A gradient has nothing to load, so it is ready at once.
   useEffect(() => onReady(), [onReady]);
-  // Two scenes can be on screen during a crossfade, so each gradient id is unique.
+  // Two scenes can be mounted while switching, so each gradient id is unique.
   const gradientId = `scene-${theme.id}`;
   return (
     <>

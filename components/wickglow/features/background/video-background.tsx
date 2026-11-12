@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { AppState, Platform, StyleSheet, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 
@@ -21,6 +21,28 @@ export function VideoBackground({ source = DEFAULT_SOURCE, onReady }: { source?:
     p.muted = true;
   });
 
+  // Web: ask the <video> element itself whether a frame is there, rather than
+  // relying on the first-frame event alone, so a large file that takes a while
+  // to load is only shown once it has a picture (no black flash).
+  const viewRef = useRef<VideoView>(null);
+  const readyRef = useRef(onReady);
+  useEffect(() => {
+    readyRef.current = onReady;
+  });
+  useEffect(() => {
+    if (Platform.OS !== 'web') return undefined;
+    const video = (viewRef.current as unknown as { nativeRef?: { current: HTMLVideoElement | null } } | null)?.nativeRef?.current;
+    if (!video) return undefined;
+    const ready = () => readyRef.current?.();
+    // HAVE_CURRENT_DATA: the first frame is decoded.
+    if (video.readyState >= 2) {
+      ready();
+      return undefined;
+    }
+    video.addEventListener('loadeddata', ready);
+    return () => video.removeEventListener('loadeddata', ready);
+  }, []);
+
   useEffect(() => {
     const sync = (state: string | null | undefined) => {
       if (state === 'active' && !reduced) player.play();
@@ -34,6 +56,7 @@ export function VideoBackground({ source = DEFAULT_SOURCE, onReady }: { source?:
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <VideoView
+        ref={viewRef}
         player={player}
         style={styles.video}
         contentFit="cover"

@@ -5,11 +5,9 @@ import type { VideoId } from '@/components/wickglow/domain/video-ids';
 // frame shown in the scene picker, so the grid never has to decode video.
 export const VIDEOS: { id: VideoId; name: string; source: number; thumb: number }[] = [
   { id: 'classic', name: 'Classic', source: require('../../../../assets/backgrounds/videos/270983_medium.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/classic.jpg') },
-  { id: 'desktop_windows', name: 'Desktop Windows', source: require('../../../../assets/backgrounds/videos/desktop_windows.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/desktop_windows.jpg') },
-  { id: 'cherry_blossom_cottage', name: 'Cherry Blossom Cottage', source: require('../../../../assets/backgrounds/videos/cherry_blossom_cottage.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/cherry_blossom_cottage.jpg') },
-  { id: 'flower_hill_girl', name: 'Flower Hill', source: require('../../../../assets/backgrounds/videos/flower_hill_girl.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/flower_hill_girl.jpg') },
   { id: 'cyberpunk_desk', name: 'Cyberpunk Desk', source: require('../../../../assets/backgrounds/videos/cyberpunk_desk.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/cyberpunk_desk.jpg') },
-  { id: 'rainy_cottage', name: 'Rainy Cottage', source: require('../../../../assets/backgrounds/videos/rainy_cottage.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/rainy_cottage.jpg') },
   { id: 'frog_lily_pond', name: 'Frog Pond', source: require('../../../../assets/backgrounds/videos/frog_lily_pond.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/frog_lily_pond.jpg') },
-  { id: 'twilight_skyline', name: 'Twilight Skyline', source: require('../../../../assets/backgrounds/videos/twilight_skyline.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/twilight_skyline.jpg') },
+  { id: 'snowy_sled', name: 'Snowy Sled', source: require('../../../../assets/backgrounds/videos/snowy_sled.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/snowy_sled.jpg') },
+  { id: 'mossy_branch', name: 'Mossy Branch', source: require('../../../../assets/backgrounds/videos/mossy_branch.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/mossy_branch.jpg') },
+  { id: 'night_hills', name: 'Night Hills', source: require('../../../../assets/backgrounds/videos/night_hills.mp4'), thumb: require('../../../../assets/backgrounds/thumbnails/night_hills.jpg') },
 ];

@@ -15,7 +15,7 @@ Applies to the streak and the four-session quest. Only a focus session of at lea
 
 ## Order
 
-The order was updated on 2026-11-03 and is recorded in `progress.md`. #1, #4 and #8 have shipped (#4 on 2026-11-04). #2 and #3 were removed by the owner on 2026-11-04. #6 and #7 are out. #5, #10, and #11 are last.
+The order was updated on 2026-11-03 and is recorded in `progress.md`. #1, #4 and #8 have shipped (#4 on 2026-11-04). #2 and #3 were removed by the owner on 2026-11-04. #6 and #7 are out. #5, #9, #10 and #11 were dropped by the owner on 2026-11-10.
 
 | #   | Feature                                 | Version | Status                      | Depends on                                                |
 | --- | --------------------------------------- | ------- | --------------------------- | --------------------------------------------------------- |
@@ -24,14 +24,14 @@ The order was updated on 2026-11-03 and is recorded in `progress.md`. #1, #4 and
 | 2   | Unlocks (XP lights the room)            | —       | Removed 2026-11-04          | —                                                         |
 | 3   | Goal-linked quests                      | —       | Removed 2026-11-04          | —                                                         |
 | 4   | Calendar stats                          | v2      | Shipped 2026-11-04          | v1 daily minutes history                                  |
-| 9   | Optional cosmetics or one-time purchase | v3      | Unscheduled                 | —                                                         |
+| 9   | Optional cosmetics or one-time purchase | —       | Out (owner, 2026-11-10)     | —                                                         |
 | 6   | Study pets                              | —       | Out                         | v1 (server drops after #5)                                |
 | 7   | Achievements                            | —       | Out                         | —                                                         |
-| 5   | Accounts and sync                       | v4      | Unscheduled                 | v1 to v3 shipped, enough users, a moderation plan         |
-| 10  | Private circles (friends' candles)      | v4      | Unscheduled                 | #5                                                        |
-| 11  | Focus rooms                             | v4      | Unscheduled                 | #5, #10, users and moderation                             |
+| 5   | Accounts and sync                       | —       | Out (owner, 2026-11-10)     | —                                                         |
+| 10  | Private circles (friends' candles)      | —       | Out (owner, 2026-11-10)     | —                                                         |
+| 11  | Focus rooms                             | —       | Out (owner, 2026-11-10)     | —                                                         |
 
-#1, #4 and #8 have shipped. #2 and #3 were removed. #6 and #7 are out. #5, #10, and #11 are last.
+#1, #4 and #8 have shipped. #2 and #3 were removed. #6 and #7 are out. #5, #9, #10 and #11 were dropped by the owner on 2026-11-10; their sections below are history only.
 
 ## v2
 
@@ -103,23 +103,25 @@ Terms read 2026-11-03, before the code:
 - Apple Music (the embeddable player, not MusicKit): `embed.music.apple.com`. Signed out, a short preview. Full tracks need the listener's own Apple Music session inside that player. MusicKit would be a playback SDK and a sign-in, so it is not used.
 - YouTube Music: no embed and no oEmbed. A `music.youtube.com` link is stored and opened. A normal `youtube.com` playlist is the YouTube player.
 
-Shipped: paste a public link. The save stores the link and the service name. The music panel splits Tracks and Streaming, and adding a link opens that service's player immediately. Spotify, YouTube, and Apple Music show that service's player on the scene, so it keeps playing when the panel closes or the ambient mixer opens. The player keeps its default height and cannot be collapsed; the owner removed Minimize on 2026-11-07. On the web, Spotify and Apple Music keep playing in a hidden browser tab. YouTube's frame still leaves when the page is hidden, and on Android and iOS every embed still leaves when the app leaves the screen. YouTube Music opens. Starting an embed pauses the local `expo-audio` player, and closing it can resume. A private or unrecognized link fails with a short message. If the embed cannot play on Android, the link opens in that service's app. Session-end volume and fade stay on the local player. The timer, XP, and quests stay on the session clock. Pure parsing is in `src/core/stream-links.ts`.
+Shipped: paste a public link. The save stores the link and the service name. The music panel splits Tracks and Streaming, and adding a link opens that service's player immediately. Spotify, YouTube, and Apple Music show that service's player on the scene, so it keeps playing when the panel closes or the ambient mixer opens. The player keeps its default height and cannot be collapsed; the owner removed Minimize on 2026-11-07. On the web, Spotify and Apple Music keep playing in a hidden browser tab. YouTube's frame still leaves when the page is hidden, and on Android and iOS every embed still leaves when the app leaves the screen. YouTube Music opens. Starting an embed pauses the local `expo-audio` player, and closing it can resume. A private or unrecognized link fails with a short message. If the embed cannot play on Android, the player shows an "Open link" button and never opens the service app on its own (changed 2026-11-11). Session-end volume and fade stay on the local player. The timer, XP, and quests stay on the session clock. Pure parsing is in `src/core/stream-links.ts`.
 
 Open questions: whether links can be shared in rooms. The privacy-policy line Spotify's widget terms ask for, before release.
 
-## v3
+## v3 (dropped)
 
 ### 9. Optional cosmetics or one-time purchase
 
+Out as of 2026-11-10 by owner decision. Kept here only as a record; do not build it.
+
 The core timer, tasks, sounds and progression stay free, because reviewers complain about paywalled features. Ask first before anything paid. Open: model, store billing, what counts as cosmetic.
 
-## v4 (last version: multiplayer)
+## v4 (dropped: multiplayer)
 
-Do not start v4 until v1 to v3 have shipped, there are enough users, and there is a plan for moderation. Accounts and sync is the first step here, and it ships before private circles and focus rooms. Circles and rooms need other people using the app.
+Out as of 2026-11-10 by owner decision: accounts and sync, private circles and focus rooms. The sections below are kept only as a record of what was proposed; do not build them.
 
 ### 5. Accounts and sync
 
-Deferred as of 2026-11-03 to this v4 work, where it is the first step rather than a standalone earlier item. It is not "waiting for" rooms: #10 and #11 depend on it, so it ships before them. Nothing here is scheduled until the preconditions above are met.
+Out as of 2026-11-10. Historical spec only.
 
 Behavior:
 
@@ -135,7 +137,7 @@ Open questions: sign-in methods (email, Google). Merge rule when the device and 
 
 ### 10. Private circles (friends' candles)
 
-An idea from the research author, not validated by users.
+Out as of 2026-11-10. Historical spec only. An idea from the research author, not validated by users.
 
 Behavior: a small invite-only group. Each friend's candle burns while that friend is in a focus session. No chat by default.
 
@@ -143,7 +145,7 @@ Open questions: how invites work. Whether presence can be hidden. Whether friend
 
 ### 11. Focus rooms
 
-Do not start until there are enough users, moderation and a community. Must-haves from the research:
+Out as of 2026-11-10. Historical spec only. Must-haves from the research:
 
 - Transfer host: the host can hand the role to another member. If the host leaves or is removed, the role passes on and the room and its Pomodoro timer are not lost.
 - Chat can be turned off. No red unread dot or badge ever shows during a focus phase.

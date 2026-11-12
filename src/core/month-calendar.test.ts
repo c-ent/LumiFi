@@ -159,4 +159,15 @@ describe('monthShade', () => {
     expect([0, 1, 24, 25, 59, 60, 240].map(monthShade)).toEqual([0, 1, 1, 2, 2, 3, 3]);
     expect(monthShade(-5)).toBe(0);
   });
+
+  it('does not mark a padding day from the next month as today', () => {
+    // 1 November 2026 pads the last week of October's grid.
+    const now = new Date(2026, 10, 1, 9).getTime();
+    const october = monthGrid(now, {}, 2026, 9);
+    const padded = october.weeks.flat().find((cell) => cell.key === calendarKey(now));
+    expect(padded?.inMonth).toBe(false);
+    expect(padded?.today).toBe(false);
+    const november = monthGrid(now, {}, 2026, 10);
+    expect(november.weeks.flat().find((cell) => cell.key === calendarKey(now))?.today).toBe(true);
+  });
 });

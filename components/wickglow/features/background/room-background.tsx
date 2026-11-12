@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import type { VideoId } from '@/components/wickglow/domain/video-ids';
 import { Crossfade } from '@/components/wickglow/features/background/crossfade';
 import { FillGradient } from '@/components/wickglow/features/background/fill-gradient';
@@ -27,10 +27,10 @@ export function RoomBackground({ video = true }: { video?: boolean }) {
 }
 
 function MoodGradient({ mood, onReady }: { mood: MoodTheme; onReady: () => void }) {
-  // A gradient has nothing to load, so it is ready at once.
-  useEffect(() => onReady(), [onReady]);
+  // Ready once FillGradient has measured itself and drawn.
   return (
     <FillGradient
+      onReady={onReady}
       // Two moods can be mounted while switching, so each gradient id is unique.
       id={`room-${mood.id}`}
       stops={[

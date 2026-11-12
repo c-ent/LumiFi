@@ -33,7 +33,11 @@ import { useTone } from '@/components/wickglow/features/tone';
  * user can add hundreds of their own files, and a plain mapped list would
  * mount every row (each with an SVG tile) at once.
  */
-type MusicSource = 'tracks' | 'streaming';
+// Which view the phone/tablet Sounds page shows. 'ambient' only exists when
+// the screen passes `ambient` (the phone does; see SoundsScroller).
+type MusicSource = 'tracks' | 'streaming' | 'ambient';
+
+const SOURCE_LABEL: Record<MusicSource, string> = { tracks: 'Tracks', streaming: 'Streaming', ambient: 'Ambient' };
 
 // Tile washes for playlist rows. These are art, not theme accents.
 const ART = ['#FFB454', '#FF8246', '#F06E6E', '#96C878', '#AA8CF0'] as const;
@@ -83,6 +87,9 @@ const NO_TRACKS: PlaylistEntry[] = [];
  * the quests and calendar). It looks like the single scrolling page it
  * replaced, but only the rows near the screen are mounted.
  *
+ * With `ambient` (the phone), the switch gains a third view, Ambient, that
+ * shows only that content, so Tracks and Streaming stay short.
+ *
  * It has to be the scroller itself: a virtualised list placed inside another
  * vertical ScrollView is given unlimited height and mounts every row anyway.
  * So the screen renders this in place of its ScrollView, not inside it.
@@ -91,6 +98,7 @@ export function SoundsScroller({
   mobile = false,
   before,
   after,
+  ambient,
   contentContainerStyle,
 }: {
   mobile?: boolean;
@@ -98,6 +106,8 @@ export function SoundsScroller({
   before?: React.ReactNode;
   /** Rendered below the track list (or below the streaming block). */
   after?: React.ReactNode;
+  /** When given, an Ambient view that shows this alone (`before` and `after` hide there). */
+  ambient?: React.ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
 }) {
   const tone = useTone(mobile);
@@ -120,22 +130,30 @@ export function SoundsScroller({
       ItemSeparatorComponent={RowGap}
       ListHeaderComponent={(
         <View>
-          {before}
-          <SourceTabs source={source} onChange={setSource} mobile={mobile} />
+          {source === 'ambient' ? null : before}
+          <SourceTabs
+            source={source}
+            options={ambient ? ['tracks', 'streaming', 'ambient'] : ['tracks', 'streaming']}
+            onChange={setSource}
+            mobile={mobile}
+            first={!before || source === 'ambient'}
+          />
           {source === 'tracks' ? (
             <>
               <NowPlaying mobile={mobile} />
               <PlaylistHead />
             </>
-          ) : (
+          ) : source === 'streaming' ? (
             <StreamBlock mobile={mobile} />
+          ) : (
+            ambient
           )}
         </View>
       )}
       ListFooterComponent={(
         <View>
           {source === 'tracks' ? <FilesNote /> : null}
-          {after}
+          {source === 'ambient' ? null : after}
         </View>
       )}
       renderItem={({ item, index }) => (
@@ -159,31 +177,38 @@ function RowGap() {
   return <View style={wideStyles.rowGap} />;
 }
 
-// The Tracks / Streaming switch above the player on phone and tablet.
-function SourceTabs({ source, onChange, mobile = false }: { source: MusicSource; onChange: (next: MusicSource) => void; mobile?: boolean }) {
+// The Tracks / Streaming (/ Ambient) switch at the top of the Sounds page on
+// phone and tablet. `first` drops the top margin when nothing sits above it.
+function SourceTabs({
+  source,
+  options,
+  onChange,
+  mobile = false,
+  first = false,
+}: {
+  source: MusicSource;
+  options: MusicSource[];
+  onChange: (next: MusicSource) => void;
+  mobile?: boolean;
+  first?: boolean;
+}) {
   const tone = useTone(mobile);
   const selectedStyle = { backgroundColor: tone.solid, borderColor: tone.solid };
   const selectedText = { color: tone.ink };
   return (
-    <View style={styles.presetRow}>
-      <Pressable
-        accessibilityRole="tab"
-        accessibilityState={{ selected: source === 'tracks' }}
-        accessibilityLabel="Tracks"
-        onPress={() => onChange('tracks')}
-        style={[styles.preset, styles.sourceTab, source === 'tracks' ? selectedStyle : null]}
-      >
-        <Text style={[styles.miniText, source === 'tracks' ? selectedText : null]}>Tracks</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="tab"
-        accessibilityState={{ selected: source === 'streaming' }}
-        accessibilityLabel="Streaming"
-        onPress={() => onChange('streaming')}
-        style={[styles.preset, styles.sourceTab, source === 'streaming' ? selectedStyle : null]}
-      >
-        <Text style={[styles.miniText, source === 'streaming' ? selectedText : null]}>Streaming</Text>
-      </Pressable>
+    <View style={[styles.presetRow, styles.sourceRow, first ? styles.sourceRowFirst : null]}>
+      {options.map((item) => (
+        <Pressable
+          key={item}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: source === item }}
+          accessibilityLabel={SOURCE_LABEL[item]}
+          onPress={() => onChange(item)}
+          style={[styles.preset, styles.sourceTab, source === item ? selectedStyle : null]}
+        >
+          <Text style={[styles.miniText, source === item ? selectedText : null]}>{SOURCE_LABEL[item]}</Text>
+        </Pressable>
+      ))}
     </View>
   );
 }

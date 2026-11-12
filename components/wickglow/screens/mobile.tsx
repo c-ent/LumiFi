@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +12,7 @@ import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { sessionFace } from '@/src/core/session-face';
-import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
+import { colors, fade as tint, fonts, radius, rounded } from '@/src/theme/tokens';
 import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset';
 import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
@@ -33,15 +34,19 @@ import { SoundsScroller } from '@/components/wickglow/features/audio/music-block
 import { openStreamEmbed, StreamStage, streamCardHeight } from '@/components/wickglow/features/audio/stream-stage';
 import { SessionEndCard } from '@/components/wickglow/features/timer/session-end-card';
 import { TimeText } from '@/components/wickglow/features/timer/time-text';
-import { BarsIcon, ClockIcon, FlameIcon, MusicIcon, ResetIcon, SkipIcon, StarIcon, TaskIcon, TimerIcon } from '@/components/wickglow/shared/icons';
+import { BarsIcon, ClockIcon, CloseIcon, FlameIcon, MusicIcon, PauseIcon, PlayIcon, ResetIcon, SkipIcon, StarIcon, TaskIcon, TimerIcon } from '@/components/wickglow/shared/icons';
 
 /**
- * The phone layout (window under 600px wide): a big candle, the time, and a
- * bottom sheet that slides up with the controls.
+ * The phone layout (window under 600px wide). The home screen is the timer:
+ * level and streak on top, the mode tabs, the candle, the time and its
+ * controls. A tab bar is fixed at the bottom; picking a tab slides a sheet up
+ * from behind it holding only that tab's content, with a one-line timer at
+ * its top. Tapping the open tab, the close button or the dimmed area closes it.
  *
- * Layers, back to front: rain, gradient background, top bar (level + streak),
- * the candle stage, the floating stream player, the bottom sheet, then the
- * session-end card and toast on top. `lamp` is the app context (logic.tsx).
+ * Layers, back to front: rain, gradient background, top bar, the candle stage,
+ * the dim behind an open sheet, the floating stream player, the sheet, the tab
+ * bar, then the session-end card and toast on top. `lamp` is the app context
+ * (logic.tsx).
  *
  * The tablet (tablet.tsx) and desktop (desktop.tsx) screens follow the same
  * recipe with a different arrangement; phone/tablet use "moods", desktop
@@ -50,6 +55,30 @@ import { BarsIcon, ClockIcon, FlameIcon, MusicIcon, ResetIcon, SkipIcon, StarIco
 
 // The sheet shows one tab at a time.
 type SheetTab = 'tasks' | 'sounds' | 'quests' | 'stats' | 'timer';
+
+// The tab bar's height above the home-indicator inset.
+const TAB_BAR_HEIGHT = 64;
+
+// The phone glass. Web gets a real blur, so its bars and sheet can be clear;
+// native has none, so they use a stronger tint to stay readable.
+const web = Platform.OS === 'web';
+const blur = (px: number) => (web ? { backdropFilter: `blur(${px}px) saturate(140%)` } : null);
+// Floating surfaces: the tab bar and the sheet.
+const glassSurface = {
+  backgroundColor: web ? colors.glassTint : colors.glassTintSolid,
+  borderWidth: 1,
+  borderColor: colors.glassEdge,
+  // A brighter top edge, like light catching the glass.
+  borderTopColor: colors.glassEdgeOn,
+  ...blur(24),
+};
+// Buttons, pills and the mode tabs: a faint frost, never white.
+const glassControl = {
+  backgroundColor: colors.glassFill,
+  borderWidth: 1,
+  borderColor: colors.glassEdge,
+  ...blur(16),
+};
 
 export function MobileWickglow() {
   const lamp = useWickglow();
@@ -60,37 +89,53 @@ export function MobileWickglow() {
   const { height } = useWindowDimensions();
   // How far the on-screen keyboard covers the bottom, so the sheet can rise above it.
   const keyboard = useKeyboardInset();
-  const [open, setOpen] = useState(false); // sheet expanded?
+  const [open, setOpen] = useState(false); // sheet up?
   const [tab, setTab] = useState<SheetTab>('tasks');
+  // The sheet's content stays mounted while it slides down, so it does not
+  // empty itself on the way out. Set when a tab opens, cleared after the slide.
+  const [mounted, setMounted] = useState(false);
+  const shown = open || mounted;
   // "Zen": while focusing with the sheet closed, the UI fades away after 4s
   // of no touches. Any touch counts as activity (`poke`).
   const { zen, poke } = useZen(lamp.running && lamp.mode === 'focus' && lamp.zenOpt && !open, 4000);
   // Reanimated shared value driving the sheet's slide (runs on the UI thread).
-  const sheetOffset = useSharedValue(0);
+  const sheetOffset = useSharedValue(1);
   const mood = lamp.moodTheme;
-  // The sheet is always fully built at `expanded` height and slid down by
-  // (expanded - collapsed) px, so only the top `collapsed` px peek out.
-  const collapsed = 214 + insets.bottom;
-  // A playing stream embed needs room at the top; shrink the stage and sheet to fit.
+  // The tab bar floats a little above the bottom edge (or the home indicator).
+  const barGap = insets.bottom + 12;
+  const tabBar = TAB_BAR_HEIGHT + barGap;
+  // The sheet reaches the bottom edge, under the floating tab bar, or sits on
+  // the keyboard while typing (the tab bar hides then).
+  const sheetBottom = keyboard;
+  const typing = keyboard > 0;
+  // Room at the end of the sheet's content so the last row clears the tab bar.
+  const bodyContent = [styles.bodyContent, { paddingBottom: typing ? 24 : tabBar + 16 }];
+  // A playing stream embed floats near the top; the stage and sheet make room for it.
   const embed = openStreamEmbed(lamp.streamLinks, lamp.activeStreamId);
   const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
-  const playerTop = insets.top + 72;
-  const fittedSheet = height - playerTop - playerReserve - 8;
-  // The sheet rises above the keyboard, so its open height is also capped to the
-  // space between the status bar and the keyboard.
-  const available = Math.max(collapsed, height - keyboard - insets.top - 8);
-  const expanded = playerReserve > 0
-    ? Math.min(height * 0.84, 760, available, Math.max(collapsed, fittedSheet))
-    : Math.min(height * 0.84, 760, available);
+  // Below the top bar (12 + 46) and the mode tabs (14 + 46), with a small gap.
+  const playerTop = insets.top + 128;
+  const streamRoof = playerTop + playerReserve + 8;
+  // Too little room under the player for a usable sheet (the keyboard is up on
+  // a short screen): the sheet takes the full height and the player tucks
+  // behind it, still mounted and playing, instead of covering the sheet's top.
+  const cramped = playerReserve > 0 && height - sheetBottom - streamRoof < 200;
+  const roof = playerReserve > 0 && !cramped ? streamRoof : insets.top + 12;
+  const sheetHeight = Math.max(200, Math.min(height * 0.8, 760, height - sheetBottom - roof));
 
-  // Slide the sheet up/down whenever it opens, closes or resizes.
+  // Slide the sheet up, or down behind the tab bar.
   useEffect(() => {
-    sheetOffset.set(withTiming(open ? 0 : expanded - collapsed, { duration: 380 }));
-  }, [collapsed, expanded, open, sheetOffset]);
+    sheetOffset.set(withTiming(open ? 0 : 1, { duration: 320 }));
+    if (open) return undefined;
+    const timer = setTimeout(() => setMounted(false), 340);
+    return () => clearTimeout(timer);
+  }, [open, sheetOffset]);
 
   const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: sheetOffset.get() }],
+    // Fully down = moved its own height plus a little, so no edge peeks out.
+    transform: [{ translateY: sheetOffset.get() * (sheetHeight + 24) }],
   }));
+  const dimStyle = useAnimatedStyle(() => ({ opacity: 1 - sheetOffset.get() }));
   // idle = nothing started; "paused" is not idle (it has time already spent).
   const idle = lamp.status === 'idle';
   // The start label, "Focus · 2 of 4", the lit pips and the focus chip.
@@ -100,15 +145,22 @@ export function MobileWickglow() {
   );
   // Dot on the Quests tab while any daily quest is unclaimed.
   const questOpen = hasOpenQuests(lamp.day);
+  const fade = { opacity: zen ? 0 : 1 };
+  const touch = zen ? 'none' : 'auto';
 
-  // Tapping the active tab closes the sheet; any other tab switches to it and opens.
+  // Tapping the open tab closes the sheet; any other tab switches to it and opens.
   const openTab = (next: SheetTab) => {
     poke();
     if (open && tab === next) setOpen(false);
     else {
       setTab(next);
       setOpen(true);
+      setMounted(true);
     }
+  };
+  const close = () => {
+    poke();
+    setOpen(false);
   };
 
   return (
@@ -117,10 +169,10 @@ export function MobileWickglow() {
       <RainOverlay amount={lamp.mix.rain} />
       <RoomBackground video={false} />
 
-      {/* Top bar: level ring (opens Stats) and streak / minutes-today pills.
-          Hidden elements also get pointerEvents="none" so invisible buttons
-          can't be tapped by accident. */}
-      <View style={[styles.top, { paddingTop: insets.top + 12, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
+      {/* Top bar: level ring and the streak / minutes-today pills, all opening
+          Stats. Hidden elements also get pointerEvents="none" so invisible
+          buttons can't be tapped by accident. */}
+      <View style={[styles.top, { paddingTop: insets.top + 12 }, fade]} pointerEvents={touch}>
         <Pressable accessibilityRole="button" accessibilityLabel="Open stats" style={styles.levelBtn} onPress={() => openTab('stats')}>
           <LevelRing progress={lamp.xpInLevel / lamp.xpNeeded} color={mood.accent} level={lamp.level} />
           <View>
@@ -129,19 +181,31 @@ export function MobileWickglow() {
           </View>
         </Pressable>
         <View style={styles.pills}>
-          <View style={styles.pill}><FlameIcon size={14} color={colors.error} /><Text style={styles.pillText}>{lamp.streak}</Text></View>
-          <View style={styles.pill}><ClockIcon size={14} color={colors.textPrimary} /><Text style={styles.pillText}>{lamp.day.minutes}m</Text></View>
+          {/* Both pills open Stats, as they open the progress card on desktop. */}
+          <Pressable accessibilityRole="button" accessibilityLabel={`Streak ${lamp.streak} days. Open stats`} hitSlop={6} style={styles.pill} onPress={() => openTab('stats')}>
+            <FlameIcon size={14} color={colors.error} /><Text style={styles.pillText}>{lamp.streak}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${lamp.day.minutes} minutes today. Open stats`} hitSlop={6} style={styles.pill} onPress={() => openTab('stats')}>
+            <ClockIcon size={14} color={colors.textPrimary} /><Text style={styles.pillText}>{lamp.day.minutes}m</Text>
+          </Pressable>
         </View>
       </View>
 
-      {/* While the sheet is open, tapping the dimmed area behind it closes it. */}
-      {open ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Close panel" onPress={() => { poke(); setOpen(false); }} style={styles.backdrop} />
-      ) : null}
+      {/* Mode tabs, under the top bar. */}
+      <View style={[styles.modes, fade]} pointerEvents={touch}>
+        {(['focus', 'short', 'long'] as TimerMode[]).map((item) => {
+          const selected = lamp.mode === item;
+          return (
+            <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${MODE_LABEL[item]} timer`} key={item} onPress={() => setMode(item)} style={[styles.mode, selected && styles.modeOn]}>
+              <Text style={[styles.modeText, selected && styles.modeTextOn]}>{MODE_LABEL[item]}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
-      {/* Stage: the candle IS the start/pause button. Bottom padding keeps it
-          clear of the collapsed sheet. */}
-      <View style={[styles.stage, { paddingBottom: collapsed + 8, paddingTop: playerReserve }]}>
+      {/* Stage: the candle (also a start/pause button), the time, the controls
+          and the cycle. Bottom padding keeps it clear of the tab bar. */}
+      <View style={[styles.stage, { paddingBottom: tabBar + 20, paddingTop: playerReserve }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={styles.candleBtn} onPress={toggle}>
           <SessionCandle
             lit={lamp.running}
@@ -156,13 +220,6 @@ export function MobileWickglow() {
         </Pressable>
         <TimeText style={styles.time} />
         <Text style={styles.phase}>{face.cycleLine}</Text>
-        <FocusLine
-          mode={face.chip.kind}
-          text={face.chip.text}
-          accent={mood.accent}
-          zen={zen}
-          onPress={lamp.mode === 'focus' ? () => openTab('tasks') : undefined}
-        />
         {/* Four mini candles = progress through the 4-session cycle. */}
         <View style={styles.pips}>
           {[0, 1, 2, 3].map((index) => (
@@ -172,52 +229,74 @@ export function MobileWickglow() {
             </View>
           ))}
         </View>
+        <View style={styles.actions}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={[styles.round, fade]} pointerEvents={touch} onPress={reset}><ResetIcon color={colors.textPrimary} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={[styles.start, { backgroundColor: tint(mood.accent, 0.24), borderColor: tint(mood.accent, 0.6) }]} onPress={toggle}>
+            <Text style={styles.startText}>{face.startLabel}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={[styles.round, fade]} pointerEvents={touch} onPress={skip}><SkipIcon color={colors.textPrimary} /></Pressable>
+        </View>
+        <FocusLine
+          mode={face.chip.kind}
+          text={face.chip.text}
+          accent={mood.accent}
+          zen={zen}
+          onPress={lamp.mode === 'focus' ? () => openTab('tasks') : undefined}
+        />
       </View>
+
+      {/* While the sheet is up, the screen behind dims and a tap on it closes the sheet. */}
+      {shown ? (
+        <Reanimated.View style={[styles.dim, dimStyle]} pointerEvents={open ? 'auto' : 'none'}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close panel" onPress={close} style={StyleSheet.absoluteFill} />
+        </Reanimated.View>
+      ) : null}
 
       {/* Playing Spotify/YouTube/Apple Music embed floats near the top. It lives
           here (not inside a tab) so closing the sheet doesn't stop the stream. */}
-      <StreamStage style={[styles.stream, { top: playerTop }]} />
+      <StreamStage style={[styles.stream, { top: playerTop }, cramped && open ? styles.streamTucked : null]} />
 
-      {/* Bottom sheet: grab handle, mode tabs, start/reset/skip, dock, and the
-          scrollable tab body. Slid by `sheetStyle`; lifted by `keyboard`. */}
-      <Reanimated.View style={[styles.sheet, { height: expanded, bottom: keyboard }, sheetStyle]}>
-        <Pressable accessibilityRole="button" accessibilityLabel={open ? 'Collapse controls' : 'Expand controls'} style={styles.grab} onPress={() => { poke(); setOpen((value) => !value); }}>
+      {/* The sheet: a one-line timer, then the open tab's content. It slides up
+          from behind the tab bar, and rides above the keyboard while typing. */}
+      {/* Closed, the sheet is hidden from screen readers, and its controls are
+          not rendered at all once it has slid away, so none can take focus. */}
+      <Reanimated.View
+        style={[styles.sheet, { height: sheetHeight, bottom: sheetBottom }, sheetStyle]}
+        pointerEvents={open ? 'auto' : 'none'}
+        accessibilityElementsHidden={!open}
+        importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
+        aria-hidden={!open}
+      >
+        {shown ? (
+        <>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close panel" style={styles.grab} onPress={close}>
           <View style={styles.grabBar} />
         </Pressable>
-        <View style={[styles.modes, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
-          {(['focus', 'short', 'long'] as TimerMode[]).map((item) => {
-            const selected = lamp.mode === item;
-            return (
-              <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${MODE_LABEL[item]} timer`} key={item} onPress={() => setMode(item)} style={[styles.mode, selected && styles.modeOn]}>
-                <Text style={[styles.modeText, selected && styles.modeTextOn]}>{MODE_LABEL[item]}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <View style={styles.actions}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Reset timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={reset}><ResetIcon color={colors.textPrimary} /></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={[styles.start, { backgroundColor: mood.accent }]} onPress={toggle}>
-            <Text style={styles.startText}>{face.startLabel}</Text>
+        <View style={styles.mini}>
+          <View style={[styles.miniFlame, { backgroundColor: lamp.running ? mood.flame2 : colors.textMuted }]} />
+          <TimeText style={styles.miniTime} />
+          <Text style={styles.miniLabel} numberOfLines={1}>{MODE_LABEL[lamp.mode]}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={[styles.miniBtn, { backgroundColor: tint(mood.accent, 0.24), borderColor: tint(mood.accent, 0.6) }]} onPress={toggle}>
+            {lamp.running ? <PauseIcon color={colors.textPrimary} size={16} /> : <PlayIcon color={colors.textPrimary} size={16} />}
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Skip timer" style={[styles.round, { opacity: zen ? 0 : 1 }]} onPress={skip}><SkipIcon color={colors.textPrimary} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close panel" style={styles.miniClose} onPress={close}>
+            <CloseIcon color={colors.textMuted} size={18} />
+          </Pressable>
         </View>
-        <View style={[styles.dock, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
-          <DockItem label="Tasks" active={open && tab === 'tasks'} color={mood.accent} onPress={() => openTab('tasks')}><TaskIcon size={20} /></DockItem>
-          <DockItem label="Sounds" active={open && tab === 'sounds'} color={mood.accent} dot={lamp.musicPlaying || lamp.activeStreamId != null} onPress={() => openTab('sounds')}><MusicIcon size={20} /></DockItem>
-          <DockItem label="Quests" active={open && tab === 'quests'} color={mood.accent} dot={questOpen} onPress={() => openTab('quests')}><StarIcon size={20} /></DockItem>
-          <DockItem label="Stats" active={open && tab === 'stats'} color={mood.accent} onPress={() => openTab('stats')}><BarsIcon size={20} /></DockItem>
-          <DockItem label="Timer" active={open && tab === 'timer'} color={mood.accent} onPress={() => openTab('timer')}><TimerIcon size={20} /></DockItem>
-        </View>
+        </>
+        ) : null}
         {/* The Sounds tab is a virtualised list (the track rows), so it is the
             scroller itself rather than a block inside the ScrollView below. */}
-        {open && tab === 'sounds' ? (
+        {shown && tab === 'sounds' ? (
           <View style={styles.body}>
-            <SoundsScroller mobile before={<MoodPicker />} after={<MixerBlock mobile />} contentContainerStyle={styles.bodyContent} />
+            {/* Tracks, Streaming and Ambient each show alone. Ambient holds the
+                mood (the look) and the ambient loops, the two that set the room. */}
+            <SoundsScroller mobile ambient={<View><MoodPicker /><MixerBlock mobile /></View>} contentContainerStyle={bodyContent} />
           </View>
-        ) : open ? (
+        ) : shown ? (
           <ScrollView
             style={styles.body}
-            contentContainerStyle={styles.bodyContent}
+            contentContainerStyle={bodyContent}
             // "handled": a tap on a button while the keyboard is open works on the
             // first tap, instead of only dismissing the keyboard.
             keyboardShouldPersistTaps="handled"
@@ -229,6 +308,15 @@ export function MobileWickglow() {
           </ScrollView>
         ) : null}
       </Reanimated.View>
+
+      {/* Tab bar, fixed at the bottom. It fades with zen like the rest. */}
+      <View style={[styles.tabBar, { bottom: barGap }, fade, typing && styles.hidden]} pointerEvents={typing ? 'none' : touch}>
+        <DockItem label="Tasks" active={open && tab === 'tasks'} color={mood.accent} onPress={() => openTab('tasks')}><TaskIcon size={20} /></DockItem>
+        <DockItem label="Sounds" active={open && tab === 'sounds'} color={mood.accent} dot={lamp.musicPlaying || lamp.activeStreamId != null} onPress={() => openTab('sounds')}><MusicIcon size={20} /></DockItem>
+        <DockItem label="Quests" active={open && tab === 'quests'} color={mood.accent} dot={questOpen} onPress={() => openTab('quests')}><StarIcon size={20} /></DockItem>
+        <DockItem label="Stats" active={open && tab === 'stats'} color={mood.accent} onPress={() => openTab('stats')}><BarsIcon size={20} /></DockItem>
+        <DockItem label="Timer" active={open && tab === 'timer'} color={mood.accent} onPress={() => openTab('timer')}><TimerIcon size={20} /></DockItem>
+      </View>
 
       {/* Gentle end-of-session card, and a short toast for XP / quest messages. */}
       {lamp.ending ? (
@@ -293,7 +381,7 @@ function DockItem({ children, label, active, color, dot, onPress }: { children: 
       {React.isValidElement(children)
         ? React.cloneElement(children as React.ReactElement<{ color?: string }>, { color: active ? color : colors.textMuted })
         : children}
-      <Text style={[styles.dockLabel, active && { color }]}>{label}</Text>
+      <Text style={[styles.dockLabel, active && styles.dockLabelOn]}>{label}</Text>
       {dot ? <View style={[styles.dot, { backgroundColor: color }]} /> : null}
     </Pressable>
   );
@@ -311,9 +399,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     zIndex: 5,
   },
-  backdrop: {
+  // Dims the candle and time behind the open sheet so the two never blend.
+  dim: {
     ...StyleSheet.absoluteFill,
     zIndex: 4,
+    backgroundColor: 'rgba(5, 3, 10, 0.6)',
   },
   levelBtn: {
     flexDirection: 'row',
@@ -336,12 +426,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pill: {
-    minHeight: 34,
-    paddingHorizontal: 12,
+    minHeight: 36,
+    paddingHorizontal: 13,
     ...rounded(radius.pill),
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...glassControl,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -372,6 +460,10 @@ const styles = StyleSheet.create({
     right: 12,
     zIndex: 7,
   },
+  // Behind the sheet (6) but above the dim (4), while the sheet needs the room.
+  streamTucked: {
+    zIndex: 5,
+  },
   stage: {
     flex: 1,
     alignItems: 'center',
@@ -399,7 +491,7 @@ const styles = StyleSheet.create({
   pips: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 6,
+    marginTop: 8,
     height: 22,
     alignItems: 'flex-end',
   },
@@ -430,16 +522,16 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 6,
-    backgroundColor: colors.bgSurface,
-    borderTopWidth: 1,
-    borderColor: colors.border,
+    // Glass. The dim behind it keeps the candle and time from showing through.
+    ...glassSurface,
+    borderBottomWidth: 0,
     borderTopLeftRadius: radius.sheet,
     borderTopRightRadius: radius.sheet,
     borderCurve: 'continuous',
     overflow: 'hidden',
   },
   grab: {
-    height: 26,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -450,22 +542,27 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   modes: {
+    marginTop: 14,
     marginHorizontal: 16,
+    zIndex: 3,
+    // A glass pill; the chosen mode is a brighter frost, not solid white.
     flexDirection: 'row',
     gap: 4,
-    backgroundColor: colors.bgCard,
-    ...rounded(radius.sm),
     padding: 4,
+    ...rounded(radius.pill),
+    ...glassControl,
   },
   mode: {
     flex: 1,
     minHeight: 38,
-    ...rounded(8),
+    ...rounded(radius.pill),
     alignItems: 'center',
     justifyContent: 'center',
   },
   modeOn: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.glassFillOn,
+    borderWidth: 1,
+    borderColor: colors.glassEdgeOn,
   },
   modeText: {
     color: colors.textMuted,
@@ -473,56 +570,122 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   modeTextOn: {
-    color: colors.textInverse,
+    color: colors.textPrimary,
   },
+  // Reset, start and skip, under the time.
   actions: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 10,
-    marginHorizontal: 16,
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 18,
+    marginBottom: 12,
+    width: '100%',
+    maxWidth: 360,
   },
+  // Round glass buttons.
   round: {
-    width: 54,
-    height: 54,
-    ...rounded(radius.lg),
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bgCard,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    ...glassControl,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // The start button: glass tinted with the mood accent (set inline).
   start: {
     flex: 1,
     minHeight: 54,
-    ...rounded(radius.lg),
+    ...rounded(radius.pill),
+    borderWidth: 1,
+    ...blur(16),
     alignItems: 'center',
     justifyContent: 'center',
   },
   startText: {
-    color: colors.textInverse,
+    color: colors.textPrimary,
     fontFamily: fonts.bodySemibold,
     fontSize: 17,
   },
-  dock: {
+  // A floating glass pill, fixed above the bottom edge and over the sheet.
+  tabBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    height: TAB_BAR_HEIGHT,
+    zIndex: 8,
     flexDirection: 'row',
-    marginTop: 8,
-    marginHorizontal: 8,
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    ...glassSurface,
+    boxShadow: '0 12px 36px rgba(0, 0, 0, 0.35)',
+    ...rounded(radius.pill),
+  },
+  hidden: {
+    opacity: 0,
+  },
+  // The one-line timer at the top of the open sheet.
+  mini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  miniFlame: {
+    width: 8,
+    height: 12,
+    borderRadius: 4,
+  },
+  miniTime: {
+    color: colors.textPrimary,
+    fontFamily: fonts.timeMedium,
+    fontSize: 22,
+    fontVariant: ['tabular-nums'],
+  },
+  miniLabel: {
+    flex: 1,
+    color: colors.textMuted,
+    fontFamily: fonts.bodySemibold,
+    fontSize: 12,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  miniBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniClose: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    ...glassControl,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dockBtn: {
     flex: 1,
-    minHeight: 50,
+    height: TAB_BAR_HEIGHT - 12,
     alignItems: 'center',
     justifyContent: 'center',
-    ...rounded(radius.sm),
+    ...rounded(radius.pill),
   },
+  // The open tab: a brighter frost and the mood accent, not solid white.
   dockBtnOn: {
-    backgroundColor: colors.bgCard,
+    backgroundColor: colors.glassFillOn,
   },
   dockLabel: {
     color: colors.textMuted,
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
     marginTop: 2,
+  },
+  dockLabelOn: {
+    color: colors.textPrimary,
   },
   dot: {
     position: 'absolute',
@@ -534,13 +697,11 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
-    marginTop: 10,
     borderTopWidth: 1,
     borderColor: colors.border,
   },
   bodyContent: {
     padding: 16,
-    paddingBottom: 28,
   },
   toast: {
     position: 'absolute',

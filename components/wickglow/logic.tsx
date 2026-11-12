@@ -1,5 +1,5 @@
 import { calendarKey } from '@/src/core/calendar';
-import type { OwnTrack, PlaylistEntry } from '@/src/core/own-tracks';
+import { MAX_OWN_TRACKS, type OwnTrack, type PlaylistEntry } from '@/src/core/own-tracks';
 import { activeStreamId as activeStreamOf, LOCAL_SOURCE, MusicSource, MusicSourceEvent, stepMusicSource } from '@/src/core/music-source';
 import { parseStreamLink, playbackFor, StreamLink } from '@/src/core/stream-links';
 import type { MusicEnd } from '@/src/core/session-end';
@@ -77,6 +77,9 @@ import {
 // How long a `store.update` change waits before it is written. A slider drag
 // lands as one write instead of one per step.
 const SAVE_DELAY_MS = 300;
+
+// The music-source events that are a playback choice by the user.
+const PLAYBACK_CHOICES = new Set<MusicSourceEvent['type']>(['playLocal', 'openEmbed', 'handOff', 'closeStream']);
 
 // What screens can read. It changes only when something on screen changes: the
 // once-a-second clock is kept out of it, in `WickglowClock` below.
@@ -335,9 +338,7 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
   // loading doesn't immediately re-write the file.
   const [store] = useState(() => createSavedStore<SavedState>(
     loaded,
-    (state) => {
-      void saveWickglowState(state);
-    },
+    (state) => saveWickglowState(state),
     SAVE_DELAY_MS,
   ));
   const saved = useSyncExternalStore(store.subscribe, store.get, store.get);
@@ -370,12 +371,22 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
   const chimeAt = useRef(0);
   // Counts addStreamLink submissions so only the latest one may save.
   const streamRequest = useRef(0);
+  // True while a file pick and copy is running, so a second press cannot start
+  // another one against the same free room.
+  const importing = useRef(false);
+  // Counts hand-offs to another app, so a late failure of an old one cannot
+  // close a stream that has taken over since.
+  const handOffCount = useRef(0);
   // Which player owns the sound: the local one, an embed, or another app. The
   // rules are in src/core/music-source.ts; `sendSource` is the only writer.
   const sourceRef = useRef<MusicSource>(LOCAL_SOURCE);
+  // Counts the user's playback choices (local play, an embed, a hand-off, a
+  // close), so a link check that finishes late cannot override a newer one.
+  const playIntent = useRef(0);
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
 
   const sendSource = (event: MusicSourceEvent) => {
+    if (PLAYBACK_CHOICES.has(event.type)) playIntent.current += 1;
     const step = stepMusicSource(sourceRef.current, event);
     sourceRef.current = step.source;
     setActiveStreamId(activeStreamOf(step.source));
@@ -409,14 +420,17 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
   };
 
   // A waiting save must not be lost: write it as soon as the app leaves the
-  // foreground (on web, when the tab is hidden or closed) and on unmount.
+  // foreground (on web, when the tab is hidden or closed). On unmount the store
+  // writes it and retires, so none of its retries can land on top of what a
+  // remounted provider's store writes later.
   useEffect(() => {
+    store.revive();
     const subscription = AppState.addEventListener('change', (next) => {
       if (next !== 'active') store.flush();
     });
     return () => {
       subscription.remove();
-      store.flush();
+      store.dispose();
     };
   }, [store]);
 
@@ -519,22 +533,28 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
     const link = store.get().streamLinks.find((item) => item.id === id);
     if (!link) return;
     const playback = playbackFor(link);
-    // On the web, opening YouTube Music leaves this page in place, so the
-    // local player keeps going. Native hands the screen to the other app.
+    // On the web, YouTube Music opens in another tab and plays there, so the
+    // local player is paused to keep one thing playing. It is not resumed on
+    // its own: there is no telling when that tab stops. Native hands the
+    // screen to the other app.
     if (playback.kind === 'open' && Platform.OS === 'web') {
-      if (sourceRef.current.kind === 'embed') closeStream();
+      sendSource({ type: 'playLocal' });
+      musicRef.current.pause();
       Linking.openURL(link.url).catch(() => showToast('Could not open that link'));
       return;
     }
     const localPlaying = musicRef.current.musicPlaying;
     if (playback.kind === 'open') {
+      const handOff = ++handOffCount.current;
       sendSource({ type: 'handOff', localPlaying });
       Linking.openURL(link.url).catch(() => {
         showToast('Could not open that link');
-        closeStream();
+        // Only undo this hand-off if it is still the one in charge.
+        if (handOff === handOffCount.current && sourceRef.current.kind === 'handoff') closeStream();
       });
       return;
     }
+    handOffCount.current += 1;
     sendSource({ type: 'openEmbed', streamId: id, localPlaying });
   };
 
@@ -664,12 +684,35 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
       // Own music files (native only): open the file picker, copy the picks into
       // the app's private folder, then add them to the saved list.
       addOwnFiles: () => {
-        void pickOwnTracks().then((picked) => {
-          if (!picked || picked.length === 0) return;
-          store.update((current) => ({ ...current, ownTracks: [...current.ownTracks, ...picked] }));
-          showToast(picked.length === 1 ? '1 file added' : `${picked.length} files added`);
+        if (importing.current) return;
+        const room = MAX_OWN_TRACKS - store.get().ownTracks.length;
+        if (room <= 0) {
+          showToast(`Your list is full (${MAX_OWN_TRACKS} files)`);
+          return;
+        }
+        importing.current = true;
+        void pickOwnTracks(room).then((picked) => {
+          // null is a cancelled pick. An empty list means every copy failed.
+          if (!picked) return;
+          if (picked.length === 0) {
+            showToast('Could not add those files');
+            return;
+          }
+          // Re-read the room: the list can have changed while the files copied.
+          // A copied file that no longer fits is deleted, never left orphaned.
+          const free = Math.max(0, MAX_OWN_TRACKS - store.get().ownTracks.length);
+          const accepted = picked.slice(0, free);
+          for (const extra of picked.slice(free)) deleteOwnTrackFile(extra.id);
+          if (accepted.length === 0) {
+            showToast(`Your list is full (${MAX_OWN_TRACKS} files)`);
+            return;
+          }
+          store.update((current) => ({ ...current, ownTracks: [...current.ownTracks, ...accepted] }));
+          showToast(accepted.length === 1 ? '1 file added' : `${accepted.length} files added`);
         }).catch(() => {
           showToast('Could not add those files');
+        }).finally(() => {
+          importing.current = false;
         });
       },
       removeOwnTrack: (id) => {
@@ -679,27 +722,35 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
         if (track) deleteOwnTrackFile(track.id);
         store.update((current) => ({ ...current, ownTracks: current.ownTracks.filter((item) => item.id !== id) }));
       },
-      // Validate a pasted link, check it isn't private, and save it. Returns a
-      // string code the UI turns into a message. Re-reads the store after the
-      // network check because state may have changed while we awaited.
+      // Validate a pasted link, check it isn't private, save it and play it.
+      // Returns a string code the UI turns into a message. Re-reads the store
+      // after the network check because state may have changed while we awaited.
       addStreamLink: async (raw) => {
+        // Count every submission, even one that fails to parse, so any newer
+        // submission supersedes an older check still in flight.
+        const requestId = ++streamRequest.current;
         const parsed = parseStreamLink(raw);
         if (!parsed.ok) return parsed.reason;
         // One saved link at a time: a new link replaces the old one.
         const isSaved = (links: StreamLink[]) => links.length === 1 && links[0].id === parsed.link.id;
-        // Count this submission before the duplicate check, so re-submitting the
-        // saved link also supersedes any older check still in flight.
-        const requestId = ++streamRequest.current;
-        if (isSaved(store.get().streamLinks)) return 'duplicate';
+        if (isSaved(store.get().streamLinks)) {
+          openStream(parsed.link.id);
+          return 'duplicate';
+        }
+        const intent = playIntent.current;
         const visibility = await checkStreamLink(parsed.link);
         // A newer submission started while this check ran: drop this result.
         if (requestId !== streamRequest.current) return 'stale';
         if (visibility === 'private') return 'private';
         const current = store.get();
-        if (isSaved(current.streamLinks)) return 'duplicate';
-        store.commit({ ...current, streamLinks: [parsed.link] });
-        showToast('Link added');
-        return 'added';
+        if (!isSaved(current.streamLinks)) {
+          store.commit({ ...current, streamLinks: [parsed.link] });
+          showToast('Link added');
+        }
+        // The link is kept either way, but it only starts playing if the user
+        // has not picked something else to play while it was being checked.
+        if (intent === playIntent.current) openStream(parsed.link.id);
+        return isSaved(current.streamLinks) ? 'duplicate' : 'added';
       },
       removeStreamLink: (id) => {
         if (activeStreamOf(sourceRef.current) === id) closeStream();

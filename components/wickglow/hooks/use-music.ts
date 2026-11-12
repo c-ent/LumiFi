@@ -3,9 +3,20 @@ import { ownTrackExists, ownTrackUri } from '@/components/wickglow/domain/own-mu
 import { preloadTrack } from '@/components/wickglow/domain/preload-track';
 import { mergePlaylist, nextPlayableIndex, OwnTrack } from '@/src/core/own-tracks';
 import { LOWERED_MUSIC_RATIO, musicLevelAtSessionEnd, MusicEnd } from '@/src/core/session-end';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { type AudioPlayer, clearPreloadedSource, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
+
+/**
+ * Loads a new source and puts the levels back. On web `replace` builds a fresh
+ * media element at full volume with loop unset, so without this a manual pick
+ * or an automatic advance would play at full volume.
+ */
+function replaceWithLevels(player: AudioPlayer, uri: number | string, levels: { volume: number; gain: number; loop: boolean }) {
+  player.replace(uri);
+  player.volume = Math.max(0, Math.min(1, levels.volume * levels.gain));
+  player.loop = levels.loop;
+}
 
 /**
  * The local music player: one `expo-audio` player that walks a playlist of
@@ -63,6 +74,12 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
     levelRef.current = { volume, gain, loop };
   }, [gain, loop, volume]);
 
+  // Every replace goes through `replaceWithLevels` (below), so the new source
+  // keeps the current volume, gain and loop.
+  const replaceSource = useCallback((uri: number | string) => {
+    replaceWithLevels(player, uri, levelRef.current);
+  }, [player]);
+
   // A file can disappear outside the app (deleted, or a reclaimed copy). The
   // check is synchronous and native, so it is cached per URI and invalidated
   // whenever the list changes.
@@ -88,15 +105,27 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
     [missingKeys, ownTracks, playlist],
   );
 
-  // Step to the next playable entry in a direction, wrapping once. Settlement
-  // (no playable entry) leaves the cursor alone so a broken list cannot spin.
+  // The next playable entry in a direction, wrapping once, or null when none
+  // is playable, so a broken list leaves the cursor alone and cannot spin.
+  const nextIndex = useCallback(
+    (direction: number) => nextPlayableIndex(playlist.length, trackIndex + direction, isPlayable, direction < 0 ? -1 : 1),
+    [isPlayable, playlist.length, trackIndex],
+  );
+
+  // A manual step only moves the cursor. `replace` keeps a playing player
+  // playing and a paused one paused, so the step keeps whichever it was.
   const stepTo = useCallback(
     (direction: number) => {
-      const index = nextPlayableIndex(playlist.length, trackIndex + direction, isPlayable, direction < 0 ? -1 : 1);
+      const index = nextIndex(direction);
       if (index != null) setSelectedKey(playlist[index].key);
     },
-    [isPlayable, playlist, trackIndex],
+    [nextIndex, playlist],
   );
+
+  // Set when a track finished on its own and the next one should start as
+  // soon as it is loaded. A finished player is stopped, so `replace` alone
+  // would leave the next track silent.
+  const playOnLoad = useRef(false);
 
   const clearFade = useCallback(() => {
     if (fadeTimer.current) {
@@ -119,8 +148,12 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
     // An own entry whose uri could not be rebuilt has '' here: never load it.
     if (!entry || !entry.uri || loadedKey.current === entry.key) return;
     loadedKey.current = entry.key;
-    player.replace(entry.uri);
-  }, [entry, player]);
+    replaceSource(entry.uri);
+    if (playOnLoad.current) {
+      playOnLoad.current = false;
+      player.play();
+    }
+  }, [entry, player, replaceSource]);
 
   // Runs after the replace effect above, so the flag survives a track change:
   // on web `replace` builds a fresh media element and drops `loop`. While it is
@@ -141,35 +174,74 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
   // The deps are `entry` and `player` alone. A drag on the volume slider used
   // to re-run this effect on every tick and call `replace` again, which builds
   // a fresh media element and refetches the track on each step of the drag.
+  //
+  // Each preload is a fetched copy held in memory (a blob URL on web), so it is
+  // released once the player has moved on to another entry, or the hook has
+  // unmounted. The release waits a tick so the load effect has replaced the
+  // source first: releasing the copy still playing would revoke it under the
+  // player.
+  const unmounted = useRef(false);
+  useEffect(() => {
+    unmounted.current = false;
+    return () => {
+      unmounted.current = true;
+    };
+  }, []);
   useEffect(() => {
     if (Platform.OS !== 'web' || !entry || !entry.uri) return undefined;
     let cancelled = false;
+    const { key, uri } = entry;
+    // Drops this entry's cached copy, unless it is still the loaded source.
+    const release = () => {
+      if (!unmounted.current && loadedKey.current === key) return;
+      try {
+        void Promise.resolve(clearPreloadedSource(uri)).catch(() => undefined);
+      } catch {
+        // Nothing cached for this source.
+      }
+    };
     void preloadTrack(entry.uri).then(() => {
-      if (cancelled || player.playing || player.currentTime > 0) return;
+      // A preload that lands after cleanup made its cache entry too late for
+      // that release, so it is released here.
+      if (cancelled) {
+        release();
+        return;
+      }
+      if (player.playing || player.currentTime > 0) return;
       loadedKey.current = entry.key;
-      player.replace(entry.uri);
-      // A fresh element starts at full volume with loop unset, so both have to
-      // be reapplied here rather than by the effects above, which already ran.
-      const { volume: latestVolume, gain: latestGain, loop: latestLoop } = levelRef.current;
-      player.volume = Math.max(0, Math.min(1, latestVolume * latestGain));
-      player.loop = latestLoop;
+      replaceSource(entry.uri);
     }, () => {
       // A failed preload is only a missed head start: play() loads the source.
     });
     return () => {
       cancelled = true;
+      setTimeout(release, 0);
     };
-  }, [entry, player]);
+  }, [entry, player, replaceSource]);
 
   const nextTrack = useCallback(() => stepTo(1), [stepTo]);
   const prevTrack = useCallback(() => stepTo(-1), [stepTo]);
 
+  // A track that ends on its own advances and keeps playing. When the next
+  // playable entry is the same one (a list of one), it restarts from the top.
+  const advanceAfterFinish = useCallback(() => {
+    const index = nextIndex(1);
+    if (index == null) return;
+    const key = playlist[index].key;
+    if (key === entry?.key) {
+      player.seekTo(0).catch(() => undefined).then(() => player.play());
+      return;
+    }
+    playOnLoad.current = true;
+    setSelectedKey(key);
+  }, [entry?.key, nextIndex, player, playlist]);
+
   useEffect(() => {
     const subscription = player.addListener('playbackStatusUpdate', (next) => {
-      if (next.didJustFinish) nextTrack();
+      if (next.didJustFinish) advanceAfterFinish();
     });
     return () => subscription.remove();
-  }, [nextTrack, player]);
+  }, [advanceAfterFinish, player]);
 
   // A file can pass the existence check and still fail to decode. Mark it
   // missing and step past it rather than stalling on silence. The guard stops
@@ -216,11 +288,12 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
       return;
     }
     // Replace the source here and record it, so the effect skips this entry.
+    playOnLoad.current = false;
     loadedKey.current = target.key;
-    player.replace(target.uri);
+    replaceSource(target.uri);
     setSelectedKey(target.key);
     player.play();
-  }, [entry?.key, player, playlist]);
+  }, [entry?.key, player, playlist, replaceSource]);
 
   const restoreMusic = useCallback(() => {
     clearFade();

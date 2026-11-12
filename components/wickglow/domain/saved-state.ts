@@ -123,7 +123,7 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
       musicEnd: readMusicEnd(saved.musicEnd),
       musicLoop: saved.musicLoop === true,
       notificationsAsked: saved.notificationsAsked === true,
-      session: readSession(saved.session, cfg),
+      session: readSession(saved.session, cfg, now),
     };
   } catch {
     return fresh;
@@ -186,9 +186,11 @@ function readStreak(value: unknown): StreakState {
  * Rebuilds a session from storage, clamping its length to the configured
  * ceiling so a stored save cannot outlast the UI limit. A session marked
  * running with no `endAt` comes back paused: there is no deadline to count to,
- * and a running status without one would never finish.
+ * and a running status without one would never finish. A deadline further off
+ * than the session's own length is pulled in to `now + totalMs`, so
+ * `endAt - now` can never show more time than the session holds.
  */
-function readSession(value: unknown, cfg: TimerCfg): SessionClock {
+function readSession(value: unknown, cfg: TimerCfg, now: number): SessionClock {
   const fallback = idleSession('focus', modeDurationMs(cfg, 'focus'));
   if (!value || typeof value !== 'object') return fallback;
   const session = value as Partial<SessionClock>;
@@ -198,14 +200,18 @@ function readSession(value: unknown, cfg: TimerCfg): SessionClock {
     : 'idle';
   const limit = MAX_MINUTES[mode] * 60000;
   // A save from before totalMs existed falls back to the configured length.
-  const storedTotal = typeof session.totalMs === 'number' && Number.isFinite(session.totalMs) && session.totalMs > 0
+  // Lengths are always whole minutes; anything else (9.5 minutes, which would
+  // round up to the 10-minute reward threshold) is not trusted either.
+  const storedTotal = typeof session.totalMs === 'number' && Number.isFinite(session.totalMs)
+    && session.totalMs > 0 && session.totalMs % 60000 === 0
     ? session.totalMs
     : modeDurationMs(cfg, mode);
   const totalMs = Math.min(storedTotal, limit);
   const remainingMs = typeof session.remainingMs === 'number' && Number.isFinite(session.remainingMs) && session.remainingMs >= 0
     ? Math.min(session.remainingMs, totalMs)
     : totalMs;
-  const endAt = typeof session.endAt === 'number' && Number.isFinite(session.endAt) ? session.endAt : null;
+  const storedEnd = typeof session.endAt === 'number' && Number.isFinite(session.endAt) ? session.endAt : null;
+  const endAt = storedEnd == null ? null : Math.min(storedEnd, now + totalMs);
   if (status === 'running' && endAt == null) return { mode, status: 'paused', endAt: null, remainingMs, totalMs };
   return { mode, status, endAt: status === 'running' ? endAt : null, remainingMs, totalMs };
 }
@@ -229,7 +235,8 @@ function readTasks(value: unknown): Task[] | null {
       id: task.id,
       text: task.text,
       done: task.done,
-      pomos: task.pomos,
+      // A count of finished sessions: a whole number, never below zero.
+      pomos: Number.isFinite(task.pomos) ? Math.max(0, Math.floor(task.pomos)) : 0,
       doneOn,
       parentId,
       date,
@@ -251,11 +258,16 @@ function isDayStats(value: unknown): value is DayStats {
   if (!value || typeof value !== 'object') return false;
   const day = value as Partial<DayStats>;
   return typeof day.d === 'string'
-    && typeof day.sessions === 'number'
-    && typeof day.minutes === 'number'
-    && typeof day.tasks === 'number'
+    && isCount(day.sessions)
+    && isCount(day.minutes)
+    && isCount(day.tasks)
     && Array.isArray(day.claimed)
     && day.claimed.every((id) => typeof id === 'string');
+}
+
+/** A finite number that is not below zero. */
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 function readHistory(value: unknown): DayHistory {

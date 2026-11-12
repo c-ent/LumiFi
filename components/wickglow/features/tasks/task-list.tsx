@@ -332,6 +332,57 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
             const overdue = isOverdue(task.date, lamp.now);
             // "Active" = the task the timer's sessions count toward.
             const active = lamp.activeTask?.id === task.id && !task.done;
+            // Date, subtasks, focus, edit and delete.
+            const controls = (
+              <>
+                {task.done ? null : (
+                  <DueControl
+                    value={task.date ?? ''}
+                    onChange={(next) => setTaskDate(task.id, next || null)}
+                    accent={accent}
+                    compact
+                    overdue={overdue}
+                    label={task.date ? `Change due date for ${task.text}` : `Add a due date to ${task.text}`}
+                  />
+                )}
+                {/* Subtask toggle: "+ Sub" when there are none, "2/3" when there are.
+                    Opening it also asks the new-subtask field to take focus. */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: task.open }}
+                  accessibilityLabel={subs.length > 0 ? `Subtasks for ${task.text}, ${doneCount} of ${subs.length} done` : `Add a subtask to ${task.text}`}
+                  onPress={() => {
+                    if (!task.open) setFocusSub(task.id);
+                    setTaskOpen(task.id, !task.open);
+                  }}
+                  hitSlop={iconSlop}
+                  style={[styles.subBtn, subs.length > 0 ? styles.subBtnOn : null]}
+                >
+                  <Text style={styles.subBtnText}>{subs.length > 0 ? `${doneCount}/${subs.length}` : '+ Sub'}</Text>
+                  {subs.length > 0 ? (
+                    <View style={task.open ? styles.chevOpen : null}>
+                      <ChevronIcon size={10} color={fade(colors.textPrimary, 0.45)} />
+                    </View>
+                  ) : null}
+                </Pressable>
+                {task.done ? null : (
+                  <FocusButton
+                    on={active}
+                    accent={accent}
+                    label={active ? `Stop focusing on ${task.text}` : `Focus on ${task.text}`}
+                    onPress={() => focusTask(task.id)}
+                  />
+                )}
+                {task.done ? null : (
+                  <IconButton label={`Edit ${task.text}`} onPress={() => beginEdit(task.id, task.text)}>
+                    <PencilIcon size={14} color={fade(colors.textPrimary, 0.45)} />
+                  </IconButton>
+                )}
+                <IconButton label={`Delete ${task.text}`} onPress={() => removeTask(task.id)}>
+                  <TrashIcon size={14} color={fade(colors.textPrimary, 0.45)} />
+                </IconButton>
+              </>
+            );
             return (
               <View
                 key={task.id}
@@ -377,53 +428,12 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                       <Text style={[styles.title, task.done ? styles.done : null]} numberOfLines={1}>{task.text}</Text>
                     </Pressable>
                   )}
-                  {task.done ? null : (
-                    <DueControl
-                      value={task.date ?? ''}
-                      onChange={(next) => setTaskDate(task.id, next || null)}
-                      accent={accent}
-                      compact
-                      overdue={overdue}
-                      label={task.date ? `Change due date for ${task.text}` : `Add a due date to ${task.text}`}
-                    />
-                  )}
-                  {/* Subtask toggle: "+ Sub" when there are none, "2/3" when there are.
-                      Opening it also asks the new-subtask field to take focus. */}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ expanded: task.open }}
-                    accessibilityLabel={subs.length > 0 ? `Subtasks for ${task.text}, ${doneCount} of ${subs.length} done` : `Add a subtask to ${task.text}`}
-                    onPress={() => {
-                      if (!task.open) setFocusSub(task.id);
-                      setTaskOpen(task.id, !task.open);
-                    }}
-                    hitSlop={iconSlop}
-                    style={[styles.subBtn, subs.length > 0 ? styles.subBtnOn : null]}
-                  >
-                    <Text style={styles.subBtnText}>{subs.length > 0 ? `${doneCount}/${subs.length}` : '+ Sub'}</Text>
-                    {subs.length > 0 ? (
-                      <View style={task.open ? styles.chevOpen : null}>
-                        <ChevronIcon size={10} color={fade(colors.textPrimary, 0.45)} />
-                      </View>
-                    ) : null}
-                  </Pressable>
-                  {task.done ? null : (
-                    <FocusButton
-                      on={active}
-                      accent={accent}
-                      label={active ? `Stop focusing on ${task.text}` : `Focus on ${task.text}`}
-                      onPress={() => focusTask(task.id)}
-                    />
-                  )}
-                  {task.done ? null : (
-                    <IconButton label={`Edit ${task.text}`} onPress={() => beginEdit(task.id, task.text)}>
-                      <PencilIcon size={14} color={fade(colors.textPrimary, 0.45)} />
-                    </IconButton>
-                  )}
-                  <IconButton label={`Delete ${task.text}`} onPress={() => removeTask(task.id)}>
-                    <TrashIcon size={14} color={fade(colors.textPrimary, 0.45)} />
-                  </IconButton>
+                  {mobile ? null : controls}
                 </View>
+                {/* On a phone or tablet the title keeps the first row to itself
+                    and the date and buttons sit on a second one, so a narrow
+                    screen does not squeeze the title to nothing. */}
+                {mobile ? <View style={styles.rowControls}>{controls}</View> : null}
                 {/* Expanded subtasks, with their own add field. */}
                 {task.open ? (
                   <View style={styles.subs}>
@@ -646,6 +656,16 @@ const styles = StyleSheet.create({
   editSm: {
     fontSize: 13,
     minHeight: 30,
+  },
+  rowControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: -4,
+    paddingBottom: 6,
+    paddingLeft: 40,
+    paddingRight: 6,
   },
   dateSlot: {
     position: 'relative',

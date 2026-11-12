@@ -25,7 +25,21 @@ import { Platform } from 'react-native';
 const CHANNEL_ID = 'session-end-alarm';
 const PREVIOUS_CHANNEL_IDS = ['session-end', 'session-end-chime'];
 export const SESSION_NOTIFICATION_ID = 'wickglow-session-end';
+// The id used before the rename. An install updated mid-session can still hold
+// an alarm under it, so every cancel clears it too.
+const LEGACY_NOTIFICATION_ID = 'lumifi-session-end';
 const SOUND = 'chime.mp3';
+
+/** Cancels the current alarm and any left over under the pre-rename id. */
+async function cancelBoth(message: string): Promise<void> {
+  for (const id of [SESSION_NOTIFICATION_ID, LEGACY_NOTIFICATION_ID]) {
+    try {
+      await cancelScheduledNotificationAsync(id);
+    } catch (error) {
+      reportNotificationError(message, error, true);
+    }
+  }
+}
 
 if (Platform.OS !== 'web') {
   setNotificationHandler({
@@ -122,11 +136,7 @@ export async function prepareNotificationPermission(alreadyAsked: boolean): Prom
 export function scheduleSessionEnd(endAt: number, mode: TimerMode): Promise<void> {
   if (Platform.OS === 'web') return Promise.resolve();
   return enqueueMutation(async () => {
-    try {
-      await cancelScheduledNotificationAsync(SESSION_NOTIFICATION_ID);
-    } catch (error) {
-      reportNotificationError('Could not cancel the previous session-end notification.', error, true);
-    }
+    await cancelBoth('Could not cancel the previous session-end notification.');
     try {
       await scheduleNotificationAsync({
         identifier: SESSION_NOTIFICATION_ID,
@@ -151,13 +161,7 @@ export function scheduleSessionEnd(endAt: number, mode: TimerMode): Promise<void
 /** Drops the pending alarm, for a pause, reset, skip or mode change. */
 export function cancelSessionEnd(): Promise<void> {
   if (Platform.OS === 'web') return Promise.resolve();
-  return enqueueMutation(async () => {
-    try {
-      await cancelScheduledNotificationAsync(SESSION_NOTIFICATION_ID);
-    } catch (error) {
-      reportNotificationError('Could not cancel the session-end notification.', error, true);
-    }
-  });
+  return enqueueMutation(() => cancelBoth('Could not cancel the session-end notification.'));
 }
 
 /**

@@ -2,7 +2,16 @@ import { breakWax } from '@/src/theme/tokens';
 import React, { useEffect } from 'react';
 import { Animated, Easing, StyleSheet } from 'react-native';
 import { useAnimatedValue } from '@/components/wickglow/hooks/use-animated-value';
-import Reanimated, { Easing as ReEasing, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, {
+  cancelAnimation,
+  Easing as ReEasing,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, {
   Circle,
   Defs,
@@ -25,9 +34,10 @@ import { useWickglowClock } from '@/components/wickglow/logic';
  * can follow the mood, and so the wax height can be computed from `progress`.
  *
  * Two animation systems are used on purpose:
- * - RN's built-in `Animated` for the entrance slide and the flicker/hint loops.
- * - Reanimated for the flame opacity, because SVG props (`useAnimatedProps`)
- *   can only be animated on the UI thread through Reanimated.
+ * - RN's built-in `Animated` for the entrance slide and the idle hint loop.
+ * - Reanimated for the flame's opacity and flicker, because SVG props
+ *   (`useAnimatedProps`) can only be animated on the UI thread through
+ *   Reanimated. The flicker stretches the flame paths up from their base.
  */
 // `createAnimatedComponent` wraps an SVG Path so `animatedProps` can drive it.
 const AnimatedPath = Reanimated.createAnimatedComponent(Path);
@@ -63,11 +73,12 @@ export function SessionCandle(props: Omit<CandleProps, 'progress'>) {
 export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood, swap }: CandleProps) {
   // `useAnimatedValue` is RN's Animated.Value kept stable across renders.
   const rise = useAnimatedValue(0); // entrance: slide up and fade in
-  const flick = useAnimatedValue(0); // flame breathing, 0..1 loop
   const hint = useAnimatedValue(0.35); // idle ring opacity
   const reduced = useReducedMotion();
   // A Reanimated shared value lives on the UI thread, so it can animate SVG props.
   const flameOpacity = useSharedValue(lit ? 1 : paused ? 0.55 : 0);
+  // Vertical stretch of the flame, 1 at rest; loops around 0.94..1.06 while lit.
+  const flick = useSharedValue(1);
 
   // Geometry is in the SVG's own 200x380 coordinate space, not screen pixels.
   // The wax top slides from y=100 (full) down to y=284 (empty); the candle
@@ -83,7 +94,12 @@ export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood
   const melt = coolerWax ? breakWax.melt : mood.melt;
 
   // Replay the entrance whenever the phase changes (focus -> break and back).
+  // Under reduced motion the candle is simply in place.
   useEffect(() => {
+    if (reduced) {
+      rise.setValue(1);
+      return;
+    }
     rise.setValue(0);
     Animated.timing(rise, {
       toValue: 1,
@@ -91,7 +107,7 @@ export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [rise, swap]);
+  }, [reduced, rise, swap]);
 
   // Fade the flame to its new level. Ending a session dims slowly (900ms) per
   // the "gentle end" rule in AGENTS.md; lighting up is quick (220ms).
@@ -103,22 +119,45 @@ export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood
     }));
   }, [dimming, flameOpacity, lit, paused]);
 
-  // Both read the same shared value, so the flame and its halo fade together.
-  const flameProps = useAnimatedProps(() => ({ opacity: flameOpacity.get() }));
+  // Both flame paths and the halo read the same opacity, so they fade
+  // together. The paths are rebuilt from the flicker, scaled up from the base
+  // of each flame (the wick top), so the tip moves and the base stays put.
+  const outerBase = topY - 15;
+  const innerBase = topY - 16;
+  const outerProps = useAnimatedProps(() => {
+    const s = flick.get();
+    const b = outerBase;
+    return {
+      opacity: flameOpacity.get(),
+      d: `M100 ${b} C88 ${b - 4 * s} 86 ${b - 20 * s} 100 ${b - 46 * s} C114 ${b - 20 * s} 112 ${b - 4 * s} 100 ${b}Z`,
+    };
+  });
+  const innerProps = useAnimatedProps(() => {
+    const s = flick.get();
+    const b = innerBase;
+    return {
+      opacity: flameOpacity.get(),
+      d: `M100 ${b} C95 ${b - 2 * s} 94 ${b - 10 * s} 100 ${b - 21 * s} C106 ${b - 10 * s} 105 ${b - 2 * s} 100 ${b}Z`,
+    };
+  });
   const glowStyle = useAnimatedStyle(() => ({ opacity: flameOpacity.get() * 0.85 }));
 
   // Flicker loop, only while burning. Skipped when the system asks for reduced
   // motion. Returning the cleanup stops the loop when `lit` flips or on unmount.
   useEffect(() => {
-    if (!lit || reduced) return undefined;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(flick, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(flick, { toValue: 0, duration: 480, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
+    if (!lit || reduced) {
+      cancelAnimation(flick);
+      flick.set(1);
+      return undefined;
+    }
+    flick.set(withRepeat(
+      withSequence(
+        withTiming(1.06, { duration: 420, easing: ReEasing.inOut(ReEasing.sin) }),
+        withTiming(0.94, { duration: 480, easing: ReEasing.inOut(ReEasing.sin) }),
+      ),
+      -1,
+    ));
+    return () => cancelAnimation(flick);
   }, [flick, lit, reduced]);
 
   // Slow pulse on the ring above the wick while nothing has started.
@@ -133,8 +172,6 @@ export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood
     loop.start();
     return () => loop.stop();
   }, [hint, idle, reduced]);
-
-  const flameScale = flick.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.06] });
 
   return (
     <Animated.View style={[styles.wrap, { opacity: rise, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }]}>
@@ -170,15 +207,12 @@ export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood
         <Rect x="99" y={topY - 15} width="2" height="15" fill="#2b2125" />
         {/* Idle ring: invites the first tap. */}
         {idle ? <Circle cx="100" cy={topY - 28} r="10" fill="none" stroke={mood.flame2} strokeWidth={1.6} opacity={0.8} /> : null}
-        {/* Outer flame, then the brighter inner core. Both fade with flameOpacity. */}
-        <AnimatedPath animatedProps={flameProps} d={`M100 ${topY - 15} C88 ${topY - 19} 86 ${topY - 35} 100 ${topY - 61} C114 ${topY - 35} 112 ${topY - 19} 100 ${topY - 15}Z`} fill="url(#flameGrad)" />
-        <AnimatedPath animatedProps={flameProps} d={`M100 ${topY - 16} C95 ${topY - 18} 94 ${topY - 26} 100 ${topY - 37} C106 ${topY - 26} 105 ${topY - 18} 100 ${topY - 16}Z`} fill={mood.flame1} />
+        {/* Outer flame, then the brighter inner core. Both fade with flameOpacity
+            and flicker with flick; the static d is the flame at rest. */}
+        <AnimatedPath animatedProps={outerProps} d={`M100 ${topY - 15} C88 ${topY - 19} 86 ${topY - 35} 100 ${topY - 61} C114 ${topY - 35} 112 ${topY - 19} 100 ${topY - 15}Z`} fill="url(#flameGrad)" />
+        <AnimatedPath animatedProps={innerProps} d={`M100 ${topY - 16} C95 ${topY - 18} 94 ${topY - 26} 100 ${topY - 37} C106 ${topY - 26} 105 ${topY - 18} 100 ${topY - 16}Z`} fill={mood.flame1} />
         {smoke ? <Path d={`M100 ${topY - 21} c-6 -10 6 -18 0 -30 c-5 -9 6 -16 2 -26`} fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={3} strokeLinecap="round" /> : null}
       </Svg>
-      {/* Invisible 1x1 view that carries the flicker scale. */}
-      {lit ? (
-        <Animated.View pointerEvents="none" style={[styles.flicker, { transform: [{ scaleY: flameScale }] }]} />
-      ) : null}
       {idle ? <Animated.View pointerEvents="none" style={[styles.hint, { borderColor: mood.flame2, opacity: hint }]} /> : null}
     </Animated.View>
   );
@@ -196,11 +230,6 @@ const styles = StyleSheet.create({
     borderRadius: 130,
     alignSelf: 'center',
     top: '8%',
-  },
-  flicker: {
-    position: 'absolute',
-    width: 1,
-    height: 1,
   },
   hint: {
     position: 'absolute',

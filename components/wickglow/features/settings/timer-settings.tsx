@@ -98,6 +98,7 @@ function DurationField({ label, value, max, onChange }: { label: string; value: 
       <TextInput
         value={text}
         onChangeText={write}
+        accessibilityLabel={label}
         keyboardType="number-pad"
         blurOnSubmit
         style={[styles.input, styles.fieldInput, { borderColor: colors.border, backgroundColor: colors.bgCard }]}

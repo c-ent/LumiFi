@@ -103,7 +103,7 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
                 key={cell.key}
                 cell={cell}
                 accent={tone.accent}
-                selected={selected === cell.key}
+                selected={cell.inMonth && selected === cell.key}
                 wide={desk}
                 onPress={cell.future || !cell.inMonth ? undefined : () => pick(cell.key)}
               />
@@ -177,11 +177,11 @@ function DayCell({
       : fade(accent, shade === 2 ? 0.42 : 0.2);
   const borderColor = selected
     ? (desk ? colors.success : accent)
-    : cell.today
+    : cell.today && cell.inMonth
       ? (desk ? colors.textPrimary : colors.textMuted)
       : 'transparent';
   // On the darkest (solid accent) cell the number switches to dark text to stay readable.
-  const ink = desk && cell.inMonth && shade === 3;
+  const ink = cell.inMonth && shade === 3;
   // Future days and the padding days from next door cannot be picked.
   const unavailable = cell.future || !cell.inMonth;
 
@@ -205,22 +205,19 @@ function DayCell({
       ]}
     >
       <Text style={[styles.monthDay, selected && styles.monthDaySelected, ink && deskStyles.ink]}>{cell.day}</Text>
-      {cell.today && !desk ? <View style={[styles.monthDot, { backgroundColor: accent }]} /> : null}
+      {cell.today && cell.inMonth && !desk ? <View style={[styles.monthDot, { backgroundColor: accent }]} /> : null}
     </Pressable>
   );
 }
 
 // A day as people say it ("Mon, Nov 9, 2026"), in the user's own locale. The
 // cell's `key` stays the internal identity and is never shown or read aloud.
-const dayFormatter = new Intl.DateTimeFormat(undefined, {
-  weekday: 'short',
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-});
+// Built per call rather than once at load, so a time zone change while the app
+// runs is picked up, as `calendarKey` picks it up through `Date`.
+const DAY_FORMAT: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
 
 function dayLabel(at: number): string {
-  return dayFormatter.format(new Date(at));
+  return new Date(at).toLocaleDateString(undefined, DAY_FORMAT);
 }
 
 // The day detail, which swaps the bare zero reading for a quiet line only on a

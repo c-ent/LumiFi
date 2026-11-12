@@ -30,7 +30,7 @@ export interface PlaylistEntry {
 }
 
 // A hand-edited save could hold an unbounded array. Far above any real playlist.
-const MAX_OWN_TRACKS = 500;
+export const MAX_OWN_TRACKS = 500;
 
 /**
  * The display title for a picked file: its name without the final extension.
@@ -53,13 +53,16 @@ export function titleFromFileName(name: string): string {
 export function parseOwnTracks(value: unknown): OwnTrack[] {
   if (!Array.isArray(value)) return [];
   const tracks: OwnTrack[] = [];
+  // The id is the file name and the playlist key, so a repeat is dropped.
+  const seen = new Set<string>();
   for (const item of value) {
     if (tracks.length >= MAX_OWN_TRACKS) break;
     if (!item || typeof item !== 'object') continue;
     const track = item as Partial<OwnTrack>;
-    if (typeof track.id !== 'string' || !track.id) continue;
+    if (typeof track.id !== 'string' || !track.id || seen.has(track.id)) continue;
     if (typeof track.uri !== 'string' || !track.uri) continue;
     const title = typeof track.title === 'string' && track.title.trim() ? track.title : 'Untitled';
+    seen.add(track.id);
     tracks.push({ id: track.id, title, uri: track.uri });
   }
   return tracks;

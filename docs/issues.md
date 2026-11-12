@@ -12,9 +12,12 @@ Order set by the owner on 2026-11-11: High first (H1 to H6), then Medium (M1 to 
 
 - Status: Open
 - Where: `components/wickglow/features/background/video-art.ts` lines 8 to 15, `BACKGROUND_LICENSES.md`
-- Cause: all eight new scene videos are wired into `VIDEOS` with no licence recorded. At least three came from moewalls.com, whose terms forbid commercial use. Any build or web export made now ships them.
-- Fix: remove the eight entries from `VIDEOS` and `VIDEO_IDS` until each has a licence row. A saved id that no longer exists already falls back to the gradient.
-- Also: `270983_medium.mp4` is called cleared in a code comment but has no row either.
+- Cause (updated 2026-11-12): five Wallper videos are wired into `VIDEOS`, and any build or web export made now ships them. The earlier moewalls.com attribution was wrong; the originals were traced to Wallper. Wallper's terms license uploads to Wallper only, so each rests on Wallper's permission:
+  - `cyberpunk_desk`: the owner reports Wallper said it may be used (2026-11-11). Wallper's reply is not on file yet.
+  - `frog_lily_pond`: the same Wallper permission; the artist (Abi Toads) has no written permission on file.
+  - `snowy_sled`, `mossy_branch`, `night_hills`: not covered by that permission yet, and their Wallper pages and uploaders are not recorded. `night_hills` also has an unidentified watermark.
+- Fix: record each permission and page in `BACKGROUND_LICENSES.md`, or remove the unconfirmed entries from `VIDEOS` and `VIDEO_IDS` before shipping. A saved id that no longer exists already falls back to the gradient.
+- Also: `270983_medium.mp4` (Classic, Pixabay) now has a row, but its Pixabay page URL and artist are not yet checked.
 
 ## High
 

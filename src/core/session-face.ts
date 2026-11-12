@@ -47,8 +47,9 @@ export function sessionFace({ mode, status, cycle, activeTask }: FaceInput, styl
   return {
     startLabel: startLabel(mode, status, style),
     cycleLine: mode === 'focus' ? `Focus · ${position + 1} of ${CYCLE_LENGTH}` : MODE_LABEL[mode],
-    // A long break follows a full cycle, so every pip is lit through it.
-    pipsLit: mode === 'long' ? CYCLE_LENGTH : position,
+    // A long break that follows a full cycle keeps every pip lit through it. A
+    // long break picked by hand mid-cycle shows the sessions actually done.
+    pipsLit: mode === 'long' && position === 0 && cycle > 0 ? CYCLE_LENGTH : position,
     chip: mode !== 'focus'
       ? { kind: 'break', text: BREAK_LINE[style] }
       : activeTask != null

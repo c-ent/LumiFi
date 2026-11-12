@@ -134,7 +134,8 @@ export function monthGrid(now: number, days: DayHistory, year: number, month: nu
         inMonth,
         minutes: cellMinutes,
         sessions: inMonth ? record?.sessions ?? 0 : 0,
-        today: key === today,
+        // A padding day from the next month is never marked as today.
+        today: inMonth && key === today,
         future: at > todayAt,
       });
     }

@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 // Which background is loading, as the swap in crossfade.tsx names it
-// (`video:rainy_cottage`, `pixel:...`, `scene:...`, `mood:...`), or null.
+// (`video:snowy_sled`, `pixel:...`, `scene:...`, `mood:...`), or null.
 // Only one backdrop is mounted at a time, so one shared value is enough. The
 // pickers read it to put a spinner on the tile that was picked.
 

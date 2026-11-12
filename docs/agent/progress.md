@@ -34,7 +34,11 @@ Moved to [completed.md](completed.md). Add new entries there.
 
 - Second review pass (owner request, 2026-11-12). A save that fails while a newer one waits can be queued again; a restored running deadline is capped at the session's length and task session counts are whole and non-negative; a failed native embed offers "Try again" beside "Open link", and any HTTP error on the embed page counts as failed; the phone and tablet mood gradient reports ready only once it is drawn; the candle entrance is skipped under reduced motion, and reduced motion is assumed until the setting is read; padding days in the month grid show no today or selected mark; every track change keeps the volume (on web a new element started at full volume); late preloads are released; on web, opening a YouTube Music link pauses the local music and does not resume it; a late failure of an old hand-off no longer closes a newer stream; own files are capped at 500 before copying; desktop zen keeps the Start button visible; tablet zen waits while the keyboard is up; the closed phone sheet is hidden from screen readers and has no focusable controls. Check on a device: the phone sheet's handle and mini timer still appear while it slides, a TalkBack swipe skips the closed sheet, and a track picked at low volume stays low on web.
 
+- Third review pass (owner request, 2026-11-12). A pause that lands after the deadline completes the session instead of pausing at 0:00; every cancel also clears an alarm left under the pre-rename id `lumifi-session-end`; a restored session length that is not whole minutes is not trusted; a duplicate own-track id is dropped on load; a pick where every copy failed shows "Could not add those files"; any new link submission, even an invalid one, supersedes an older check, and a checked link only starts playing if nothing else was chosen meanwhile (`addStreamLink` now opens it); the store retires its save queue on unmount (`dispose`, undone by `revive` when an effect re-runs); the gradient reports ready only once it has a size; the web embed iframe is sandboxed without top navigation; zen wakes on mouse and key activity on all three web layouts (moved into `use-zen.ts`); on phone and tablet the task row puts the date and buttons on a second row; on a short phone with the keyboard up and a stream playing, the sheet takes the height and the player tucks behind it. Check in a browser: Spotify, YouTube and Apple Music embeds still play and sign in under the sandbox; zen wakes on a key press on phone and tablet widths. On a device: the two-row task list, and the sheet with a stream and the keyboard up on a small phone.
+
 ## Next up
+
+Interim (owner request, 2026-11-12): a sideloaded APK from the `preview` profile (`eas build --platform android --profile preview`; `eas.json` sets `buildType: apk` and `autoIncrement`). It uses the same EAS keystore that Play will use later, so do not delete that keystore.
 
 Google Play release, in this order:
 
@@ -47,7 +51,8 @@ Google Play release, in this order:
 7. Data Safety form, content rating and target audience.
 8. Release build: `eas build --platform android` (an `.aab`, R8 minified). Test it on a device, because a debug build does not show R8 problems.
 9. Closed test: 12 testers for 14 consecutive days (personal accounts created after 13 November 2023). Start as soon as the build is ready, since the 14 days cannot be shortened.
-10. `eas submit` to production.
+10. Owner: apply for production access in Play Console once the closed test has run its 14 days, and wait for Google's approval.
+11. `eas submit` to production.
 
 Run the device checks in "Still to check" during the closed test.
 

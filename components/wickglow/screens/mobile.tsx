@@ -115,7 +115,12 @@ export function MobileWickglow() {
   const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
   // Below the top bar (12 + 46) and the mode tabs (14 + 46), with a small gap.
   const playerTop = insets.top + 128;
-  const roof = playerReserve > 0 ? playerTop + playerReserve + 8 : insets.top + 12;
+  const streamRoof = playerTop + playerReserve + 8;
+  // Too little room under the player for a usable sheet (the keyboard is up on
+  // a short screen): the sheet takes the full height and the player tucks
+  // behind it, still mounted and playing, instead of covering the sheet's top.
+  const cramped = playerReserve > 0 && height - sheetBottom - streamRoof < 200;
+  const roof = playerReserve > 0 && !cramped ? streamRoof : insets.top + 12;
   const sheetHeight = Math.max(200, Math.min(height * 0.8, 760, height - sheetBottom - roof));
 
   // Slide the sheet up, or down behind the tab bar.
@@ -249,7 +254,7 @@ export function MobileWickglow() {
 
       {/* Playing Spotify/YouTube/Apple Music embed floats near the top. It lives
           here (not inside a tab) so closing the sheet doesn't stop the stream. */}
-      <StreamStage style={[styles.stream, { top: playerTop }]} />
+      <StreamStage style={[styles.stream, { top: playerTop }, cramped && open ? styles.streamTucked : null]} />
 
       {/* The sheet: a one-line timer, then the open tab's content. It slides up
           from behind the tab bar, and rides above the keyboard while typing. */}
@@ -454,6 +459,10 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     zIndex: 7,
+  },
+  // Behind the sheet (6) but above the dim (4), while the sheet needs the room.
+  streamTucked: {
+    zIndex: 5,
   },
   stage: {
     flex: 1,

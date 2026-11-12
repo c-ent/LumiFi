@@ -1,4 +1,4 @@
-import { idleSession, isSameRun, pauseSession, startSession, takeCompletedSession } from '@/src/core/clock';
+import { idleSession, isSameRun, pauseSession, sessionAwaitingCompletion, startSession, takeCompletedSession } from '@/src/core/clock';
 import { modeAfterSkip, modeDurationMs } from '@/src/core/phase';
 import { focusEndLine, MusicEnd } from '@/src/core/session-end';
 import type { TimerCfg, TimerMode } from '@/src/core/types';
@@ -124,6 +124,12 @@ export function createSessionRun({ state, alarm, music, show, now, random }: Ses
   const pause = () => {
     const current = state.get();
     if (current.session.status !== 'running') return;
+    // A pause that lands after the deadline but before the clock noticed it
+    // would leave the session paused at 0:00 with nothing paid. It completes.
+    if (sessionAwaitingCompletion(current.session, now())) {
+      reachEnd();
+      return;
+    }
     state.commit({ ...current, session: pauseSession(current.session, now()) });
     show({ ending: null });
     void alarm.cancel();

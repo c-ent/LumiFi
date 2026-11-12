@@ -22,6 +22,14 @@ export interface SaveQueue<T> {
   now: (state: T) => void;
   /** Write the waiting state at once, if there is one. */
   flush: () => void;
+  /**
+   * Write the waiting state once, then stop for good: no later write, no retry.
+   * For a store being retired, so a retry cannot land on top of what a newer
+   * store has written to the same key since.
+   */
+  dispose: () => void;
+  /** Undo `dispose`. Strict Mode and Fast Refresh re-run an effect on the same store. */
+  revive: () => void;
 }
 
 /**
@@ -35,6 +43,7 @@ export function createSaveQueue<T>(write: (state: T) => WriteResult, delayMs: nu
   let waiting: { state: T } | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let retryMs = RETRY_MIN_MS;
+  let disposed = false;
 
   const clear = () => {
     if (timer != null) clearTimeout(timer);
@@ -45,7 +54,7 @@ export function createSaveQueue<T>(write: (state: T) => WriteResult, delayMs: nu
   // waiting: that one replaces it anyway. Either way a failed state is no
   // longer the saved one, so handing it back later queues it again.
   const failed = (state: T) => {
-    if (last?.state !== state) return;
+    if (disposed || last?.state !== state) return;
     last = null;
     if (waiting) return;
     waiting = { state };
@@ -55,6 +64,7 @@ export function createSaveQueue<T>(write: (state: T) => WriteResult, delayMs: nu
   };
 
   const run = (state: T) => {
+    if (disposed) return;
     last = { state };
     let result: WriteResult;
     try {
@@ -90,6 +100,7 @@ export function createSaveQueue<T>(write: (state: T) => WriteResult, delayMs: nu
 
   return {
     later: (state) => {
+      if (disposed) return;
       // Already written (or being written by `now`): nothing is left to save.
       if (last && state === last.state) {
         waiting = null;
@@ -106,5 +117,14 @@ export function createSaveQueue<T>(write: (state: T) => WriteResult, delayMs: nu
       run(state);
     },
     flush,
+    dispose: () => {
+      flush();
+      disposed = true;
+      waiting = null;
+      clear();
+    },
+    revive: () => {
+      disposed = false;
+    },
   };
 }

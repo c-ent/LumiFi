@@ -13,6 +13,19 @@ import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles
 // Permissions the iframe may use. Autoplay and encrypted-media are needed for
 // the services' players to actually play audio.
 const IFRAME_ALLOW = 'autoplay *; clipboard-write; encrypted-media *; fullscreen *; picture-in-picture *';
+// What the embed page may do. Scripts and its own origin (for sign-in and
+// playback), popups for "open in the app" links, sign-in forms and
+// fullscreen. Neither top-navigation token is granted, so an embed can never
+// navigate Wickglow itself away.
+const IFRAME_SANDBOX = [
+  'allow-scripts',
+  'allow-same-origin',
+  'allow-popups',
+  'allow-popups-to-escape-sandbox',
+  'allow-forms',
+  'allow-presentation',
+  'allow-storage-access-by-user-activation',
+].join(' ');
 
 export function StreamPlayer({
   service,
@@ -48,6 +61,7 @@ export function StreamPlayer({
           src: embedUrl,
           title: `${name} player`,
           allow: IFRAME_ALLOW,
+          sandbox: IFRAME_SANDBOX,
           allowFullScreen: true,
           referrerPolicy: 'strict-origin-when-cross-origin',
           style: { width: '100%', height: '100%', border: 0 },

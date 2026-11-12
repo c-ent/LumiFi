@@ -1,6 +1,6 @@
 import { colors, fade, radius } from '@/src/theme/tokens';
 import { StreamServiceMark } from '@/components/wickglow/shared/stream-marks';
-import { parseStreamLink, playbackFor, streamServiceName } from '@/src/core/stream-links';
+import { playbackFor, streamServiceName } from '@/src/core/stream-links';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useWickglow } from '@/components/wickglow/logic';
@@ -49,16 +49,15 @@ export function StreamBlock({
   const [notice, setNotice] = useState<string | null>(null);
 
   // "Add" pressed. The save is async (it checks whether the link is private),
-  // so a successful add or an already-saved link clears the field and starts
-  // playing it; any other result shows a message under the field.
+  // so a successful add or an already-saved link clears the field;
+  // `addStreamLink` starts playing it unless something newer is playing. Any
+  // other result shows a message under the field.
   const submit = () => {
     const pending = draft;
     void addStreamLink(pending).then((result) => {
       if (result === 'added' || result === 'duplicate') {
         // Only clear if the user hasn't typed something new in the meantime.
         setDraft((current) => (current === pending ? '' : current));
-        const parsed = parseStreamLink(pending);
-        if (parsed.ok) openStream(parsed.link.id);
         setNotice(null);
         return;
       }

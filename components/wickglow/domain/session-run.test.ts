@@ -120,6 +120,17 @@ describe('session run', () => {
     expect(t.get().session).toMatchObject({ mode: 'short', status: 'idle', remainingMs: 5 * MIN });
   });
 
+  it('completes a session paused after its deadline instead of leaving it paused at zero', async () => {
+    const t = setup();
+    await t.run.start();
+    t.advance(25 * MIN + 500);
+    t.run.pause();
+    expect(t.get().session.status).not.toBe('paused');
+    expect(t.get().session.mode).toBe('short');
+    expect(t.get().day.minutes).toBe(25);
+    expect(t.music.chime).toHaveBeenCalledTimes(1);
+  });
+
   it('cancels the alarm on pause and moves it to the new deadline on resume', async () => {
     const t = setup();
     await t.run.start();

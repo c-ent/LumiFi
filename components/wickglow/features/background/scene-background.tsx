@@ -118,8 +118,11 @@ function GradientScene({ theme, size, drifts, breathe, onReady }: {
   breathe: Animated.AnimatedInterpolation<number>;
   onReady: () => void;
 }) {
-  // A gradient has nothing to load, so it is ready at once.
-  useEffect(() => onReady(), [onReady]);
+  // A gradient has nothing to load, so it is ready as soon as it has a size to draw at.
+  const drawable = size.width > 0 && size.height > 0;
+  useEffect(() => {
+    if (drawable) onReady();
+  }, [drawable, onReady]);
   // Two scenes can be mounted while switching, so each gradient id is unique.
   const gradientId = `scene-${theme.id}`;
   return (

@@ -24,6 +24,20 @@ describe('save queue', () => {
     expect(write).toHaveBeenCalledWith({ n: 40 });
   });
 
+  it('writes the waiting state on dispose, then never writes or retries again', async () => {
+    const write = jest.fn(async () => false);
+    const queue = createSaveQueue(write, 300, loaded);
+    queue.later({ n: 1 });
+    queue.dispose();
+    expect(write).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    jest.advanceTimersByTime(120000);
+    queue.later({ n: 2 });
+    queue.now({ n: 3 });
+    jest.advanceTimersByTime(120000);
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
   it('does not write the state that was just loaded', () => {
     const write = jest.fn();
     const queue = createSaveQueue(write, 300, loaded);

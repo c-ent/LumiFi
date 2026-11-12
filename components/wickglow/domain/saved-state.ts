@@ -200,7 +200,10 @@ function readSession(value: unknown, cfg: TimerCfg, now: number): SessionClock {
     : 'idle';
   const limit = MAX_MINUTES[mode] * 60000;
   // A save from before totalMs existed falls back to the configured length.
-  const storedTotal = typeof session.totalMs === 'number' && Number.isFinite(session.totalMs) && session.totalMs > 0
+  // Lengths are always whole minutes; anything else (9.5 minutes, which would
+  // round up to the 10-minute reward threshold) is not trusted either.
+  const storedTotal = typeof session.totalMs === 'number' && Number.isFinite(session.totalMs)
+    && session.totalMs > 0 && session.totalMs % 60000 === 0
     ? session.totalMs
     : modeDurationMs(cfg, mode);
   const totalMs = Math.min(storedTotal, limit);

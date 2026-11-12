@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -102,19 +101,6 @@ export function DesktopWickglow() {
   const theme = lamp.sceneTheme;
   // Big timer digits scale with the window but never pass 280px.
   const timeSize = Math.min(width * 0.23, height * 0.36, 280);
-
-  // Web only: a mouse (unlike a touch) moves without pressing, so listen to the
-  // window directly. `onTouchStart` on the root view covers touches.
-  useEffect(() => {
-    if (Platform.OS !== 'web') return undefined;
-    const onMove = () => poke();
-    window.addEventListener('pointerdown', onMove);
-    window.addEventListener('pointermove', onMove);
-    return () => {
-      window.removeEventListener('pointerdown', onMove);
-      window.removeEventListener('pointermove', onMove);
-    };
-  }, [poke]);
 
   // Open a panel, or close it if its button is pressed again.
   const togglePanel = (id: PanelId) => {

@@ -129,6 +129,13 @@ export const panelStyles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 8,
   },
+  // Phone and tablet sheet section titles ("Mood", "Daily quests", "Last 7
+  // days", ...) read larger than the shared 11px `kicker`. Desktop panels keep
+  // the smaller size (they either use `wide.label` after `kicker`, which wins
+  // since it comes last, or are desktop-only and never add this).
+  kickerLg: {
+    fontSize: 16,
+  },
   mixHead: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -267,6 +274,9 @@ export const panelStyles = StyleSheet.create({
   sceneGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    // Centers each wrapped row on its own, so an odd last tile (7 scenes at
+    // 2 per row) sits in the middle instead of flush left with a gap beside it.
+    justifyContent: 'center',
     gap: 14,
   },
   sceneBtn: {
@@ -297,12 +307,19 @@ export const panelStyles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 2,
   },
+  // 3 per row (a 3x3-ish grid; 6 moods make two full rows, a 7th "Video" tile
+  // on tablet starts a third). `moodBtn` gets a fixed width instead of `flex: 1`
+  // so a short last row doesn't stretch to fill the width.
   moodRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    // Centers each wrapped row on its own, so an odd last tile (7 moods at
+    // 3 per row) sits in the middle instead of flush left with a gap beside it.
+    justifyContent: 'center',
     gap: 10,
   },
   moodBtn: {
-    flex: 1,
+    width: '30%',
     borderWidth: 2,
     // A faint edge so each card reads on its own; selected turns it white.
     borderColor: colors.border,
@@ -312,12 +329,34 @@ export const panelStyles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 8,
   },
+  // A round swatch of the mood's flame colour.
   moodFlame: {
-    width: 22,
-    height: 30,
-    ...rounded(radius.sm),
+    width: 26,
+    height: 26,
+    ...rounded(13),
     marginBottom: 6,
     boxShadow: '0 0 16px rgba(255,255,255,0.25)',
+  },
+  // The phone and tablet content card: the same box as the level card and the
+  // stat tiles, so every section of a sheet reads as one set of tiles.
+  card: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgCard,
+    ...rounded(radius.md),
+    padding: 14,
+    marginBottom: 12,
+  },
+  // A quest tile: the same card, packed closer since they stack as a list.
+  questCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgCard,
+    ...rounded(radius.md),
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+    gap: 10,
   },
   levelCard: {
     borderWidth: 1,

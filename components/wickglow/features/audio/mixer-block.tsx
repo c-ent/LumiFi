@@ -23,7 +23,7 @@ export function MixerBlock({ mobile = false }: { mobile?: boolean }) {
   return (
     <View>
       <View style={styles.mixHead}>
-        <Text style={[styles.kicker, styles.mixKicker]}>Ambient sounds</Text>
+        <Text style={[styles.kicker, styles.mixKicker, mobile && styles.kickerLg]}>Ambient sounds</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Turn off ambient sounds"

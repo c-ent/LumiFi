@@ -11,6 +11,17 @@ export const glassPanel: ViewStyle = {
   ...(Platform.OS === 'web' ? { backdropFilter: 'blur(18px)' } : null),
 };
 
+// The phone tab bar's dark glass, for small floating controls (the desktop dock
+// buttons, mode tabs, top pills and round timer buttons): a dark tint the scene
+// shows through, a faint edge, and a brighter top edge like light on glass.
+export const darkGlass: ViewStyle = {
+  backgroundColor: colors.glassTint,
+  borderWidth: 1,
+  borderColor: colors.glassEdge,
+  borderTopColor: colors.glassEdgeOn,
+  ...(Platform.OS === 'web' ? { backdropFilter: 'blur(16px) saturate(140%)' } : null),
+};
+
 // Screens and feature files share these keys, so the sheet stays in one place.
 // This is the app's "shared CSS file": buttons, inputs, rows, bars, the
 // calendar cells and so on. React Native has no stylesheet cascade or CSS

@@ -16,7 +16,8 @@ No hardcoded hex values. React Native has no CSS variables, so tokens are keys i
 | Surface (modal and panels) | `colors.bgSurface` | `#180E14` at 93% opacity |
 | Surface, opaque | `colors.bgSurfaceSolid` | `#140F1C` |
 | Card fill | `colors.bgCard` | white at 6% opacity |
-| Scene control fill | `colors.bgControl` | white at 20% opacity, so it holds up over bright video backgrounds. Desktop top pills, mode tabs, timer round buttons and dock buttons |
+| Scene control fill | `colors.bgControl` | white at 20% opacity. No longer used by any screen since 2026-11-13; kept as a token |
+| Desktop dark glass | `darkGlass` in `shared/panel-styles.ts` | the phone tab bar's glass: `glassTint` with `glassEdge`, a `glassEdgeOn` top edge and a 16px blur on web. Desktop top pills, mode tabs, timer round buttons and dock buttons (owner request, 2026-11-13). The chosen mode tab and an open dock button stay solid white |
 | Inset field | `colors.bgInset` | black at 28% opacity |
 | Phone glass control | `colors.glassFill`, chosen `glassFillOn` | white at 7%, chosen 16%. Phone top pills, mode tabs, round buttons, sheet close button |
 | Phone glass edge | `colors.glassEdge`, `glassEdgeOn` | white at 12%, and 30% for a chosen mode and the top edge of the tab bar and sheet |

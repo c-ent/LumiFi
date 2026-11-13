@@ -4,7 +4,7 @@ This project uses third-party audio assets for background music, ambient sounds,
 
 ## Lofi Tracks
 
-All fourteen lofi tracks ship in the app from [Pixabay](https://pixabay.com/music/) under the [Pixabay Content License](https://pixabay.com/service/license-summary/). Each file in `assets/audio/lofi/` is named `Title - Author.mp3`.
+All fourteen lofi tracks ship in the app from [Pixabay](https://pixabay.com/music/) under the [Pixabay Content License](https://pixabay.com/service/license-summary/). Each file in `assets/audio/lofi/` is named `Title - Author.ogg`. These are Opus re-encodes (64 kbps, 2026-11-13) of the 256 kbps Pixabay MP3s, made to shrink the app; the licence allows modification. The original MP3s are kept, unbundled, in `assets/audio/lofi/original/`.
 
 **Author vs. contributor.** The track page shows only the contributor's Pixabay handle. The name in the Author column is the one on that contributor's *profile* details block, which the track page does not display — check it by opening the handle's profile, not the track. Where a profile carries no separate name the handle stands in for both, which is why two contributors each have a track called just "Lofi".
 
@@ -53,7 +53,7 @@ All nine ambient loops are sourced from [Freesound](https://freesound.org), and 
 | Keyboard    | `Keyboard.ogg`   | Keyboard    | Caleitobb   | [871564](https://freesound.org/s/871564/) | CC0 1.0 |
 | Waves       | `Waves.ogg`      | Waves       | Jojo1298    | [698911](https://freesound.org/s/698911/) | CC0 1.0 |
 
-**Status.** Author, URL and licence are from Freesound page, and the matching recording is in `assets/audio/ambient/` under each file name. Every loop is **CC0 1.0**, so none needs attribution, none restricts commercial use, and no credits screen is required for ambient audio.
+**Status.** Author, URL and licence are from Freesound page, and the matching recording is in `assets/audio/ambient/` under each file name. The shipped loops are Opus re-encodes (64 kbps, 2026-11-13) of the Vorbis files kept, unbundled, in `assets/audio/ambient/original/`. Every loop is **CC0 1.0**, so none needs attribution, none restricts commercial use, and no credits screen is required for ambient audio.
 
 ## Sound Effects (SFX)
 

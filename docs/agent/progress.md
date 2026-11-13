@@ -8,7 +8,15 @@ v2
 
 ## Current feature
 
-Accounts and saving with Firebase (owner request, 2026-11-13). Comes before the Google Play release, which is paused until this is done. Blocked until the owner approves the Firebase dependency and the auth change (Ask first in AGENTS.md); see Open questions.
+Accounts and saving with Firebase (owner request, 2026-11-13). Comes before the Google Play release, which is paused until this is done. Owner approved (2026-11-13): the `firebase` package; Auth and Firestore on the free Spark plan; sign-in with Email/Password and Google; "saving" means XP, streaks, tasks and history synced across devices.
+
+Built 2026-11-13 (steps 1 to 6 of [../feature/firebase.md](../feature/firebase.md)): email sign-in, sign-up, reset and verification; Google sign-in (web works, Android code waits on owner tasks); Firestore layout and rules, tested on the emulator; first sign-in with "keep which progress"; ongoing sync; account deletion by email with a page at `/delete-account`. Typecheck, tests, rules tests, lint and both bundles pass (details in the feature doc's "Checks run").
+
+Also 2026-11-13: the read-cost fix the owner chose after a review (fix B with savings 1 to 4): one `records` collection, each device reads only what is new since its last sync, the subtask list and session count are no longer synced, task edits wait 10 s, and deleted-task tombstones are cleared after 30 days. Estimated: about 2,000 to 2,500 active users a day on the free plan, no longer shrinking as history grows (it was about 9 a day after a year). Details and the table: the feature doc's "Read and write costs".
+
+Also fixed 2026-11-13: the web app showed only a black screen. `app/+html.tsx` (added in ba5822c for the keyboard fix) did not render Expo's `headNodes` and `bodyNodes`, so every web build since had no script tags and stayed on the dark loading screen. The live site was deployed before that and still works; the next deploy needs this fix.
+
+Next: the owner tasks below, then the account checks under Still to check. When those pass, the feature moves to completed.md and the Play release resumes.
 
 ## Current goal
 
@@ -16,13 +24,20 @@ Add accounts and saving with Firebase, then return to the Google Play release. O
 
 ## Not yet completed
 
-- Accounts and saving with Firebase (current, pending approval).
+- Accounts and saving with Firebase (current, code built). Owner tasks left:
+  1. Deploy the Firestore rules: `npx firebase login`, then `npm run deploy:rules`. Until then the live database denies everything, so sign-in works but syncing shows "Could not reach your account".
+  2. EAS: the six `EXPO_PUBLIC_FIREBASE_*` vars (`eas env:create`).
+  3. Google on Android: Android app in Firebase (`com.cent.wickglow` + SHA-1 from `eas credentials`), `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` in `.env` and EAS, then a new development build.
+  4. Privacy policy: account data in Firebase.
+  5. Before release: check the email-based account deletion against Play's current policy.
 - Google Play release (paused until after accounts and saving). See Next up.
 - C1 from [../issues.md](../issues.md): the uncleared videos.
 
 ## Open questions
 
-- Accounts and saving (owner, 2026-11-13). Needs owner approval before building: (a) the Firebase dependency and which Firebase services (Auth, Firestore?), (b) the auth change, (c) how this squares with the 2026-11-10 decision to drop accounts and sync, (d) what "savings rate" means (a saving rate for progress or money? Not in the spec). Also check that Firebase does not go against the server-validated rewards rule (XP is validated on the server, never sent as a total from the client); Supabase is the current backend and Firebase would be a second one.
+- Accounts and saving: answered 2026-11-13 (sign-in in Stats; user picks on a merge conflict; Google on Android approved; progress only syncs), recorded in [../feature/firebase.md](../feature/firebase.md). Also answered 2026-11-13: rule caps on XP and streak changes are enough; users request account deletion by email and the owner deletes it by hand after 7 days. No Firebase questions are open. One convention change to confirm: AGENTS.md allowed only the six Firebase values in the client; Google sign-in on Android also needs `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (a public OAuth id, not a secret), so the rule now names it. Say if you want it handled another way.
+- Account name (2026-11-13): the account card shows the Firebase Auth profile name (from Google, or the optional "Name" typed at sign-up), else the email. People can change their name from the pencil on the account card (owner, 2026-11-13); an empty name goes back to showing the email. Open: is a username or a profile page wanted? Not built; no Firestore schema change is needed for the name.
+- Security: `npm audit` reports 4 high findings in `@grpc/grpc-js`, pulled in by Firestore's Node build. The app bundles the browser or React Native build, which does not use gRPC; re-check on the next Firebase update.
 - Play release: the privacy policy URL, the store name after the trademark search, and the developer account.
 - Spotify widget terms: they require a privacy policy that says the embed sets cookies, including third-party ones, and how to manage them. Needed before release if Spotify embeds ship.
 - The Apple Music card that floats bottom-right on desktop after the Music panel closes, with a "Find stream" button: keep it or not?
@@ -34,7 +49,7 @@ Add accounts and saving with Firebase, then return to the Google Play release. O
 Paused on 2026-11-13 until accounts and saving are done. Resume in this order:
 
 1. Owner: trademark and store-name search for Wickglow.
-2. Owner: write and host a privacy policy. It must cover the Spotify embed's cookies (including third-party ones and how to manage them), Supabase data, and that background scenes are downloaded from the Wickglow site on Vercel, which sees the device's IP address.
+2. Owner: write and host a privacy policy. It must cover the Spotify embed's cookies (including third-party ones and how to manage them), account data in Firebase (Google), and that background scenes are downloaded from the Wickglow site on Vercel, which sees the device's IP address.
 3. Owner: create the Play Console developer account ($25 one time).
 4. Background licences (`BACKGROUND_LICENSES.md`): add the permission text for `frog_lily_pond` (Abi Toads) and Wallper's reply for `cyberpunk_desk`; confirm Wallper's permission covers `snowy_sled`, `mossy_branch` and `night_hills` and add their page links; add the row for `270983_medium.mp4` (Classic, Pixabay) if still missing.
 5. Check the final Android manifest: no microphone permission, and no new permission, ads or tracking without the owner's go-ahead.
@@ -65,6 +80,21 @@ Out of scope by owner decision, 2026-11-10: cosmetics, private circles, focus ro
 - Tablet layout: Sounds shows the tracks with no tabs; the side column reads Tasks, Sounds, mixer, quests, stats, calendar, timer settings; the task list uses two rows; the Video mood card's spinner fits.
 - Large tablet in landscape (desktop layout, needs the Vercel deploy): a remote scene tile shows its size, a tap shows the percentage and then plays it; it still plays in airplane mode; with the network off a tap shows "Tap to retry"; closing the app mid-download leaves no broken scene; tapping another tile during a download keeps that tile selected. On a phone or tablet with a remote video saved from desktop, Classic plays.
 - Backgrounds and fonts: video playback is smooth; switching shows no black flash and settles on the last pick; fonts are right from the first frame.
+
+### Web black screen fix
+
+- Run `npx expo start --web` and open it: the app shows (not a black screen). After the next Vercel deploy, the live site still loads.
+
+### Accounts (needs the rules deployed)
+
+- Web: create an account with email; the verification email arrives and the row says "Email not confirmed" until the link is opened and you come back to the tab. Sign out and in; Forgot password sends a link; a wrong password and a short password show their messages. Continue with Google opens the popup and signs in.
+- Web, two browsers (or a normal and a private window) on the same account: a finished focus session, a new task, a ticked task and a deleted task show on the other within a few seconds, with the same XP, level, streak and calendar. Edit a task offline in one, then reconnect: it goes up.
+- First sign-in: a device with progress on an empty account uploads it; a fresh device on that account takes it; a device with its own progress shows "Keep which progress?", and each choice keeps only that side (the other device follows). "Decide later" and the row's Choose button.
+- Firebase console after those: only `users/{uid}/records`, with `s_`, `t_` (and `d_` for an older save) records; no totals. Opening the subtask list writes nothing; several quick task edits arrive as one change about 10 s later, or at once when the tab is hidden.
+- Reads: Firebase console, Firestore, Usage. Reopening the app with nothing new should add only a read or two.
+- Android (current development build): email sign-in and sync work; the Google button is hidden. After the Google owner tasks and a new build: Google sign-in works and the account picker shows again after sign-out.
+- Delete account opens an email with the account's email and id; `https://wickglow.vercel.app/delete-account` shows the page after the next deploy.
+- Phone, tablet and desktop: the Account row (new compact layout, 2026-11-13) and both cards fit; a long email shortens in the middle; the status dot is green when saved; the sign-in card stays above the keyboard.
 
 ### In a browser
 

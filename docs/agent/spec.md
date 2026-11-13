@@ -17,7 +17,7 @@ From competitor research (evidence in `roadmap.md`). Check new work against thes
 ## Goals
 1. A user can start a focus session within two taps of opening the app, with no account.
 2. The time shown is always correct after any period in the background, and a notification fires at the session end on a physical Android device.
-3. XP, level, streak and quest progress persist across restarts, on the device. Accounts and sync were dropped on 2026-11-10.
+3. XP, level, streak and quest progress persist across restarts, on the device. Optional accounts sync them across devices (v2, built 2026-11-13; see `docs/feature/firebase.md`): sign in from the Account row in Stats, with email and password or Google.
 4. One codebase renders three layouts (phone, tablet, desktop web) from window width.
 5. Music and ambient sounds keep playing with the screen off.
 6. A session ends gently and motivates: the flame dims, a soft chime plays, a short encouraging message shows, and the music does what the user chose.
@@ -78,13 +78,13 @@ From competitor research (evidence in `roadmap.md`). Check new work against thes
 Timer, tasks, music and the full ambient mixer (rain, cafe, fireplace, wind, clock ticking, brown noise, forest, keyboard and waves), the user's own audio files, public streaming links played in each service's own player, moods, focus fade, gentle session end, session-end messages, music-at-end setting, local storage, session-end notification, Android and web.
 
 ### Planned after v1
-Shipped one at a time from `roadmap.md`: your own music files, streaming playlists, and calendar stats (v2, shipped). Goal-linked quests shipped and were removed on 2026-11-04. Accounts and sync, private circles, and focus rooms were dropped by the owner on 2026-11-10, as were cosmetics; their roadmap entries are kept as history only. Study pets and achievements are out.
+Shipped one at a time from `roadmap.md`: your own music files, streaming playlists, and calendar stats (v2, shipped). Goal-linked quests shipped and were removed on 2026-11-04. Private circles and focus rooms were dropped by the owner on 2026-11-10, as were cosmetics; their roadmap entries are kept as history only. Accounts and sync were dropped on 2026-11-10 and brought back on 2026-11-13 as the current feature. Study pets and achievements are out.
 
 ### Out of scope for v1
-- Focus rooms, chat, friends and leaderboards. Dropped by the owner on 2026-11-10 along with accounts and sync.
+- Focus rooms, chat, friends and leaderboards. Dropped by the owner on 2026-11-10.
 - Study pets and achievements are out. Goal-linked quests were removed. The calendar view is v2.
 - A coin currency, loot boxes, or paid cosmetics.
-- iOS release, app blocking, flashcards, planners, notes, a Spotify, Google, or Apple sign-in or playback SDK, extra languages.
+- iOS release, app blocking, flashcards, planners, notes, a Spotify, Google, or Apple sign-in or playback SDK for music, extra languages. (Google sign-in for Wickglow accounts is approved, see `docs/feature/firebase.md`.)
 - Ads, tracking SDKs, payments, and any paywall on the core timer.
 - A marketing site inside this app. The site is a separate static project (Astro or plain HTML) for the pitch, store links, and the privacy policy. The Expo web build is the app, not that site.
 

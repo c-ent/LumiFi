@@ -16,7 +16,9 @@ export { monthGrid, monthRef, monthShade, quietDayLine, shiftMonth } from '@/src
 export { hasOpenQuests, LEVEL_NAMES, QUESTS, levelInfo };
 export { breakWax, colors, fonts, radius, rounded } from '@/src/theme/tokens';
 
-export type SceneId = 'dusk' | 'midnight' | 'forest' | 'ember';
+// Desktop scenes and phone moods are the same nine themes (owner decision,
+// 2026-11-14), so a scene is always the same id as a mood.
+export type SceneId = MoodId;
 
 // Volume sliders, each 0..100. The ambient sounds are listed in src/core/ambient.ts.
 export type { MixLevels } from '@/src/core/ambient';
@@ -57,13 +59,32 @@ export interface MoodTheme {
 
 // Layout detection lives in `features/layout.ts`, not here.
 
-// Desktop scenes are separate from the phone moods. Unifying them is still an open question.
-export const SCENES: SceneTheme[] = [
-  { id: 'dusk', name: 'Dusk', b1: '#2a1b3d', b2: '#6b3a4a', b3: '#c97b4a', o1: '#ffb36b', o2: '#ff7e8b', o3: '#ffd9a0', accent: '#ffb36b' },
-  { id: 'midnight', name: 'Midnight', b1: '#080c20', b2: '#162052', b3: '#34428a', o1: '#6c7bff', o2: '#3dd2ff', o3: '#a9b4ff', accent: '#9fadff' },
-  { id: 'forest', name: 'Forest', b1: '#06191a', b2: '#0e3b36', b3: '#2f6b52', o1: '#5fe0b0', o2: '#e3f27a', o3: '#9be8c8', accent: '#7be0b8' },
-  { id: 'ember', name: 'Ember', b1: '#160c0e', b2: '#471a1c', b3: '#a1442a', o1: '#ff9a56', o2: '#ffd27a', o3: '#ff7a6b', accent: '#ff9a56' },
-];
+// Insertion order of `moods` (src/theme/tokens.ts) is the one display order
+// for both pickers, so Amber/Moonlit/Rose/... land in the same spot on
+// desktop and on phone/tablet.
+const THEME_ORDER = Object.keys(moods) as MoodId[];
+
+const moodNames: Record<MoodId, string> = {
+  amber: 'Amber', moon: 'Moonlit',
+  rose: 'Rose', violet: 'Violet', ash: 'Ash',
+  forest: 'Forest', tide: 'Tide',
+};
+
+// Desktop scenes are built from the same mood palettes: the background
+// base/mid/glow become the gradient's three stops, and the three flame colors
+// become the three drifting orbs. A scene is always the same name and the
+// same colors as its mood (owner decision, 2026-11-14).
+export const SCENES: SceneTheme[] = THEME_ORDER.map((id) => ({
+  id,
+  name: moodNames[id],
+  b1: moods[id].bgBase,
+  b2: moods[id].bgMid,
+  b3: moods[id].bgGlow,
+  o1: moods[id].flame1,
+  o2: moods[id].flame2,
+  o3: moods[id].flame3,
+  accent: moods[id].accent,
+}));
 
 // Wax, dish and glow are candle illustration colors, kept here so the room art
 // reads from `MOODS` alone.
@@ -76,16 +97,30 @@ const candleArt = {
     glow: 'rgba(120, 160, 255, 0.45)', wax: '#E6ECF8', waxS: '#B7C3DB', melt: '#C9D8F2',
     dish: '#1F2745', dishHi: '#2D3A66',
   },
-  spirit: {
-    glow: 'rgba(90, 230, 160, 0.4)', wax: '#E3F3E9', waxS: '#B3CFBC', melt: '#C8E8D3',
-    dish: '#1A3326', dishHi: '#274B38',
+  rose: {
+    glow: 'rgba(255, 120, 180, 0.42)', wax: '#F8E6EE', waxS: '#D6B7C5', melt: '#F0C6D8',
+    dish: '#2E1424', dishHi: '#45203A',
+  },
+  violet: {
+    glow: 'rgba(170, 120, 255, 0.42)', wax: '#EEE8F8', waxS: '#C5BADB', melt: '#D9CCF2',
+    dish: '#221A3D', dishHi: '#33285A',
+  },
+  ash: {
+    glow: 'rgba(235, 230, 220, 0.3)', wax: '#EDEAE4', waxS: '#C2BEB6', melt: '#DAD5CC',
+    dish: '#1E1E22', dishHi: '#2C2C32',
+  },
+  forest: {
+    glow: 'rgba(167, 217, 107, 0.4)', wax: '#EAF3DC', waxS: '#BFCDA8', melt: '#DCEAC4',
+    dish: '#17301C', dishHi: '#234A2C',
+  },
+  tide: {
+    glow: 'rgba(94, 227, 240, 0.4)', wax: '#DFF4F6', waxS: '#AFD0D4', melt: '#CBEBEF',
+    dish: '#0E2E38', dishHi: '#184654',
   },
 } as const;
 
-const moodNames: Record<MoodId, string> = { amber: 'Amber', moon: 'Moonlit', spirit: 'Spirit' };
-
 // Merge the base mood tokens with the candle art into the full mood objects.
-export const MOODS: MoodTheme[] =(Object.keys(moods) as MoodId[]).map((id) => ({
+export const MOODS: MoodTheme[] = THEME_ORDER.map((id) => ({
   id,
   name: moodNames[id],
   ...moods[id],

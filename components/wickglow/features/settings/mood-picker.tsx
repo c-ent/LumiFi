@@ -7,9 +7,9 @@ import { useWickglow } from '@/components/wickglow/logic';
 import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles';
 import { MOODS } from '@/components/wickglow/theme';
 
-// Phone/tablet: choose a mood (Amber / Moonlit / Spirit). A mood only changes
-// colors (background, flame, accent), never the layout. Each button shows a dot
-// in that mood's flame color. Desktop uses ScenePicker instead.
+// Phone/tablet: choose a mood (Amber / Moonlit / Rose / ...). A mood only changes
+// colors (background, flame, accent), never the layout. Each button shows a
+// circle in that mood's flame color. Desktop uses ScenePicker instead.
 // `video` adds the looping-video background as one more choice; the tablet
 // passes it and the phone does not.
 export function MoodPicker({ video = false }: { video?: boolean }) {
@@ -18,7 +18,7 @@ export function MoodPicker({ video = false }: { video?: boolean }) {
   const reduced = useReducedMotion();
   return (
     <View>
-      <Text style={styles.kicker}>Mood</Text>
+      <Text style={[styles.kicker, styles.kickerLg]}>Mood</Text>
       <View style={styles.moodRow}>
         {MOODS.map((item) => {
           const selected = item.id === mood && !(video && videoBg);

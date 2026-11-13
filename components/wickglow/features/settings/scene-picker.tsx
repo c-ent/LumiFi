@@ -19,11 +19,12 @@ import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles
 import { SCENES } from '@/components/wickglow/theme';
 import { formatMegabytes } from '@/src/core/remote-scenes';
 
-// Desktop: choose the background. Three groups: the gradient scenes (Dusk /
-// Midnight / Forest / Ember, each with a swatch of its middle color), Pixel art
+// Desktop: choose the background. Three groups: the nine gradient scenes
+// (each with a swatch of its middle color; the same nine themes and colors as
+// the phone/tablet MoodPicker, see components/wickglow/theme.ts), Pixel art
 // (looping pixel-art videos) and Videos (looping video).
 // Exactly one choice across all groups is selected. Phone/tablet use MoodPicker
-// instead (the two systems are still separate; see progress.md).
+// instead, which lists the same nine themes under the same names.
 //
 // Every video but Classic lives on the scene host. On Android a tile that is not
 // downloaded yet shows its size; a tap downloads it, then selects it, unless

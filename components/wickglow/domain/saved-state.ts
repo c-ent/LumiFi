@@ -25,8 +25,10 @@ export const STORAGE_KEY = 'wickglow:state';
 export const LEGACY_STORAGE_KEY = 'lumifi:state';
 
 const MODES: TimerMode[] = ['focus', 'short', 'long'];
-const SCENE_IDS: SceneId[] = ['dusk', 'midnight', 'forest', 'ember'];
-const MOOD_IDS: MoodId[] = ['amber', 'moon', 'spirit'];
+// Scenes and moods are the same themes (see components/wickglow/theme.ts).
+const THEME_IDS: MoodId[] = ['amber', 'moon', 'rose', 'violet', 'ash', 'forest', 'tide'];
+const SCENE_IDS: SceneId[] = THEME_IDS;
+const MOOD_IDS: MoodId[] = THEME_IDS;
 
 // levelInfo walks XP a level at a time, so a huge finite total would spin for
 // years. This sits far above any reachable score but keeps the walk bounded.
@@ -61,7 +63,9 @@ export function createInitialState(now = Date.now()): SavedState {
     cfg,
     auto: false,
     zenOpt: true,
-    scene: 'dusk',
+    // Dusk (the old desktop default) was removed 2026-11-14; desktop now
+    // defaults to the same theme as phone/tablet.
+    scene: 'amber',
     mood: 'amber',
     videoBg: null,
     pixelBg: null,

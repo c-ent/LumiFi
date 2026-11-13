@@ -1,6 +1,8 @@
 import { MixLevels, silentAmbient } from '@/src/core/ambient';
 import { idleSession, SessionClock } from '@/src/core/clock';
 import { emptyDay, restoreDayHistory } from '@/src/core/history';
+import { emptyLog, legacyFromHistory, MAX_DAY_MINUTES, MAX_DAY_TASKS, ProgressLog, sessionRecord, type DayRecord, type SessionRecord } from '@/src/core/progress-log';
+import type { SyncMeta } from '@/src/core/sync';
 import { OwnTrack, parseOwnTracks } from '@/src/core/own-tracks';
 import { parseStreamLinks, StreamLink } from '@/src/core/stream-links';
 import { DEFAULT_MINUTES, MAX_MINUTES, MIN_MINUTES, modeDurationMs } from '@/src/core/phase';
@@ -53,6 +55,8 @@ export interface SavedState extends ProgressState {
   streamLinks: StreamLink[];
   notificationsAsked: boolean;
   session: SessionClock;
+  /** What this device last saw in the linked account, or null when it was never linked. */
+  sync: SyncMeta | null;
 }
 
 /** The state a fresh install starts from: no XP, no streak, no tasks. */
@@ -83,6 +87,8 @@ export function createInitialState(now = Date.now()): SavedState {
     streamLinks: [],
     notificationsAsked: false,
     session: idleSession('focus', modeDurationMs(cfg, 'focus')),
+    log: emptyLog(),
+    sync: null,
   };
 }
 
@@ -128,6 +134,10 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
       musicLoop: saved.musicLoop === true,
       notificationsAsked: saved.notificationsAsked === true,
       session: readSession(saved.session, cfg, now),
+      // A save from before the log existed turns its daily totals into day
+      // records once, so they can be uploaded to an account.
+      log: saved.log === undefined ? { sessions: [], legacy: legacyFromHistory(restored.days) } : readLog(saved.log),
+      sync: readSyncMeta(saved.sync),
     };
   } catch {
     return fresh;
@@ -281,4 +291,82 @@ function readHistory(value: unknown): DayHistory {
     if (isDayStats(entry)) history[entry.d] = entry;
   }
   return history;
+}
+
+function readLog(value: unknown): ProgressLog {
+  if (!value || typeof value !== 'object') return emptyLog();
+  const log = value as { sessions?: unknown; legacy?: unknown };
+  const sessions: SessionRecord[] = [];
+  const ids = new Set<string>();
+  if (Array.isArray(log.sessions)) {
+    for (const item of log.sessions) {
+      if (!item || typeof item !== 'object') continue;
+      const entry = item as Partial<SessionRecord>;
+      const record = typeof entry.end === 'number' && typeof entry.minutes === 'number'
+        ? sessionRecord(entry.end, entry.minutes, typeof entry.task === 'number' ? entry.task : null)
+        : null;
+      if (!record || ids.has(record.id)) continue;
+      ids.add(record.id);
+      sessions.push(record);
+    }
+  }
+  const legacy: DayRecord[] = [];
+  const days = new Set<string>();
+  if (Array.isArray(log.legacy)) {
+    for (const item of log.legacy) {
+      if (!item || typeof item !== 'object') continue;
+      const entry = item as Partial<DayRecord>;
+      if (typeof entry.d !== 'string' || !DAY_KEY.test(entry.d) || days.has(entry.d)) continue;
+      if (!isCount(entry.minutes) || !isCount(entry.sessions) || !isCount(entry.tasks)) continue;
+      days.add(entry.d);
+      legacy.push({
+        d: entry.d,
+        minutes: Math.min(MAX_DAY_MINUTES, Math.floor(entry.minutes)),
+        sessions: Math.min(MAX_DAY_MINUTES / 10, Math.floor(entry.sessions)),
+        tasks: Math.min(MAX_DAY_TASKS, Math.floor(entry.tasks)),
+      });
+    }
+  }
+  return { sessions: sessions.sort((a, b) => a.end - b.end), legacy };
+}
+
+// `calendarKey` format: no zero padding.
+const DAY_KEY = /^\d{4}-\d{1,2}-\d{1,2}$/;
+
+/**
+ * The link to an account. A record from the first build of accounts (no
+ * `epoch` or `since`) is dropped, so the device links again with one full
+ * read rather than trusting a shape the sync no longer uses.
+ */
+function readSyncMeta(value: unknown): SyncMeta | null {
+  if (!value || typeof value !== 'object') return null;
+  const meta = value as Partial<Record<keyof SyncMeta, unknown>>;
+  if (typeof meta.uid !== 'string' || meta.uid.length === 0) return null;
+  if (!isCount(meta.epoch) || !isCount(meta.since)) return null;
+  const strings = (list: unknown) => (Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string') : []);
+  const tasks: SyncMeta['tasks'] = {};
+  if (meta.tasks && typeof meta.tasks === 'object') {
+    for (const [id, entry] of Object.entries(meta.tasks as Record<string, unknown>)) {
+      if (!entry || typeof entry !== 'object') continue;
+      const known = entry as { stamp?: unknown; sig?: unknown };
+      if (typeof known.stamp === 'number' && Number.isFinite(known.stamp) && typeof known.sig === 'string') {
+        tasks[id] = { stamp: known.stamp, sig: known.sig };
+      }
+    }
+  }
+  const tombs: SyncMeta['tombs'] = {};
+  if (meta.tombs && typeof meta.tombs === 'object') {
+    for (const [id, at] of Object.entries(meta.tombs as Record<string, unknown>)) {
+      if (typeof at === 'number' && Number.isFinite(at)) tombs[id] = at;
+    }
+  }
+  return {
+    uid: meta.uid,
+    epoch: Math.floor(meta.epoch),
+    since: Math.floor(meta.since),
+    sessions: strings(meta.sessions),
+    days: strings(meta.days),
+    tasks,
+    tombs,
+  };
 }

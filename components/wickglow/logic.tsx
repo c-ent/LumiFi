@@ -35,6 +35,8 @@ import { useMusic } from '@/components/wickglow/hooks/use-music';
 import { useSessionClock } from '@/components/wickglow/hooks/use-session-clock';
 import { SESSION_NOTIFICATION_ID, cancelSessionEnd, prepareNotificationPermission, scheduleSessionEnd } from '@/components/wickglow/domain/notifications';
 import { loadWickglowState, saveWickglowState } from '@/components/wickglow/domain/storage';
+import { AccountProvider } from '@/components/wickglow/features/account/account';
+import { KeepProgressCard } from '@/components/wickglow/features/account/keep-progress-card';
 import {
   levelInfo,
   MixLevels,
@@ -784,7 +786,11 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
     <WickglowContext.Provider value={value}>
       <MusicPlayerContext.Provider value={music.player}>
         <ClockProvider session={saved.session} onReachEnd={onReachEnd}>
-          {now == null ? <View style={{ flex: 1, backgroundColor: colors.bgBase }} /> : children}
+          {/* The account syncs the same store (domain/account-sync.ts). */}
+          <AccountProvider store={store}>
+            {now == null ? <View style={{ flex: 1, backgroundColor: colors.bgBase }} /> : children}
+            <KeepProgressCard />
+          </AccountProvider>
         </ClockProvider>
       </MusicPlayerContext.Provider>
     </WickglowContext.Provider>

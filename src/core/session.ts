@@ -1,5 +1,6 @@
 import { rollToToday } from './history';
 import { modeAfterComplete } from './phase';
+import { appendSession, sessionRecord } from './progress-log';
 import { claimReachedQuests } from './quests';
 import { streakAfterFocus } from './streak';
 import { appendSubtask, dropTask, flipTask } from './tasks';
@@ -60,6 +61,8 @@ export function completeSession<T extends ProgressState>(
       days: { ...rolled.days, [nextDay.d]: nextDay },
       streak: rewardSession ? streakAfterFocus(rolled.streak, now) : rolled.streak,
       tasks,
+      // The record accounts sync. `now` is when the session ended.
+      log: appendSession(rolled.log, sessionRecord(Math.round(now), minutes, rolled.activeId)),
     },
     nextMode: modeAfterComplete('focus', cycle),
     messages,

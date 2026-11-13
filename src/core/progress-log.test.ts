@@ -1,0 +1,129 @@
+import { calendarKey } from './calendar';
+import {
+  appendSession,
+  emptyLog,
+  hasProgress,
+  legacyFromHistory,
+  logMinutes,
+  rebuildProgress,
+  sessionRecord,
+  withSessionCounts,
+} from './progress-log';
+import { Task } from './types';
+
+const at = (year: number, month: number, day: number, hour = 10) => new Date(year, month - 1, day, hour).getTime();
+
+function task(id: number, doneOn: string | null, parentId: number | null = null): Task {
+  return { id, text: `t${id}`, done: doneOn != null, pomos: 0, doneOn, parentId, date: null, open: false };
+}
+
+describe('session records', () => {
+  it('rejects a session under a minute or over 180 minutes', () => {
+    expect(sessionRecord(at(2026, 11, 3), 0)).toBeNull();
+    expect(sessionRecord(at(2026, 11, 3), 181)).toBeNull();
+    expect(sessionRecord(at(2026, 11, 3), 2.5)).toBeNull();
+    expect(sessionRecord(at(2026, 11, 3), 25)).toEqual({ id: `${at(2026, 11, 3)}-25`, end: at(2026, 11, 3), minutes: 25, task: null });
+    expect(sessionRecord(at(2026, 11, 3), 25, 7)?.task).toBe(7);
+  });
+
+  it('keeps a session once by id', () => {
+    const record = sessionRecord(at(2026, 11, 3), 25);
+    const once = appendSession(emptyLog(), record);
+    expect(appendSession(once, record)).toBe(once);
+    expect(once.sessions).toHaveLength(1);
+  });
+});
+
+describe('legacyFromHistory', () => {
+  it('turns days with progress into records and caps a day at 1440 minutes', () => {
+    const records = legacyFromHistory({
+      '2026-11-2': { d: '2026-11-2', minutes: 2000, sessions: 3, tasks: 1, claimed: ['q1'] },
+      '2026-11-3': { d: '2026-11-3', minutes: 0, sessions: 0, tasks: 0, claimed: [] },
+      '2026-11-1': { d: '2026-11-1', minutes: 30, sessions: 1, tasks: 0, claimed: [] },
+    });
+    expect(records).toEqual([
+      { d: '2026-11-1', minutes: 30, sessions: 1, tasks: 0 },
+      { d: '2026-11-2', minutes: 1440, sessions: 3, tasks: 1 },
+    ]);
+  });
+});
+
+describe('rebuildProgress', () => {
+  it('pays 2 XP a minute and each quest once a day', () => {
+    let log = emptyLog();
+    for (let index = 0; index < 4; index += 1) log = appendSession(log, sessionRecord(at(2026, 11, 3, 9 + index), 25));
+    const rebuilt = rebuildProgress(log, [task(1, '2026-11-3')], at(2026, 11, 3, 20));
+    // 100 minutes = 200 XP, + 40 sessions, + 50 minutes, + 30 task.
+    expect(rebuilt.xp).toBe(320);
+    expect(rebuilt.day).toEqual({ d: '2026-11-3', sessions: 4, minutes: 100, tasks: 1, claimed: ['q1', 'q2', 'q3'] });
+  });
+
+  it('does not count a session under 10 minutes toward sessions or the streak', () => {
+    const log = appendSession(emptyLog(), sessionRecord(at(2026, 11, 3), 5));
+    const rebuilt = rebuildProgress(log, [], at(2026, 11, 3, 20));
+    expect(rebuilt.xp).toBe(10);
+    expect(rebuilt.day.sessions).toBe(0);
+    expect(rebuilt.streak).toEqual({ n: 0, last: '' });
+  });
+
+  it('builds the streak across days and restarts after a gap', () => {
+    let log = emptyLog();
+    log = appendSession(log, sessionRecord(at(2026, 11, 1), 25));
+    log = appendSession(log, sessionRecord(at(2026, 11, 3), 25));
+    log = appendSession(log, sessionRecord(at(2026, 11, 4), 25));
+    expect(rebuildProgress(log, [], at(2026, 11, 4, 20)).streak).toEqual({ n: 2, last: '2026-11-4' });
+  });
+
+  it('carries a streak across a month end and from day records into sessions', () => {
+    const log = appendSession(
+      { sessions: [], legacy: [{ d: '2026-10-31', minutes: 25, sessions: 1, tasks: 0 }] },
+      sessionRecord(at(2026, 11, 1), 25),
+    );
+    expect(rebuildProgress(log, [], at(2026, 11, 1, 20)).streak).toEqual({ n: 2, last: '2026-11-1' });
+  });
+
+  it('does not count a task twice when a day record already holds it', () => {
+    const log = { sessions: [], legacy: [{ d: '2026-11-3', minutes: 0, sessions: 0, tasks: 1 }] };
+    const rebuilt = rebuildProgress(log, [task(1, '2026-11-3')], at(2026, 11, 3, 20));
+    expect(rebuilt.day.tasks).toBe(1);
+    expect(rebuilt.xp).toBe(30);
+  });
+
+  it('counts only top-level tasks', () => {
+    const rebuilt = rebuildProgress(emptyLog(), [task(1, '2026-11-3', 9)], at(2026, 11, 3, 20));
+    expect(rebuilt.day.tasks).toBe(0);
+  });
+
+  it('always has today in the history', () => {
+    const now = at(2026, 11, 3, 20);
+    const rebuilt = rebuildProgress(emptyLog(), [], now);
+    expect(rebuilt.days[calendarKey(now)]).toBe(rebuilt.day);
+    expect(rebuilt.xp).toBe(0);
+  });
+});
+
+describe('summaries', () => {
+  it('counts minutes and tells empty from not', () => {
+    const log = appendSession({ sessions: [], legacy: [{ d: '2026-11-1', minutes: 30, sessions: 1, tasks: 0 }] }, sessionRecord(at(2026, 11, 3), 25));
+    expect(logMinutes(log)).toBe(55);
+    expect(hasProgress(emptyLog(), [])).toBe(false);
+    expect(hasProgress(emptyLog(), [task(1, null)])).toBe(true);
+    expect(hasProgress(log, [])).toBe(true);
+  });
+});
+
+describe('withSessionCounts', () => {
+  it('counts each task sessions from the records, never lowering a count the device already has', () => {
+    let log = emptyLog();
+    log = appendSession(log, sessionRecord(at(2026, 11, 3, 9), 25, 1));
+    log = appendSession(log, sessionRecord(at(2026, 11, 3, 10), 25, 1));
+    log = appendSession(log, sessionRecord(at(2026, 11, 3, 11), 25, 2));
+    const tasks = [task(1, null), { ...task(2, null), pomos: 5 }, task(3, null)];
+    expect(withSessionCounts(tasks, log).map((item) => item.pomos)).toEqual([2, 5, 0]);
+  });
+
+  it('returns the same list when nothing changes', () => {
+    const tasks = [task(1, null)];
+    expect(withSessionCounts(tasks, emptyLog())).toBe(tasks);
+  });
+});

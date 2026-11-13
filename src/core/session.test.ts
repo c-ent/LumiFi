@@ -18,6 +18,7 @@ function progressAt(now: number, focus = 25): ProgressState {
     tasks: [task({ id: 1, text: 'Read chapter 5' })],
     activeId: 1,
     cycle: 0,
+    log: { sessions: [], legacy: [] },
   };
 }
 
@@ -260,5 +261,20 @@ describe('subtasks and the daily task count', () => {
     const dropped = removeTask(withSub, 2, monday).state;
     expect(dropped.day.tasks).toBe(0);
     expect(dropped.tasks).toEqual([withSub.tasks[0]]);
+  });
+});
+
+describe('session records', () => {
+  const end = new Date(2026, 10, 13, 10).getTime();
+
+  it('records a finished focus session once, with the focused task', () => {
+    const done = completeSession(progressAt(end), 'focus', end, 25);
+    expect(done.state.log.sessions).toEqual([{ id: `${end}-25`, end, minutes: 25, task: 1 }]);
+  });
+
+  it('records no task when none is focused, and nothing for a break', () => {
+    const idle = { ...progressAt(end), activeId: null };
+    expect(completeSession(idle, 'focus', end, 25).state.log.sessions[0].task).toBeNull();
+    expect(completeSession(idle, 'short', end, 5).state.log.sessions).toEqual([]);
   });
 });

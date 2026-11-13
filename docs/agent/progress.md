@@ -73,6 +73,8 @@ Out of scope by owner decision, 2026-11-10: cosmetics, accounts and sync, privat
 
 ## Still to check
 
+- Desktop logo as home (owner request, 2026-11-13). In a browser at desktop width: click the logo or "Wickglow" with each panel open and check the panel closes and only the scene and timer remain; during a focus session with zen faded in, move the mouse to show the top bar, click the logo, and check the controls come back and fade again after 3.5 s. The pointer should become a hand over the logo, and a screen reader should read "Wickglow, home, button".
+
 - Desktop dark glass (owner request, 2026-11-13). The top pills, mode tabs, Reset and Skip, and the dock buttons now use the phone tab bar's dark glass (`darkGlass`) instead of the 20% white fill. In a browser, over a bright video and a dark gradient: they should read as dark, see-through glass with a light top edge; the chosen mode and an open dock button stay solid white.
 
 - Phone glass, lighter version (2026-11-12). In a phone-width browser over each mood, and on a device: the tab bar, sheet, mode tabs, pills and round buttons should read as clear glass, not white; the open tab and the chosen mode show a soft frost (open tab icon in the mood accent); the start buttons are mood-tinted glass with light text. Check the text stays readable on the sheet on a device, where there is no blur (`glassTintSolid`, 86%).

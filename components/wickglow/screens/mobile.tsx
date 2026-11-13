@@ -21,6 +21,7 @@ import { RoomBackground } from '@/components/wickglow/features/background/room-b
 import { RainOverlay } from '@/components/wickglow/features/background/rain';
 import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { LevelCard } from '@/components/wickglow/features/progression/level-card';
+import { AccountRow } from '@/components/wickglow/features/account/account-row';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
 import { StatGrid } from '@/components/wickglow/features/progression/stat-grid';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
@@ -343,6 +344,7 @@ function StatsTab() {
       <SegmentTabs value={view} options={STATS_VIEWS} labels={STATS_LABEL} onChange={setView} mobile first />
       {view === 'stats' ? (
         <>
+          <AccountRow mobile />
           <LevelCard mobile />
           <StatGrid />
           <WeekChart mobile />

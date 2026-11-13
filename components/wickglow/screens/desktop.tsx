@@ -19,6 +19,7 @@ import { hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/them
 import { RainOverlay } from '@/components/wickglow/features/background/rain';
 import { SceneBackground } from '@/components/wickglow/features/background/scene-background';
 import { LevelCard } from '@/components/wickglow/features/progression/level-card';
+import { AccountChip } from '@/components/wickglow/features/account/account-chip';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
 import { StatGrid } from '@/components/wickglow/features/progression/stat-grid';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
@@ -295,7 +296,7 @@ export function DesktopWickglow() {
         >
           <ScrollView keyboardShouldPersistTaps="handled" style={[styles.progressScroll, panel === 'quests' && styles.questsScroll, panel === 'tasks' && styles.tasksScroll]}>
             <View style={styles.progressCard}>
-              <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
+              <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} actions={panel === 'progress' ? <AccountChip /> : undefined} />
               {panel === 'progress' ? <ProgressBoard /> : panel === 'quests' ? <QuestsBoard /> : <TaskList />}
             </View>
           </ScrollView>

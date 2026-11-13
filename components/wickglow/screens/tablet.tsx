@@ -12,6 +12,7 @@ import { RainOverlay } from '@/components/wickglow/features/background/rain';
 import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
+import { AccountRow } from '@/components/wickglow/features/account/account-row';
 import { StatGrid } from '@/components/wickglow/features/progression/stat-grid';
 import { WeekChart } from '@/components/wickglow/features/progression/week-chart';
 import { TimerSettings } from '@/components/wickglow/features/settings/timer-settings';
@@ -152,6 +153,7 @@ export function TabletWickglow() {
                 <StatGrid />
                 <WeekChart mobile />
                 <MonthCalendar mobile />
+                <AccountRow />
                 <Text style={styles.kicker}>Timer settings</Text>
                 <TimerSettings mobile />
               </>

@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View 
 import { colors, fade } from '@/src/theme/tokens';
 import { CloseIcon, GoogleIcon } from '@/components/wickglow/shared/icons';
 import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset';
+import { MAX_NAME_LENGTH } from '@/src/data/auth';
 import { useAccount } from './account';
 import { cardStyles as styles } from './account-card-styles';
 
@@ -17,6 +18,7 @@ export function SignInCard({ visible, accent, onClose }: { visible: boolean; acc
   const account = useAccount();
   const keyboard = useKeyboardInset();
   const [mode, setMode] = useState<Mode>('signIn');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -42,7 +44,7 @@ export function SignInCard({ visible, accent, onClose }: { visible: boolean; acc
     }
   };
 
-  const submit = () => run(() => (mode === 'signIn' ? account.signIn(email, password) : account.signUp(email, password)));
+  const submit = () => run(() => (mode === 'signIn' ? account.signIn(email, password) : account.signUp(email, password, name)));
   const signingUp = mode === 'signUp';
 
   return (
@@ -58,6 +60,22 @@ export function SignInCard({ visible, accent, onClose }: { visible: boolean; acc
             </View>
             <Text style={styles.lead}>Keep your XP, streak, tasks and history the same on every device.</Text>
 
+            {signingUp ? (
+              <>
+                <Text style={styles.label}>Name (optional)</Text>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  maxLength={MAX_NAME_LENGTH}
+                  autoComplete="name"
+                  textContentType="name"
+                  accessibilityLabel="Name"
+                  placeholder="What should we call you?"
+                  placeholderTextColor={fade(colors.textPrimary, 0.4)}
+                  style={styles.input}
+                />
+              </>
+            ) : null}
             <Text style={styles.label}>Email</Text>
             <TextInput
               value={email}

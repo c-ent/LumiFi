@@ -1,3 +1,4 @@
+import { installWebInputZoomGuard } from '@/components/wickglow/shared/web-input-zoom';
 import { installWebScrollbar } from '@/components/wickglow/shared/web-scrollbar';
 import { colors } from '@/src/theme/tokens';
 import { Stack } from 'expo-router';
@@ -13,6 +14,7 @@ export default function RootLayout() {
     if (Platform.OS === 'web') {
       document.title = 'Wickglow';
       installWebScrollbar();
+      installWebInputZoomGuard();
       return;
     }
     void SystemUI.setBackgroundColorAsync(colors.bgBase);

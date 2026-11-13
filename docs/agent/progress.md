@@ -6,6 +6,10 @@ Read at the start of every session. Update after each meaningful change. Keep it
 
 v2
 
+## Recent
+
+- 2026-11-14 app size: `react-native-webview` removed; native `stream-player.tsx` is a stub. Typecheck, lint, tests, web and Android exports pass. Open: `expo-doctor` reports 13 Expo packages one patch behind SDK 58 (`npx expo install --check`); `expo-dev-client` still in release builds (needed for the dev profile, not yet changed); rebuild the preview APK to confirm the arm64-only `buildArchs` setting applies (107 MB before).
+
 ## Current feature
 
 Accounts and saving with Firebase (owner request, 2026-11-13). Comes before the Google Play release, which is paused until this is done. Owner approved (2026-11-13): the `firebase` package; Auth and Firestore on the free Spark plan; sign-in with Email/Password and Google; "saving" means XP, streaks, tasks and history synced across devices.

@@ -1,5 +1,5 @@
 import { colors, fade, fonts, radius, rounded } from '@/src/theme/tokens';
-import { openStreamEmbed } from '@/components/wickglow/features/audio/stream-stage';
+import { openStreamEmbed, STREAMING_AVAILABLE } from '@/components/wickglow/features/audio/stream-stage';
 import Slider from '@react-native-community/slider';
 import { FlashList } from '@shopify/flash-list';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -18,6 +18,7 @@ import { useTone } from '@/components/wickglow/features/tone';
  * The Music panel. It has two sources:
  * - "Tracks": the local player (bundled lofi + the user's own files).
  * - "Streaming": a pasted Spotify/YouTube/Apple Music link (see stream-block.tsx).
+ *   Web only: hidden on Android and iOS (see `STREAMING_AVAILABLE`).
  *
  * It renders in two shapes from the same pieces:
  * - `SoundsScroller` (phone and tablet): tabs, one source at a time. It is the
@@ -62,16 +63,19 @@ export function MusicBlock({
         </View>
         <FilesNote wide />
       </View>
-      <View style={wideStyles.streamCol}>
-        <View style={wideStyles.stream}>
-          <Text style={[styles.kicker, wideStyles.cardLabel]}>Streaming</Text>
-          <StreamBlock wide>
-            <View style={wideStyles.playerBox}>
-              <EmbedSlot slotRef={embedSlotRef} onLayout={onEmbedLayout} />
-            </View>
-          </StreamBlock>
+      {/* Streaming is web-only; on Android and iOS the tracks fill the card. */}
+      {STREAMING_AVAILABLE ? (
+        <View style={wideStyles.streamCol}>
+          <View style={wideStyles.stream}>
+            <Text style={[styles.kicker, wideStyles.cardLabel]}>Streaming</Text>
+            <StreamBlock wide>
+              <View style={wideStyles.playerBox}>
+                <EmbedSlot slotRef={embedSlotRef} onLayout={onEmbedLayout} />
+              </View>
+            </StreamBlock>
+          </View>
         </View>
-      </View>
+      ) : null}
     </View>
   );
 }
@@ -112,6 +116,11 @@ export function SoundsScroller({
 }) {
   const tone = useTone(mobile);
   const [source, setSource] = useState<MusicSource>('tracks');
+  // Streaming is web-only. Without it and without Ambient (the tablet) only
+  // Tracks is left, so the switch is not shown at all.
+  const options: MusicSource[] = ['tracks'];
+  if (STREAMING_AVAILABLE) options.push('streaming');
+  if (ambient) options.push('ambient');
   const { playlist, trackIndex, musicPlaying, ownTracks, selectTrack, removeOwnTrack } = useWickglow();
   const accent = tone.accent;
   // The list re-renders its visible rows when this changes. Without it a row
@@ -131,13 +140,15 @@ export function SoundsScroller({
       ListHeaderComponent={(
         <View>
           {source === 'ambient' ? null : before}
-          <SourceTabs
-            source={source}
-            options={ambient ? ['tracks', 'streaming', 'ambient'] : ['tracks', 'streaming']}
-            onChange={setSource}
-            mobile={mobile}
-            first={!before || source === 'ambient'}
-          />
+          {options.length > 1 ? (
+            <SourceTabs
+              source={source}
+              options={options}
+              onChange={setSource}
+              mobile={mobile}
+              first={!before || source === 'ambient'}
+            />
+          ) : null}
           {source === 'tracks' ? (
             <>
               <NowPlaying mobile={mobile} />

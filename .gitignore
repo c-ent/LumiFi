@@ -49,3 +49,8 @@ app-example
 
 #background
 /assets/backgrounds/videos/original/
+
+# Firebase emulator logs
+firestore-debug.log
+firebase-debug.log
+ui-debug.log

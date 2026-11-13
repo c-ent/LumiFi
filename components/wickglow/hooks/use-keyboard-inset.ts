@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Dimensions, Keyboard, Platform, type KeyboardEvent } from 'react-native';
+import { Platform } from 'react-native';
+import { KeyboardEvents } from 'react-native-keyboard-controller';
 
-// How much of the window the keyboard covers. A resized window already ends
-// at the keyboard, so the overlap is 0 and the sheet is not lifted twice.
-export function keyboardCover(windowHeight: number, screenY: number): number {
-  if (!Number.isFinite(windowHeight) || !Number.isFinite(screenY)) return 0;
-  return Math.max(0, Math.round(windowHeight - screenY));
+// The keyboard height reported by react-native-keyboard-controller, made safe
+// to lay out with. The app is edge-to-edge, so that height already reaches the
+// bottom edge of the screen (navigation bar included), which is where the
+// sheet is pinned.
+export function keyboardCover(height: number): number {
+  if (!Number.isFinite(height)) return 0;
+  return Math.max(0, Math.round(height));
 }
 
 // Web version of the same number. On mobile browsers the on-screen keyboard
@@ -14,10 +17,6 @@ export function keyboardCover(windowHeight: number, screenY: number): number {
 export function visualKeyboardCover(innerHeight: number, viewportHeight: number, offsetTop: number): number {
   if (!Number.isFinite(innerHeight) || !Number.isFinite(viewportHeight) || !Number.isFinite(offsetTop)) return 0;
   return Math.max(0, Math.round(innerHeight - viewportHeight - offsetTop));
-}
-
-function coverFromEvent(event: KeyboardEvent): number {
-  return keyboardCover(Dimensions.get('window').height, event.endCoordinates.screenY);
 }
 
 // The distance to lift a bottom-pinned sheet so a focused field stays visible.
@@ -40,12 +39,14 @@ export function useKeyboardInset() {
       };
     }
 
-    // Native: iOS has "will" events that fire before the animation, so the
-    // sheet moves with the keyboard. Android only has "did" events.
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvent, (event) => setInset(coverFromEvent(event)));
-    const hide = Keyboard.addListener(hideEvent, () => setInset(0));
+    // Native: react-native-keyboard-controller (needs the KeyboardProvider in
+    // app/_layout.tsx). Its "will" events fire as the keyboard starts to move
+    // on Android as well as iOS, with the final height, so the sheet rises
+    // with the keyboard instead of after it. React Native's own Keyboard
+    // events gave a wrong height on edge-to-edge Android and the keyboard
+    // covered the field.
+    const show = KeyboardEvents.addListener('keyboardWillShow', (event) => setInset(keyboardCover(event.height)));
+    const hide = KeyboardEvents.addListener('keyboardWillHide', () => setInset(0));
     return () => {
       show.remove();
       hide.remove();

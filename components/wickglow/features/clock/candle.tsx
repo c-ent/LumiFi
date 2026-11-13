@@ -1,6 +1,6 @@
 import { breakWax } from '@/src/theme/tokens';
-import React, { useEffect } from 'react';
-import { Animated, Easing, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Animated, Easing, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { useAnimatedValue } from '@/components/wickglow/hooks/use-animated-value';
 import Reanimated, {
   cancelAnimation,
@@ -140,7 +140,22 @@ export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood
       d: `M100 ${b} C95 ${b - 2 * s} 94 ${b - 10 * s} 100 ${b - 21 * s} C106 ${b - 10 * s} 105 ${b - 2 * s} 100 ${b}Z`,
     };
   });
-  const glowStyle = useAnimatedStyle(() => ({ opacity: flameOpacity.get() * 0.85 }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: flameOpacity.get() }));
+
+  // The halo is drawn outside the candle SVG so it is not clipped by its
+  // viewBox. To sit on the flame it maps SVG units to pixels the way the SVG's
+  // default "xMidYMid meet" does: one uniform scale, centred in the box.
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const onLayout = (event: LayoutChangeEvent) => {
+    const { width: w, height: h } = event.nativeEvent.layout;
+    setBox((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+  };
+  const scale = Math.min(box.w / 200, box.h / 380);
+  // Centred on the middle of the flame, so it follows the flame down. It
+  // shrinks with the wax: 100 units across a full candle, 55 when burnt down.
+  const glowR = (55 + clamped * 45) * scale;
+  const glowX = (box.w - 200 * scale) / 2 + 100 * scale;
+  const glowY = (box.h - 380 * scale) / 2 + (topY - 34) * scale;
 
   // Flicker loop, only while burning. Skipped when the system asks for reduced
   // motion. Returning the cleanup stops the loop when `lit` flips or on unmount.
@@ -174,9 +189,28 @@ export function Candle({ progress, lit, paused, idle, smoke, dimming, mode, mood
   }, [hint, idle, reduced]);
 
   return (
-    <Animated.View style={[styles.wrap, { opacity: rise, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }]}>
-      {/* Soft halo behind the candle. pointerEvents="none" so it never eats taps. */}
-      <Reanimated.View pointerEvents="none" style={[styles.glow, { backgroundColor: mood.glow }, glowStyle]} />
+    <Animated.View onLayout={onLayout} style={[styles.wrap, { opacity: rise, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }]}>
+      {/* Soft halo around the flame, fading to nothing at its edge. It moves
+          down and shrinks as the candle burns. pointerEvents="none" so it never
+          eats taps. */}
+      {glowR > 0 ? (
+        <Reanimated.View
+          pointerEvents="none"
+          style={[styles.glow, { left: glowX - glowR, top: glowY - glowR, width: glowR * 2, height: glowR * 2 }, glowStyle]}
+        >
+          <Svg width="100%" height="100%" viewBox="0 0 100 100">
+            <Defs>
+              <RadialGradient id="candleHalo" cx="50%" cy="50%" r="50%">
+                <Stop offset="0" stopColor={mood.glow} stopOpacity={1} />
+                <Stop offset="0.3" stopColor={mood.glow} stopOpacity={0.6} />
+                <Stop offset="0.65" stopColor={mood.glow} stopOpacity={0.18} />
+                <Stop offset="1" stopColor={mood.glow} stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Circle cx="50" cy="50" r="50" fill="url(#candleHalo)" />
+          </Svg>
+        </Reanimated.View>
+      ) : null}
       <Svg width="100%" height="100%" viewBox="0 0 200 380">
         <Defs>
           {/* Gradients are declared once here and referenced as url(#id) below. */}
@@ -225,11 +259,6 @@ const styles = StyleSheet.create({
   },
   glow: {
     position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    alignSelf: 'center',
-    top: '8%',
   },
   hint: {
     position: 'absolute',

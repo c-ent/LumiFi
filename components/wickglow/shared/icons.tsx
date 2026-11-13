@@ -162,6 +162,16 @@ export function UploadIcon(props: IconProps) {
   );
 }
 
+export function DownloadIcon(props: IconProps) {
+  return (
+    <Stroke {...props} size={props.size ?? 18}>
+      <Path d="M12 4v12" />
+      <Path d="M7 11l5 5 5-5" />
+      <Path d="M4 20h16" />
+    </Stroke>
+  );
+}
+
 export function TrashIcon(props: IconProps) {
   return (
     <Stroke {...props}>

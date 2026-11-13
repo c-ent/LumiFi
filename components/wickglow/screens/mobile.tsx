@@ -31,10 +31,11 @@ import { TaskList } from '@/components/wickglow/features/tasks/task-list';
 import { FocusLine } from '@/components/wickglow/features/tasks/focus-line';
 import { MixerBlock } from '@/components/wickglow/features/audio/mixer-block';
 import { SoundsScroller } from '@/components/wickglow/features/audio/music-block';
-import { openStreamEmbed, StreamStage, streamCardHeight } from '@/components/wickglow/features/audio/stream-stage';
+import { useEndStream } from '@/components/wickglow/features/audio/stream-stage';
 import { SessionEndCard } from '@/components/wickglow/features/timer/session-end-card';
 import { TimeText } from '@/components/wickglow/features/timer/time-text';
-import { BarsIcon, ClockIcon, CloseIcon, FlameIcon, MusicIcon, PauseIcon, PlayIcon, ResetIcon, SkipIcon, StarIcon, TaskIcon, TimerIcon } from '@/components/wickglow/shared/icons';
+import { SegmentTabs } from '@/components/wickglow/shared/segment-tabs';
+import { BarsIcon, ClockIcon, CloseIcon, FlameIcon, MusicIcon, PauseIcon, PlayIcon, ResetIcon, SceneIcon, SkipIcon, TaskIcon, TimerIcon } from '@/components/wickglow/shared/icons';
 
 /**
  * The phone layout (window under 600px wide). The home screen is the timer:
@@ -54,7 +55,7 @@ import { BarsIcon, ClockIcon, CloseIcon, FlameIcon, MusicIcon, PauseIcon, PlayIc
  */
 
 // The sheet shows one tab at a time.
-type SheetTab = 'tasks' | 'sounds' | 'quests' | 'stats' | 'timer';
+type SheetTab = 'tasks' | 'sounds' | 'stats' | 'mood' | 'timer';
 
 // The tab bar's height above the home-indicator inset.
 const TAB_BAR_HEIGHT = 64;
@@ -84,6 +85,8 @@ export function MobileWickglow() {
   const lamp = useWickglow();
   // Actions never change identity, so they are pulled out once (see logic.tsx).
   const { setMode, toggle, startNext, dismissEnding, reset, skip } = lamp;
+  // Streaming is desktop-only; end one left playing from a wider window.
+  useEndStream();
   // Safe-area insets = the notch / status bar / home-indicator sizes in px.
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -110,17 +113,7 @@ export function MobileWickglow() {
   const typing = keyboard > 0;
   // Room at the end of the sheet's content so the last row clears the tab bar.
   const bodyContent = [styles.bodyContent, { paddingBottom: typing ? 24 : tabBar + 16 }];
-  // A playing stream embed floats near the top; the stage and sheet make room for it.
-  const embed = openStreamEmbed(lamp.streamLinks, lamp.activeStreamId);
-  const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
-  // Below the top bar (12 + 46) and the mode tabs (14 + 46), with a small gap.
-  const playerTop = insets.top + 128;
-  const streamRoof = playerTop + playerReserve + 8;
-  // Too little room under the player for a usable sheet (the keyboard is up on
-  // a short screen): the sheet takes the full height and the player tucks
-  // behind it, still mounted and playing, instead of covering the sheet's top.
-  const cramped = playerReserve > 0 && height - sheetBottom - streamRoof < 200;
-  const roof = playerReserve > 0 && !cramped ? streamRoof : insets.top + 12;
+  const roof = insets.top + 12;
   const sheetHeight = Math.max(200, Math.min(height * 0.8, 760, height - sheetBottom - roof));
 
   // Slide the sheet up, or down behind the tab bar.
@@ -143,7 +136,7 @@ export function MobileWickglow() {
     { mode: lamp.mode, status: lamp.status, cycle: lamp.cycle, activeTask: lamp.activeTask?.text ?? null },
     'candle',
   );
-  // Dot on the Quests tab while any daily quest is unclaimed.
+  // Dot on the Stats tab (which holds the quests) while any daily quest is open.
   const questOpen = hasOpenQuests(lamp.day);
   const fade = { opacity: zen ? 0 : 1 };
   const touch = zen ? 'none' : 'auto';
@@ -205,7 +198,7 @@ export function MobileWickglow() {
 
       {/* Stage: the candle (also a start/pause button), the time, the controls
           and the cycle. Bottom padding keeps it clear of the tab bar. */}
-      <View style={[styles.stage, { paddingBottom: tabBar + 20, paddingTop: playerReserve }]}>
+      <View style={[styles.stage, { paddingBottom: tabBar + 20 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={face.startLabel} style={styles.candleBtn} onPress={toggle}>
           <SessionCandle
             lit={lamp.running}
@@ -252,10 +245,6 @@ export function MobileWickglow() {
         </Reanimated.View>
       ) : null}
 
-      {/* Playing Spotify/YouTube/Apple Music embed floats near the top. It lives
-          here (not inside a tab) so closing the sheet doesn't stop the stream. */}
-      <StreamStage style={[styles.stream, { top: playerTop }, cramped && open ? styles.streamTucked : null]} />
-
       {/* The sheet: a one-line timer, then the open tab's content. It slides up
           from behind the tab bar, and rides above the keyboard while typing. */}
       {/* Closed, the sheet is hidden from screen readers, and its controls are
@@ -291,7 +280,7 @@ export function MobileWickglow() {
           <View style={styles.body}>
             {/* Tracks, Streaming and Ambient each show alone. Ambient holds the
                 mood (the look) and the ambient loops, the two that set the room. */}
-            <SoundsScroller mobile ambient={<View><MoodPicker /><MixerBlock mobile /></View>} contentContainerStyle={bodyContent} />
+            <SoundsScroller mobile ambient={<MixerBlock mobile />} contentContainerStyle={bodyContent} />
           </View>
         ) : shown ? (
           <ScrollView
@@ -302,8 +291,8 @@ export function MobileWickglow() {
             keyboardShouldPersistTaps="handled"
           >
             {tab === 'tasks' ? <TaskList mobile /> : null}
-            {tab === 'quests' ? <QuestList mobile /> : null}
-            {tab === 'stats' ? <View><LevelCard mobile /><StatGrid /><WeekChart mobile /><MonthCalendar mobile /></View> : null}
+            {tab === 'stats' ? <StatsTab /> : null}
+            {tab === 'mood' ? <MoodPicker /> : null}
             {tab === 'timer' ? <TimerSettings mobile /> : null}
           </ScrollView>
         ) : null}
@@ -313,8 +302,8 @@ export function MobileWickglow() {
       <View style={[styles.tabBar, { bottom: barGap }, fade, typing && styles.hidden]} pointerEvents={typing ? 'none' : touch}>
         <DockItem label="Tasks" active={open && tab === 'tasks'} color={mood.accent} onPress={() => openTab('tasks')}><TaskIcon size={20} /></DockItem>
         <DockItem label="Sounds" active={open && tab === 'sounds'} color={mood.accent} dot={lamp.musicPlaying || lamp.activeStreamId != null} onPress={() => openTab('sounds')}><MusicIcon size={20} /></DockItem>
-        <DockItem label="Quests" active={open && tab === 'quests'} color={mood.accent} dot={questOpen} onPress={() => openTab('quests')}><StarIcon size={20} /></DockItem>
-        <DockItem label="Stats" active={open && tab === 'stats'} color={mood.accent} onPress={() => openTab('stats')}><BarsIcon size={20} /></DockItem>
+        <DockItem label="Stats" active={open && tab === 'stats'} color={mood.accent} dot={questOpen} onPress={() => openTab('stats')}><BarsIcon size={20} /></DockItem>
+        <DockItem label="Mood" active={open && tab === 'mood'} color={mood.accent} onPress={() => openTab('mood')}><SceneIcon size={20} /></DockItem>
         <DockItem label="Timer" active={open && tab === 'timer'} color={mood.accent} onPress={() => openTab('timer')}><TimerIcon size={20} /></DockItem>
       </View>
 
@@ -336,6 +325,32 @@ export function MobileWickglow() {
           <Text style={styles.toastText}>{lamp.toast}</Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+// The Stats tab shows one view at a time, like Sounds: Stats (level, today's
+// numbers, the last 7 days, the daily quests) or Calendar (the month view and
+// streak). The quests live here; the phone has no Quests tab of its own.
+type StatsView = 'stats' | 'calendar';
+const STATS_VIEWS: readonly StatsView[] = ['stats', 'calendar'];
+const STATS_LABEL: Record<StatsView, string> = { stats: 'Stats', calendar: 'Calendar' };
+
+function StatsTab() {
+  const [view, setView] = useState<StatsView>('stats');
+  return (
+    <View>
+      <SegmentTabs value={view} options={STATS_VIEWS} labels={STATS_LABEL} onChange={setView} mobile first />
+      {view === 'stats' ? (
+        <>
+          <LevelCard mobile />
+          <StatGrid />
+          <WeekChart mobile />
+          <QuestList mobile title="Quests" />
+        </>
+      ) : (
+        <MonthCalendar mobile />
+      )}
     </View>
   );
 }
@@ -453,16 +468,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: fonts.timeMedium,
     fontSize: 18,
-  },
-  stream: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    zIndex: 7,
-  },
-  // Behind the sheet (6) but above the dim (4), while the sheet needs the room.
-  streamTucked: {
-    zIndex: 5,
   },
   stage: {
     flex: 1,

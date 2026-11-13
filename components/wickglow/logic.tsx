@@ -4,6 +4,8 @@ import { activeStreamId as activeStreamOf, LOCAL_SOURCE, MusicSource, MusicSourc
 import { parseStreamLink, playbackFor, StreamLink } from '@/src/core/stream-links';
 import type { MusicEnd } from '@/src/core/session-end';
 import { streakCount } from '@/src/core/streak';
+import { trackLength, trackPosition } from '@/src/core/track-time';
+import { type AudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { colors } from '@/src/theme/tokens';
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { addNotificationReceivedListener } from 'expo-notifications';
@@ -168,6 +170,8 @@ interface WickglowActions {
   prevTrack: () => void;
   toggleMusicLoop: () => void;
   selectTrack: (index: number) => void;
+  /** Moves the local track to this many seconds in. */
+  seekMusic: (seconds: number) => void;
 }
 
 type WickglowContextValue = WickglowState & WickglowActions;
@@ -183,6 +187,10 @@ interface WickglowClock {
 
 const WickglowContext = createContext<WickglowContextValue | null>(null);
 const ClockContext = createContext<WickglowClock | null>(null);
+// The local music player itself, for the progress bar. The player's identity
+// never changes, so this context never re-renders anything; the bar reads the
+// position with its own status subscription (`useMusicPosition`).
+const MusicPlayerContext = createContext<AudioPlayer | null>(null);
 
 /**
  * Owns the ticking state, so a tick re-renders this small component and the
@@ -246,6 +254,7 @@ const ACTION_NAMES = Object.keys({
   prevTrack: true,
   toggleMusicLoop: true,
   selectTrack: true,
+  seekMusic: true,
 } satisfies Record<keyof WickglowActions, true>) as (keyof WickglowActions)[];
 
 /**
@@ -681,6 +690,7 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
         releaseStreamForLocal();
         music.selectTrack(index);
       },
+      seekMusic: (seconds) => music.seekTo(seconds),
       // Own music files (native only): open the file picker, copy the picks into
       // the app's private folder, then add them to the saved list.
       addOwnFiles: () => {
@@ -772,9 +782,11 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
   // ever renders with an unknown date.
   return (
     <WickglowContext.Provider value={value}>
-      <ClockProvider session={saved.session} onReachEnd={onReachEnd}>
-        {now == null ? <View style={{ flex: 1, backgroundColor: colors.bgBase }} /> : children}
-      </ClockProvider>
+      <MusicPlayerContext.Provider value={music.player}>
+        <ClockProvider session={saved.session} onReachEnd={onReachEnd}>
+          {now == null ? <View style={{ flex: 1, backgroundColor: colors.bgBase }} /> : children}
+        </ClockProvider>
+      </MusicPlayerContext.Provider>
     </WickglowContext.Provider>
   );
 }
@@ -787,6 +799,19 @@ export function useWickglowClock() {
   const value = useContext(ClockContext);
   if (!value) throw new Error('useWickglowClock must be used inside WickglowProvider');
   return value;
+}
+
+/**
+ * Where the local track is, in seconds. Subscribes to the player's status in
+ * the calling component only, so its updates (a few a second) re-render the
+ * progress bar and nothing else. `length` is 0 until the track has loaded.
+ */
+export function useMusicPosition() {
+  const player = useContext(MusicPlayerContext);
+  if (!player) throw new Error('useMusicPosition must be used inside WickglowProvider');
+  const status = useAudioPlayerStatus(player);
+  const length = trackLength(status.duration);
+  return { position: trackPosition(status.currentTime, length), length };
 }
 
 /** Read app state and actions. Throws if used outside `WickglowProvider`. */

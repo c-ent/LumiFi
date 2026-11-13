@@ -1,7 +1,7 @@
 import { playbackFor, streamServiceName, type StreamLink } from '@/src/core/stream-links';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { StreamPlayer } from '@/components/wickglow/features/audio/stream-player';
 import { useWickglow } from '@/components/wickglow/logic';
 import { glassPanel, panelStyles } from '@/components/wickglow/shared/panel-styles';
@@ -17,14 +17,37 @@ import { StreamServiceMark } from '@/components/wickglow/shared/stream-marks';
 // Vertical space the card adds around the embed (header + padding), in px.
 const CARD_CHROME = 72;
 
+/**
+ * Streaming links are a web-only feature (owner choice, 2026-11-13). In the
+ * Android and iOS app the service embeds run in a WebView with no sign-in, so
+ * Spotify and Apple Music only offered previews that often did not play. The
+ * Streaming views are hidden there and no embed is shown. Saved links stay in
+ * storage untouched.
+ */
+export const STREAMING_AVAILABLE = Platform.OS === 'web';
+
 // The currently playing embed, or null. "Open" links (YouTube Music) are not
-// embeds, so they return null here.
+// embeds, so they return null here, and so does everything on Android and iOS.
 export function openStreamEmbed(links: StreamLink[], activeId: string | null) {
+  if (!STREAMING_AVAILABLE) return null;
   const link = activeId ? links.find((item) => item.id === activeId) : undefined;
   if (!link) return null;
   const playback = playbackFor(link);
   if (playback.kind !== 'embed') return null;
   return { link, playback };
+}
+
+/**
+ * Phone and tablet layouts have no streaming (owner choice, 2026-11-14). On the
+ * web a window can narrow from desktop to phone width with an embed playing;
+ * with no player on screen it would be silent but still own the sound, so the
+ * phone and tablet screens call this to end it.
+ */
+export function useEndStream() {
+  const { activeStreamId, closeStream } = useWickglow();
+  useEffect(() => {
+    if (activeStreamId != null) closeStream();
+  }, [activeStreamId, closeStream]);
 }
 
 // Total card height for an embed of the given height.

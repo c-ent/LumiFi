@@ -80,7 +80,7 @@ export function rounded(size: number) {
   return { borderRadius: size, borderCurve: 'continuous' as const };
 }
 
-export type MoodId = 'amber' | 'moon' | 'spirit';
+export type MoodId = 'amber' | 'moon' | 'rose' | 'violet' | 'ash' | 'forest' | 'tide';
 
 export interface MoodPalette {
   bgBase: string;
@@ -92,7 +92,14 @@ export interface MoodPalette {
   accent: string;
 }
 
-/** A mood replaces background, flame and accent. `moon` is the stored id for Moonlit. */
+/**
+ * A mood replaces background, flame and accent. `moon` is the stored id for
+ * Moonlit. This is also the single source for the desktop scenes: `SCENES` in
+ * `components/wickglow/theme.ts` maps these same palettes into gradient
+ * stops and drifting orbs, so a theme is the same name and the same colors on
+ * every layout (owner decision, 2026-11-14; the two systems used to carry
+ * separate colors under a few matching names).
+ */
 export const moods: Record<MoodId, MoodPalette> = {
   amber: {
     bgBase: colors.bgBase,
@@ -112,13 +119,54 @@ export const moods: Record<MoodId, MoodPalette> = {
     flame3: '#6F9CFF',
     accent: '#A6C6FF',
   },
-  spirit: {
-    bgBase: '#06130E',
-    bgMid: '#0E2A1F',
-    bgGlow: '#173D2D',
-    flame1: '#EAFFF3',
-    flame2: '#8DFFC4',
-    flame3: '#3DDC97',
-    accent: '#7BE8B0',
+  // Pink flame on a deep plum night.
+  rose: {
+    bgBase: '#14070F',
+    bgMid: '#2E0F22',
+    bgGlow: '#4A1A36',
+    flame1: '#FFF0F6',
+    flame2: '#FFA6C9',
+    flame3: '#FF6FA5',
+    accent: '#FFA6C9',
+  },
+  // Lavender flame on dark violet.
+  violet: {
+    bgBase: '#0C0716',
+    bgMid: '#1E1238',
+    bgGlow: '#33205A',
+    flame1: '#F6F0FF',
+    flame2: '#C9A6FF',
+    flame3: '#9A6BFF',
+    accent: '#C4A6FF',
+  },
+  // A colourless, quiet mood: a pale flame on charcoal.
+  ash: {
+    bgBase: '#0B0B0D',
+    bgMid: '#18181C',
+    bgGlow: '#26262C',
+    flame1: '#FFFFFF',
+    flame2: '#E4E2DC',
+    flame3: '#A9A59C',
+    accent: '#E4E2DC',
+  },
+  // Lime-green flame on deep moss (was a desktop-only scene).
+  forest: {
+    bgBase: '#06191A',
+    bgMid: '#123D2C',
+    bgGlow: '#1F3A22',
+    flame1: '#F3FFCB',
+    flame2: '#D7EE6E',
+    flame3: '#5A9B5E',
+    accent: '#A7D96B',
+  },
+  // Cyan flame on deep teal water (was a desktop-only scene).
+  tide: {
+    bgBase: '#041319',
+    bgMid: '#0B3240',
+    bgGlow: '#0F4050',
+    flame1: '#E0FBFF',
+    flame2: '#5EE3F0',
+    flame3: '#1E7A98',
+    accent: '#5EE3F0',
   },
 };

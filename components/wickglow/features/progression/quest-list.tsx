@@ -17,7 +17,7 @@ import { progressWide as wide } from '@/components/wickglow/features/progression
  * name of the imported shared style object. Two layouts, one data table:
  * the desktop card (wide) and the compact phone/tablet list.
  */
-export function QuestList({ mobile = false, wide: desk = false }: { mobile?: boolean; wide?: boolean }) {
+export function QuestList({ mobile = false, wide: desk = false, title = 'Daily quests' }: { mobile?: boolean; wide?: boolean; title?: string }) {
   const { day } = useWickglow();
   const tone = useTone(mobile);
   // Pre-compute each row once so both layouts render identical numbers.
@@ -57,22 +57,41 @@ export function QuestList({ mobile = false, wide: desk = false }: { mobile?: boo
 
   return (
     <View>
-      <Text style={styles.kicker}>Daily quests</Text>
+      <Text style={[styles.kicker, styles.kickerLg]}>{title}</Text>
+      {/* One tile per quest: name and reward, the bar, then the count. */}
       {rows.map(({ quest, value, done, width }) => (
-        <View key={quest.id} style={styles.quest}>
-          <View style={styles.levelRow}>
-            <Text style={[styles.taskText, done && styles.done]}>{quest.text} ({value}/{quest.goal})</Text>
+        <View key={quest.id} style={styles.questCard}>
+          <View style={tileStyles.line}>
+            <Text style={[styles.taskText, tileStyles.name, done && styles.done]}>{quest.text}</Text>
             <Text style={[styles.reward, { color: colors.success }]}>{done ? `Claimed ${quest.reward} XP` : `+${quest.reward} XP`}</Text>
           </View>
-          <View style={styles.barTrack}>
+          <View style={[styles.barTrack, tileStyles.bar]}>
             <View style={[styles.barFill, { width, backgroundColor: done ? colors.success : tone.accent }]} />
           </View>
+          <Text style={styles.meta}>{value} / {quest.goal}</Text>
         </View>
       ))}
       <Text style={styles.note}>{`Every focus minute also earns ${XP_PER_FOCUS_MINUTE} XP.`}</Text>
     </View>
   );
 }
+
+// Phone and tablet quest tiles.
+const tileStyles = StyleSheet.create({
+  line: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  name: {
+    flex: 1,
+  },
+  // The card's gap spaces the rows, so the shared bar's own margin is dropped.
+  bar: {
+    marginTop: 0,
+  },
+});
 
 // Desktop-only styles. Rows are divided by a hairline; the first has none.
 const deskStyles = StyleSheet.create({

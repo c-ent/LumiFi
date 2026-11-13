@@ -26,7 +26,7 @@ describe('theme tokens', () => {
     expect(colors.error).toBe('#FF8F8F');
   });
 
-  it('keeps Moonlit and Spirit as background, flame and accent swaps', () => {
+  it('keeps Moonlit as a background, flame and accent swap', () => {
     expect(moods.moon).toEqual({
       bgBase: '#070A1A',
       bgMid: '#121A40',
@@ -35,15 +35,6 @@ describe('theme tokens', () => {
       flame2: '#A6C6FF',
       flame3: '#6F9CFF',
       accent: '#A6C6FF',
-    });
-    expect(moods.spirit).toEqual({
-      bgBase: '#06130E',
-      bgMid: '#0E2A1F',
-      bgGlow: '#173D2D',
-      flame1: '#EAFFF3',
-      flame2: '#8DFFC4',
-      flame3: '#3DDC97',
-      accent: '#7BE8B0',
     });
   });
 

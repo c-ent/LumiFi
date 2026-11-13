@@ -58,7 +58,7 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
   // Built once, then either wrapped in a card (desktop) or returned bare at the bottom.
   const body = (
     <View>
-      <Text style={[styles.kicker, desk && wide.label]}>Calendar</Text>
+      <Text style={[styles.kicker, desk ? wide.label : styles.kickerLg]}>Calendar</Text>
 
       <View style={desk ? deskStyles.head : styles.monthHead}>
         <Pressable

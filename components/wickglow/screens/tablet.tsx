@@ -20,7 +20,7 @@ import { TaskList } from '@/components/wickglow/features/tasks/task-list';
 import { FocusLine } from '@/components/wickglow/features/tasks/focus-line';
 import { MixerBlock } from '@/components/wickglow/features/audio/mixer-block';
 import { SoundsScroller } from '@/components/wickglow/features/audio/music-block';
-import { openStreamEmbed, StreamStage, streamCardHeight } from '@/components/wickglow/features/audio/stream-stage';
+import { useEndStream } from '@/components/wickglow/features/audio/stream-stage';
 import { SessionEndCard } from '@/components/wickglow/features/timer/session-end-card';
 import { TimeText } from '@/components/wickglow/features/timer/time-text';
 import { ClockIcon, FlameIcon, ResetIcon, SkipIcon } from '@/components/wickglow/shared/icons';
@@ -35,6 +35,8 @@ export function TabletWickglow() {
   const lamp = useWickglow();
   // Actions never change identity, so they are pulled out once (see logic.tsx).
   const { setMode, toggle, startNext, dismissEnding, reset, skip } = lamp;
+  // Streaming is desktop-only; end one left playing from a wider window.
+  useEndStream();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const keyboard = useKeyboardInset();
@@ -45,10 +47,6 @@ export function TabletWickglow() {
   const mood = lamp.moodTheme;
   // Timer digits scale with the window, clamped to 48..72px.
   const timeSize = Math.min(72, Math.max(48, width * 0.08));
-
-  // Room to leave at the top of the left column for a playing stream embed.
-  const embed = openStreamEmbed(lamp.streamLinks, lamp.activeStreamId);
-  const playerReserve = embed ? streamCardHeight(embed.playback.height) : 0;
 
   const idle = lamp.status === 'idle';
   const face = sessionFace(
@@ -66,7 +64,7 @@ export function TabletWickglow() {
         {/* Left: level, candle, time, mode tabs and start/reset/skip. */}
         <ScrollView
           style={styles.stage}
-          contentContainerStyle={[styles.stageContent, playerReserve > 0 ? { paddingTop: playerReserve } : null]}
+          contentContainerStyle={styles.stageContent}
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.top, { opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
@@ -162,9 +160,6 @@ export function TabletWickglow() {
         </View>
       </View>
 
-      {/* Floating stream player over the left column. */}
-      <StreamStage style={[styles.stream, { top: insets.top + 8, width: Math.min(420, width * 0.48) }]} />
-
       {lamp.ending ? (
         <SessionEndCard
           title={lamp.ending.title}
@@ -189,11 +184,6 @@ export function TabletWickglow() {
 const styles = StyleSheet.create({  root: {
     flex: 1,
     overflow: 'hidden',
-  },
-  stream: {
-    position: 'absolute',
-    left: 12,
-    zIndex: 4,
   },
   split: {
     flex: 1,
@@ -359,7 +349,7 @@ const styles = StyleSheet.create({  root: {
   kicker: {
     color: colors.textMuted,
     fontFamily: fonts.bodySemibold,
-    fontSize: 11,
+    fontSize: 16,
     letterSpacing: 1.4,
     textTransform: 'uppercase',
     marginBottom: 8,

@@ -75,10 +75,10 @@ describe('saved day history', () => {
   });
 
   it('falls back to the defaults for a scene, mood or zen setting it does not know', () => {
-    const kept = parseSavedState(JSON.stringify({ scene: 'forest', mood: 'spirit', zenOpt: false }), now);
-    expect(kept).toMatchObject({ scene: 'forest', mood: 'spirit', zenOpt: false });
+    const kept = parseSavedState(JSON.stringify({ scene: 'forest', mood: 'violet', zenOpt: false }), now);
+    expect(kept).toMatchObject({ scene: 'forest', mood: 'violet', zenOpt: false });
     const bad = parseSavedState(JSON.stringify({ scene: 'beach', mood: 7, zenOpt: 'no' }), now);
-    expect(bad).toMatchObject({ scene: 'dusk', mood: 'amber', zenOpt: true });
+    expect(bad).toMatchObject({ scene: 'amber', mood: 'amber', zenOpt: true });
   });
 
   it('reads the streak and the session count as whole numbers that cannot go below zero', () => {

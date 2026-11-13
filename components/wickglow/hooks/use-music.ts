@@ -295,6 +295,13 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
     player.play();
   }, [entry?.key, player, playlist, replaceSource]);
 
+  // The progress bar's seek. A seek that fails (the source has not loaded yet)
+  // leaves the position where it was.
+  const seekTo = useCallback((seconds: number) => {
+    if (!Number.isFinite(seconds)) return;
+    player.seekTo(Math.max(0, seconds)).catch(() => undefined);
+  }, [player]);
+
   const restoreMusic = useCallback(() => {
     clearFade();
     setGain(1);
@@ -349,6 +356,7 @@ export function useMusic(volume: number, ownTracks: OwnTrack[], loop = false) {
     nextTrack,
     prevTrack,
     selectTrack,
+    seekTo,
     restoreMusic,
     onSessionEnd,
     playChime,

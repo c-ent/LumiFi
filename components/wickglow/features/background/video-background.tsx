@@ -14,7 +14,7 @@ const DEFAULT_SOURCE: number = require('../../../../assets/backgrounds/videos/27
  * `onReady` fires once the first frame is on screen, so a crossfade can wait
  * for it instead of fading in a black box.
  */
-export function VideoBackground({ source = DEFAULT_SOURCE, onReady }: { source?: number; onReady?: () => void }) {
+export function VideoBackground({ source = DEFAULT_SOURCE, onReady }: { source?: number | string; onReady?: () => void }) {
   const reduced = useReducedMotion();
   const player = useVideoPlayer(source, (p) => {
     p.loop = true;

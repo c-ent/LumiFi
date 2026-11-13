@@ -10,7 +10,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { sessionFace } from '@/src/core/session-face';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
-import { glassPanel } from '@/components/wickglow/shared/panel-styles';
+import { darkGlass, glassPanel } from '@/components/wickglow/shared/panel-styles';
 import { useFullscreen } from '@/components/wickglow/hooks/use-fullscreen';
 import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
@@ -108,6 +108,12 @@ export function DesktopWickglow() {
     setPanel((current) => (current === id ? null : id));
   };
 
+  // Home (the logo): close whatever panel is open and show the controls again.
+  const goHome = () => {
+    poke();
+    setPanel(null);
+  };
+
   // Remember where the embed slot is in the window. Skips zero-size results
   // (not laid out yet) and identical results (avoids a pointless re-render).
   const applyEmbedFrame = useCallback((x: number, y: number, slotWidth: number, slotHeight: number) => {
@@ -160,12 +166,14 @@ export function DesktopWickglow() {
       {/* Top bar: logo on the left; streak, minutes and level pills on the
           right (each opens the Progress card). */}
       <View style={[styles.top, { paddingTop: insets.top + 14, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
-        <View style={styles.brand}>
+        {/* The logo is the home button: it closes any open panel and wakes
+            the controls, leaving just the scene and the timer. */}
+        <Pressable accessibilityRole="button" accessibilityLabel="Wickglow, home" onPress={goHome} style={styles.brand}>
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <LogoMark size={26} />
           </View>
           <Text style={styles.brandText}>Wickglow</Text>
-        </View>
+        </Pressable>
         <View style={styles.pills}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Streak ${lamp.streak} days. Open progress`} style={styles.pill} onPress={() => togglePanel('progress')}>
             <FlameIcon size={15} color={colors.error} />
@@ -390,9 +398,7 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: 14,
     ...rounded(radius.pill),
-    backgroundColor: colors.bgControl,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...darkGlass,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -423,9 +429,7 @@ const styles = StyleSheet.create({
     gap: 6,
     padding: 4,
     ...rounded(radius.pill),
-    backgroundColor: colors.bgControl,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...darkGlass,
   },
   tab: {
     minHeight: 36,
@@ -476,9 +480,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: colors.bgControl,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...darkGlass,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -514,15 +516,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.bgControl,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...darkGlass,
     alignItems: 'center',
     justifyContent: 'center',
   },
   ibOn: {
     backgroundColor: colors.textPrimary,
     borderColor: colors.textPrimary,
+    borderTopColor: colors.textPrimary,
   },
   dot: {
     position: 'absolute',

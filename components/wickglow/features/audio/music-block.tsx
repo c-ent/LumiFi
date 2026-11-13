@@ -1,26 +1,30 @@
 import { colors, fade, fonts, radius, rounded } from '@/src/theme/tokens';
-import { openStreamEmbed } from '@/components/wickglow/features/audio/stream-stage';
+import { openStreamEmbed, STREAMING_AVAILABLE } from '@/components/wickglow/features/audio/stream-stage';
 import Slider from '@react-native-community/slider';
 import { FlashList } from '@shopify/flash-list';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { formatTrackTime } from '@/src/core/track-time';
 import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import type { PlaylistEntry } from '@/src/core/own-tracks';
 import { StreamBlock } from '@/components/wickglow/features/audio/stream-block';
-import { useWickglow } from '@/components/wickglow/logic';
+import { useMusicPosition, useWickglow } from '@/components/wickglow/logic';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 import { CloseIcon, MusicIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RepeatIcon, UploadIcon, VolumeIcon } from '@/components/wickglow/shared/icons';
 import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles';
+import { SegmentTabs } from '@/components/wickglow/shared/segment-tabs';
 import { useTone } from '@/components/wickglow/features/tone';
 
 /**
  * The Music panel. It has two sources:
  * - "Tracks": the local player (bundled lofi + the user's own files).
  * - "Streaming": a pasted Spotify/YouTube/Apple Music link (see stream-block.tsx).
+ *   Desktop web layout only: hidden on Android and iOS (see `STREAMING_AVAILABLE`)
+ *   and never offered in the phone and tablet layouts.
  *
  * It renders in two shapes from the same pieces:
- * - `SoundsScroller` (phone and tablet): tabs, one source at a time. It is the
+ * - `SoundsScroller` (phone and tablet): Tracks, plus Ambient on phone. It is the
  *   page's scroller, not a block inside one, so the track list can be
  *   virtualised (see the note on it below).
  * - `MusicBlock` (the desktop Music card): tracks on the left, streaming on the
@@ -35,9 +39,9 @@ import { useTone } from '@/components/wickglow/features/tone';
  */
 // Which view the phone/tablet Sounds page shows. 'ambient' only exists when
 // the screen passes `ambient` (the phone does; see SoundsScroller).
-type MusicSource = 'tracks' | 'streaming' | 'ambient';
+type MusicSource = 'tracks' | 'ambient';
 
-const SOURCE_LABEL: Record<MusicSource, string> = { tracks: 'Tracks', streaming: 'Streaming', ambient: 'Ambient' };
+const SOURCE_LABEL: Record<MusicSource, string> = { tracks: 'Tracks', ambient: 'Ambient' };
 
 // Tile washes for playlist rows. These are art, not theme accents.
 const ART = ['#FFB454', '#FF8246', '#F06E6E', '#96C878', '#AA8CF0'] as const;
@@ -62,33 +66,36 @@ export function MusicBlock({
         </View>
         <FilesNote wide />
       </View>
-      <View style={wideStyles.streamCol}>
-        <View style={wideStyles.stream}>
-          <Text style={[styles.kicker, wideStyles.cardLabel]}>Streaming</Text>
-          <StreamBlock wide>
-            <View style={wideStyles.playerBox}>
-              <EmbedSlot slotRef={embedSlotRef} onLayout={onEmbedLayout} />
-            </View>
-          </StreamBlock>
+      {/* Streaming is web-only; on Android and iOS the tracks fill the card. */}
+      {STREAMING_AVAILABLE ? (
+        <View style={wideStyles.streamCol}>
+          <View style={wideStyles.stream}>
+            <Text style={[styles.kicker, wideStyles.cardLabel]}>Streaming</Text>
+            <StreamBlock wide>
+              <View style={wideStyles.playerBox}>
+                <EmbedSlot slotRef={embedSlotRef} onLayout={onEmbedLayout} />
+              </View>
+            </StreamBlock>
+          </View>
         </View>
-      </View>
+      ) : null}
     </View>
   );
 }
 
-// Streaming shows no track rows. A constant, so the list's data keeps one identity.
+// Ambient shows no track rows. A constant, so the list's data keeps one identity.
 const NO_TRACKS: PlaylistEntry[] = [];
 
 /**
  * The Sounds page on phone and tablet, as one virtualised list. The track rows
  * are the list's items; everything else on the page rides along as the list's
  * header and footer: `before` (the mood picker, and on tablet the tasks), the
- * Tracks / Streaming tabs, the player, and `after` (the mixer, and on tablet
+ * Tracks / Ambient switch, the player, and `after` (the mixer, and on tablet
  * the quests and calendar). It looks like the single scrolling page it
  * replaced, but only the rows near the screen are mounted.
  *
  * With `ambient` (the phone), the switch gains a third view, Ambient, that
- * shows only that content, so Tracks and Streaming stay short.
+ * shows only that content, so Tracks stays short.
  *
  * It has to be the scroller itself: a virtualised list placed inside another
  * vertical ScrollView is given unlimited height and mounts every row anyway.
@@ -102,9 +109,9 @@ export function SoundsScroller({
   contentContainerStyle,
 }: {
   mobile?: boolean;
-  /** Rendered above the Tracks / Streaming tabs. */
+  /** Rendered above the Tracks / Ambient switch. */
   before?: React.ReactNode;
-  /** Rendered below the track list (or below the streaming block). */
+  /** Rendered below the track list. */
   after?: React.ReactNode;
   /** When given, an Ambient view that shows this alone (`before` and `after` hide there). */
   ambient?: React.ReactNode;
@@ -112,6 +119,11 @@ export function SoundsScroller({
 }) {
   const tone = useTone(mobile);
   const [source, setSource] = useState<MusicSource>('tracks');
+  // Streaming lives only on the desktop Music card (owner choice, 2026-11-14),
+  // so phone and tablet never offer it. Without Ambient (the tablet) only
+  // Tracks is left, so the switch is not shown at all.
+  const options: MusicSource[] = ['tracks'];
+  if (ambient) options.push('ambient');
   const { playlist, trackIndex, musicPlaying, ownTracks, selectTrack, removeOwnTrack } = useWickglow();
   const accent = tone.accent;
   // The list re-renders its visible rows when this changes. Without it a row
@@ -131,20 +143,21 @@ export function SoundsScroller({
       ListHeaderComponent={(
         <View>
           {source === 'ambient' ? null : before}
-          <SourceTabs
-            source={source}
-            options={ambient ? ['tracks', 'streaming', 'ambient'] : ['tracks', 'streaming']}
-            onChange={setSource}
-            mobile={mobile}
-            first={!before || source === 'ambient'}
-          />
+          {options.length > 1 ? (
+            <SegmentTabs
+              value={source}
+              options={options}
+              labels={SOURCE_LABEL}
+              onChange={setSource}
+              mobile={mobile}
+              first={!before || source === 'ambient'}
+            />
+          ) : null}
           {source === 'tracks' ? (
             <>
               <NowPlaying mobile={mobile} />
               <PlaylistHead />
             </>
-          ) : source === 'streaming' ? (
-            <StreamBlock mobile={mobile} />
           ) : (
             ambient
           )}
@@ -177,41 +190,6 @@ function RowGap() {
   return <View style={wideStyles.rowGap} />;
 }
 
-// The Tracks / Streaming (/ Ambient) switch at the top of the Sounds page on
-// phone and tablet. `first` drops the top margin when nothing sits above it.
-function SourceTabs({
-  source,
-  options,
-  onChange,
-  mobile = false,
-  first = false,
-}: {
-  source: MusicSource;
-  options: MusicSource[];
-  onChange: (next: MusicSource) => void;
-  mobile?: boolean;
-  first?: boolean;
-}) {
-  const tone = useTone(mobile);
-  const selectedStyle = { backgroundColor: tone.solid, borderColor: tone.solid };
-  const selectedText = { color: tone.ink };
-  return (
-    <View style={[styles.presetRow, styles.sourceRow, first ? styles.sourceRowFirst : null]}>
-      {options.map((item) => (
-        <Pressable
-          key={item}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: source === item }}
-          accessibilityLabel={SOURCE_LABEL[item]}
-          onPress={() => onChange(item)}
-          style={[styles.preset, styles.sourceTab, source === item ? selectedStyle : null]}
-        >
-          <Text style={[styles.miniText, source === item ? selectedText : null]}>{SOURCE_LABEL[item]}</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
 
 // An empty box on the desktop Music card. The real stream player (StreamStage)
 // floats above the scene and is positioned to cover this box, so the card looks
@@ -282,24 +260,34 @@ function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?:
     </>
   );
 
+  // Volume is drawn in quiet greys with a speaker icon in front, so it does not
+  // read as a second progress bar. The accent belongs to the track position.
+  const volume = (
+    <View style={wideStyles.vol}>
+      <VolumeIcon color={colors.textMuted} size={16} />
+      <Slider
+        accessibilityLabel="Music volume"
+        style={wideStyles.volSlider}
+        minimumValue={0}
+        maximumValue={100}
+        value={lamp.mix.music}
+        onValueChange={(value) => setMix('music', Math.round(value))}
+        minimumTrackTintColor={colors.textMuted}
+        maximumTrackTintColor={'rgba(255, 255, 255, 0.16)'}
+        thumbTintColor={colors.textPrimary}
+      />
+    </View>
+  );
+
   if (!wide) {
     return (
-      <View>
+      <View style={styles.card}>
         <Text style={styles.trackName}>{lamp.trackTitle}</Text>
         <Text style={styles.meta}>{lamp.trackArtist}</Text>
+        <TrackProgress accent={tone.accent} />
         <View style={styles.transport}>
           {transport}
-          <Slider
-            accessibilityLabel="Music volume"
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={100}
-            value={lamp.mix.music}
-            onValueChange={(value) => setMix('music', Math.round(value))}
-            minimumTrackTintColor={tone.accent}
-            maximumTrackTintColor={colors.border}
-            thumbTintColor={tone.accent}
-          />
+          {volume}
         </View>
       </View>
     );
@@ -311,23 +299,71 @@ function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?:
       <View style={wideStyles.nowCopy}>
         <Text style={wideStyles.nowTitle} numberOfLines={1}>{lamp.trackTitle}</Text>
         <Text style={wideStyles.nowArtist} numberOfLines={1}>{lamp.trackArtist}</Text>
+        <TrackProgress accent={tone.accent} wide />
         <View style={wideStyles.controls}>
           {transport}
-          <View style={wideStyles.vol}>
-            <VolumeIcon color={colors.textMuted} size={16} />
-            <Slider
-              accessibilityLabel="Music volume"
-              style={wideStyles.volSlider}
-              minimumValue={0}
-              maximumValue={100}
-              value={lamp.mix.music}
-              onValueChange={(value) => setMix('music', Math.round(value))}
-              minimumTrackTintColor={tone.accent}
-              maximumTrackTintColor={'rgba(255, 255, 255, 0.16)'}
-              thumbTintColor={tone.accent}
-            />
-          </View>
+          {volume}
         </View>
+      </View>
+    </View>
+  );
+}
+
+// How long a released seek holds the bar at the picked spot while the player's
+// status catches up, so the thumb does not jump back for a moment.
+const SEEK_HOLD_MS = 900;
+
+// The track position: a seek bar in the accent, with the time played on the
+// left and the time left on the right. It reads the player's status itself
+// (`useMusicPosition`), so its updates re-render only this bar.
+function TrackProgress({ accent, wide = false }: { accent: string; wide?: boolean }) {
+  const { seekMusic } = useWickglow();
+  const { position, length } = useMusicPosition();
+  // While a finger or mouse holds the thumb, the bar shows that spot, not the
+  // player's position, which would pull the thumb back on each update.
+  const [held, setHeld] = useState<number | null>(null);
+  const dragging = useRef(false);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+  }, []);
+
+  const ready = length > 0;
+  const shown = Math.min(held ?? position, length);
+  const left = Math.max(0, length - shown);
+
+  return (
+    <View style={wide ? wideStyles.progressWide : wideStyles.progress}>
+      <Slider
+        accessibilityLabel="Track position"
+        accessibilityValue={ready ? { text: `${formatTrackTime(shown)} of ${formatTrackTime(length)}` } : undefined}
+        disabled={!ready}
+        style={wideStyles.progressSlider}
+        minimumValue={0}
+        maximumValue={ready ? length : 1}
+        value={ready ? shown : 0}
+        onSlidingStart={(value) => {
+          if (holdTimer.current) clearTimeout(holdTimer.current);
+          dragging.current = true;
+          setHeld(value);
+        }}
+        onValueChange={(value) => {
+          if (dragging.current) setHeld(value);
+        }}
+        onSlidingComplete={(value) => {
+          dragging.current = false;
+          setHeld(value);
+          seekMusic(value);
+          holdTimer.current = setTimeout(() => setHeld(null), SEEK_HOLD_MS);
+        }}
+        minimumTrackTintColor={accent}
+        maximumTrackTintColor={'rgba(255, 255, 255, 0.16)'}
+        thumbTintColor={accent}
+      />
+      <View style={wideStyles.times}>
+        <Text style={wideStyles.time}>{ready ? formatTrackTime(shown) : '0:00'}</Text>
+        <Text style={wideStyles.time}>{ready ? `-${formatTrackTime(left)}` : '--:--'}</Text>
       </View>
     </View>
   );
@@ -342,7 +378,7 @@ function PlaylistHead({ wide = false }: { wide?: boolean }) {
   const canAddFiles = Platform.OS !== 'web' && !wide;
   return (
     <View style={wide ? wideStyles.labelRow : styles.mixHead}>
-      <Text style={[styles.kicker, styles.mixKicker, wide ? wideStyles.label : null]}>Playlist</Text>
+      <Text style={[styles.kicker, styles.mixKicker, wide ? wideStyles.label : styles.kickerLg]}>Playlist</Text>
       {canAddFiles ? (
         <Pressable
           accessibilityRole="button"
@@ -767,6 +803,27 @@ const wideStyles = StyleSheet.create({
   volSlider: {
     flex: 1,
     height: 28,
+  },
+  progress: {
+    marginTop: 8,
+  },
+  progressWide: {
+    marginTop: 6,
+  },
+  progressSlider: {
+    height: 24,
+    marginHorizontal: Platform.OS === 'web' ? 0 : -8,
+  },
+  times: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -2,
+  },
+  time: {
+    color: colors.textMuted,
+    fontFamily: fonts.body,
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
   },
   own: {
     flexDirection: 'row',

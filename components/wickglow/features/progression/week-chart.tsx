@@ -47,8 +47,9 @@ export function WeekChart({ mobile = false, wide: desk = false }: { mobile?: boo
   if (!desk) {
     return (
       <View>
-        <Text style={styles.kicker}>Last 7 days</Text>
-        {chart}
+        <Text style={[styles.kicker, styles.kickerLg]}>Last 7 days</Text>
+        {/* In a card, like the level card and stat tiles above it. */}
+        <View style={styles.card}>{chart}</View>
       </View>
     );
   }

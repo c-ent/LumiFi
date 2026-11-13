@@ -1,7 +1,7 @@
 import { commitDurationMinutes, MAX_MINUTES } from '@/src/core/phase';
-import { colors } from '@/src/theme/tokens';
+import { colors, radius, rounded } from '@/src/theme/tokens';
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useWickglow } from '@/components/wickglow/logic';
 import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles';
 import { PRESETS, TimerCfg } from '@/components/wickglow/theme';
@@ -19,43 +19,50 @@ export function TimerSettings({ mobile = false }: { mobile?: boolean }) {
   const tone = useTone(mobile);
   // A preset is "selected" only when all three lengths match the current settings.
   const same = (preset: TimerCfg) => preset.focus === lamp.cfg.focus && preset.short === lamp.cfg.short && preset.long === lamp.cfg.long;
+  // Phone and tablet put each group in its own card, like the other sheets.
+  // The desktop panel is already a card, so its groups stay plain.
+  const box = mobile ? styles.card : null;
+  const longBreakNote = <Text style={styles.note}>Every fourth focus session is followed by a long break.</Text>;
   return (
     <View>
-      <Text style={styles.kicker}>Timer length</Text>
-      <View style={styles.presetRow}>
-        {PRESETS.map((preset) => {
-          const selected = same(preset);
-          return (
-            <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${preset.focus} minute focus preset`} key={preset.focus} onPress={() => applyPreset(preset)} style={[styles.preset, selected && { backgroundColor: tone.solid, borderColor: tone.solid }]}>
-              <Text style={[styles.miniText, selected && { color: tone.ink }]}>{preset.focus} / {preset.short}</Text>
-            </Pressable>
-          );
-        })}
+      <Text style={[styles.kicker, mobile && styles.kickerLg]}>Timer length</Text>
+      <View style={box}>
+        <View style={styles.presetRow}>
+          {PRESETS.map((preset) => {
+            const selected = same(preset);
+            return (
+              <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${preset.focus} minute focus preset`} key={preset.focus} onPress={() => applyPreset(preset)} style={[styles.preset, selected && { backgroundColor: tone.solid, borderColor: tone.solid }]}>
+                <Text style={[styles.miniText, selected && { color: tone.ink }]}>{preset.focus} / {preset.short}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={styles.fields}>
+          <DurationField label="Focus (min)" value={lamp.cfg.focus} max={MAX_MINUTES.focus} onChange={(value) => setDuration('focus', value)} />
+          <DurationField label="Short break" value={lamp.cfg.short} max={MAX_MINUTES.short} onChange={(value) => setDuration('short', value)} />
+          <DurationField label="Long break" value={lamp.cfg.long} max={MAX_MINUTES.long} onChange={(value) => setDuration('long', value)} />
+        </View>
+        {mobile ? longBreakNote : null}
       </View>
-      <View style={styles.fields}>
-        <DurationField label="Focus (min)" value={lamp.cfg.focus} max={MAX_MINUTES.focus} onChange={(value) => setDuration('focus', value)} />
-        <DurationField label="Short break" value={lamp.cfg.short} max={MAX_MINUTES.short} onChange={(value) => setDuration('short', value)} />
-        <DurationField label="Long break" value={lamp.cfg.long} max={MAX_MINUTES.long} onChange={(value) => setDuration('long', value)} />
+      {mobile ? <Text style={[styles.kicker, styles.kickerLg]}>Sessions</Text> : null}
+      <View style={box}>
+        <CheckRow first={mobile} label="Start the next session automatically" checked={lamp.auto} onPress={() => setAuto(!lamp.auto)} accent={tone.accent} />
+        <CheckRow label="Hide the interface while I focus" checked={lamp.zenOpt} onPress={() => setZenOpt(!lamp.zenOpt)} accent={tone.accent} />
       </View>
-      <CheckRow label="Start the next session automatically" checked={lamp.auto} onPress={() => setAuto(!lamp.auto)} accent={tone.accent} />
-      <CheckRow label="Hide the interface while I focus" checked={lamp.zenOpt} onPress={() => setZenOpt(!lamp.zenOpt)} accent={tone.accent} />
-      <Text style={styles.kicker}>When a session ends</Text>
-      <View style={styles.presetRow}>
-        {([
-          ['keep', 'Keep playing'],
-          ['lower', 'Lower the volume'],
-          ['fade', 'Fade out and stop'],
-        ] as const).map(([id, label]) => {
-          const selected = lamp.musicEnd === id;
-          return (
-            <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={label} key={id} onPress={() => setMusicEnd(id)} style={[styles.preset, selected && { backgroundColor: tone.solid, borderColor: tone.solid }]}>
-              <Text style={[styles.miniText, selected && { color: tone.ink }]}>{label}</Text>
-            </Pressable>
-          );
-        })}
+      <Text style={[styles.kicker, mobile && styles.kickerLg]}>When a session ends</Text>
+      <View style={box}>
+        <View style={choiceStyles.list}>
+          {([
+            ['keep', 'Keep playing'],
+            ['lower', 'Lower the volume'],
+            ['fade', 'Fade out and stop'],
+          ] as const).map(([id, label]) => (
+            <ChoiceRow key={id} label={label} selected={lamp.musicEnd === id} onPress={() => setMusicEnd(id)} accent={tone.accent} />
+          ))}
+        </View>
+        <Text style={styles.note}>Lower drops the music to half until the next session starts. The chime still plays.</Text>
       </View>
-      <Text style={styles.note}>Lower drops the music to half until the next session starts. The chime still plays.</Text>
-      <Text style={styles.note}>Every fourth focus session is followed by a long break.</Text>
+      {mobile ? null : longBreakNote}
     </View>
   );
 }
@@ -116,10 +123,59 @@ function DurationField({ label, value, max, onChange }: { label: string; value: 
   );
 }
 
-// A labelled on/off row (a checkbox that fills with the accent when checked).
-function CheckRow({ label, checked, onPress, accent }: { label: string; checked: boolean; onPress: () => void; accent: string }) {
+// One option of a single-choice group, drawn as a full-width row with a radio
+// dot. Full width and one height for every option, so the group reads as a
+// list rather than a set of pills that wrap at different widths.
+function ChoiceRow({ label, selected, onPress, accent }: { label: string; selected: boolean; onPress: () => void; accent: string }) {
   return (
-    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={label} onPress={onPress} style={styles.checkRow}>
+    <Pressable accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={label} onPress={onPress} style={[choiceStyles.row, selected && { borderColor: accent }]}>
+      <View style={[choiceStyles.dot, { borderColor: selected ? accent : colors.border }]}>
+        {selected ? <View style={[choiceStyles.dotOn, { backgroundColor: accent }]} /> : null}
+      </View>
+      <Text style={[styles.taskText, choiceStyles.text, selected && { color: colors.textPrimary }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const choiceStyles = StyleSheet.create({
+  list: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  row: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 46,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...rounded(radius.md),
+  },
+  dot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotOn: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  text: {
+    flex: 1,
+  },
+});
+
+// A labelled on/off row (a checkbox that fills with the accent when checked).
+// `first` drops the top margin when it opens a card.
+function CheckRow({ label, checked, onPress, accent, first = false }: { label: string; checked: boolean; onPress: () => void; accent: string; first?: boolean }) {
+  return (
+    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={label} onPress={onPress} style={[styles.checkRow, first ? { marginTop: 0 } : null]}>
       <View style={[styles.check, { borderColor: checked ? accent : colors.border, backgroundColor: checked ? accent : 'transparent' }]} />
       <Text style={styles.taskText}>{label}</Text>
     </Pressable>

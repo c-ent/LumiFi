@@ -140,9 +140,14 @@ function GradientScene({ theme, size, drifts, breathe, onReady }: {
           <Rect width={size.width} height={size.height} fill={`url(#${gradientId})`} />
         </Svg>
       ) : null}
-      <SceneOrb color={theme.o1} size={460} opacity={0.45} place={{ left: -120, top: -80 }} drift={drifts[0]} />
+      {/* o1..o3 run palest to darkest (same order as a mood's flame1..flame3).
+          The biggest, most opaque, frontmost orb takes the darkest color (o3)
+          and the smallest, faintest, backmost orb takes the palest (o1), so
+          the dark orb reads as a clear dark shape instead of washing into a
+          dark corner of the gradient (owner request, 2026-11-14). */}
+      <SceneOrb color={theme.o3} size={460} opacity={0.45} place={{ left: -120, top: -80 }} drift={drifts[0]} />
       <SceneOrb color={theme.o2} size={400} opacity={0.35} place={{ right: -120, bottom: -80 }} drift={drifts[1]} />
-      <SceneOrb color={theme.o3} size={260} opacity={0.22} place={{ left: '52%', top: '8%' }} drift={drifts[2]} />
+      <SceneOrb color={theme.o1} size={260} opacity={0.22} place={{ left: '52%', top: '8%' }} drift={drifts[2]} />
       <Animated.View
         style={[
           styles.core,

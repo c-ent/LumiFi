@@ -260,3 +260,12 @@ export function ChevronIcon(props: IconProps) {
     </Stroke>
   );
 }
+
+export function GoogleIcon({ size = 18 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx="12" cy="12" r="10" fill="#4285F4" />
+      <Path d="M8 12c0 2.2 1.8 4 4 4v-2h2v-2h-2v-1c0-.6.4-1 1-1h1V9h-1c-2.2 0-4 1.8-4 3z" fill="white" />
+    </Svg>
+  );
+}

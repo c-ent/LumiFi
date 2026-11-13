@@ -16,6 +16,8 @@ Also 2026-11-13: the read-cost fix the owner chose after a review (fix B with sa
 
 Also fixed 2026-11-13: the web app showed only a black screen. `app/+html.tsx` (added in ba5822c for the keyboard fix) did not render Expo's `headNodes` and `bodyNodes`, so every web build since had no script tags and stayed on the dark loading screen. The live site was deployed before that and still works; the next deploy needs this fix.
 
+Also 2026-11-13: the Android builds include only 64-bit ARM (`buildArchs: ["arm64-v8a"]`), set through `expo-build-properties` in `app.json` (owner approved). The minimum Android version stays at the Expo default. This makes the EAS builds smaller and drops old 32-bit and x86 devices. Check that a development build installs and runs on the Xiaomi Pad 6 (arm64).
+
 Next: the owner tasks below, then the account checks under Still to check. When those pass, the feature moves to completed.md and the Play release resumes.
 
 ## Current goal
@@ -37,7 +39,7 @@ Add accounts and saving with Firebase, then return to the Google Play release. O
 
 - Accounts and saving: answered 2026-11-13 (sign-in in Stats; user picks on a merge conflict; Google on Android approved; progress only syncs), recorded in [../feature/firebase.md](../feature/firebase.md). Also answered 2026-11-13: rule caps on XP and streak changes are enough; users request account deletion by email and the owner deletes it by hand after 7 days. No Firebase questions are open. One convention change to confirm: AGENTS.md allowed only the six Firebase values in the client; Google sign-in on Android also needs `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (a public OAuth id, not a secret), so the rule now names it. Say if you want it handled another way.
 - Account name (2026-11-13): the account card shows the Firebase Auth profile name (from Google, or the optional "Name" typed at sign-up), else the email. People can change their name from the pencil on the account card (owner, 2026-11-13); an empty name goes back to showing the email. Open: is a username or a profile page wanted? Not built; no Firestore schema change is needed for the name.
-- Security: `npm audit` reports 4 high findings in `@grpc/grpc-js`, pulled in by Firestore's Node build. The app bundles the browser or React Native build, which does not use gRPC; re-check on the next Firebase update.
+- Security (2026-11-14): `npm audit` reports 0 vulnerabilities. Minimal change: the committed `package-lock.json` was kept, with four stale nested `glob` entries removed so npm re-resolves them. Fixes are `overrides` in `package.json`: `@grpc/grpc-js`, `uuid`, `re2`, `@opentelemetry/core` (under `@google-cloud/pubsub`), and `glob` (under `archiver-utils`, `exegesis`, `rimraf`, `firebase-tools`). Direct dependency versions are unchanged. Those are transitive copies in dev-only `firebase-tools`; the app bundle is unaffected. Do not run `npm audit fix --force`: it downgrades `firebase`/`firebase-tools` to older majors. Re-check the overrides when `firebase-tools` releases a version that resolves them itself.
 - Play release: the privacy policy URL, the store name after the trademark search, and the developer account.
 - Spotify widget terms: they require a privacy policy that says the embed sets cookies, including third-party ones, and how to manage them. Needed before release if Spotify embeds ship.
 - The Apple Music card that floats bottom-right on desktop after the Music panel closes, with a "Find stream" button: keep it or not?

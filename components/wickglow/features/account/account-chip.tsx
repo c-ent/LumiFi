@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { colors, fade, fonts, radius, rounded } from '@/src/theme/tokens';
 import { useTone } from '@/components/wickglow/features/tone';
 import { ChevronIcon, UserIcon } from '@/components/wickglow/shared/icons';
 import { MAX_NAME_LENGTH } from '@/src/data/auth';
+import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset';
 import { statusColor, statusLine } from './account-row';
 import { SignInCard } from './sign-in-card';
 import { useAccount } from './account';
@@ -24,7 +25,18 @@ export function AccountChip() {
   const [note, setNote] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
   const chipRef = useRef<React.ComponentRef<typeof Pressable>>(null);
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // The menu is placed under the chip when it opens. While the keyboard is up
+  // (Edit name), it moves up just enough to end above it, and scrolls if it
+  // still does not fit.
+  const keyboard = useKeyboardInset();
+  const [contentHeight, setContentHeight] = useState(0);
+  const menuFloor = windowHeight - keyboard - MENU_GAP;
+  const menuHeight = contentHeight + MENU_CHROME;
+  const menuTop = keyboard > 0 && contentHeight > 0
+    ? Math.max(MENU_GAP, Math.min(menuPos.top, menuFloor - menuHeight))
+    : menuPos.top;
+  const menuMaxHeight = keyboard > 0 ? Math.max(0, menuFloor - menuTop) : undefined;
   if (!account.available || account.user === undefined) return null;
   const user = account.user;
 
@@ -51,14 +63,21 @@ export function AccountChip() {
   const first = (user.name ?? email.split('@')[0]).split(' ')[0];
   const initial = (user.name ?? email).charAt(0).toUpperCase();
   const canRetry = sync.phase === 'offline' || sync.phase === 'error';
-  const close = () => {
-    setOpen(false);
+  // Leaving the name editor closes the keyboard first. Removing a focused
+  // field on Android can leave the keyboard's hide unreported, and the card
+  // behind stayed lifted.
+  const stopEditing = () => {
+    Keyboard.dismiss();
     setEditing(false);
+  };
+  const close = () => {
+    stopEditing();
+    setOpen(false);
     setNameError(null);
   };
   const saveName = async () => {
     const result = await account.setName(draft);
-    if (result.ok) setEditing(false);
+    if (result.ok) stopEditing();
     else setNameError(result.message ?? 'Could not save the name.');
   };
 
@@ -93,7 +112,13 @@ export function AccountChip() {
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
         <Pressable accessible={false} tabIndex={-1} onPress={close} style={StyleSheet.absoluteFill} />
-        <View style={[styles.menu, { top: menuPos.top, right: menuPos.right }]}>
+        <View style={[styles.menu, { top: menuTop, right: menuPos.right }, menuMaxHeight != null ? { maxHeight: menuMaxHeight } : null]}>
+          <ScrollView
+            style={styles.menuScroll}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+            onContentSizeChange={(_, height) => setContentHeight(height)}
+          >
             {editing ? (
               <>
                 <TextInput
@@ -110,7 +135,7 @@ export function AccountChip() {
                 />
                 {nameError ? <Text style={styles.error}>{nameError}</Text> : null}
                 <View style={styles.editRow}>
-                  <Pressable accessibilityRole="button" onPress={() => setEditing(false)} style={styles.item}>
+                  <Pressable accessibilityRole="button" onPress={stopEditing} style={styles.item}>
                     <Text style={styles.itemText}>Cancel</Text>
                   </Pressable>
                   <Pressable accessibilityRole="button" onPress={() => void saveName()} style={[styles.save, { backgroundColor: tone.solid }]}>
@@ -181,13 +206,22 @@ export function AccountChip() {
             >
               <Text style={[styles.itemText, { color: colors.error }]}>Delete account</Text>
             </Pressable>
+          </ScrollView>
         </View>
       </Modal>
     </View>
   );
 }
 
+// Space kept between the menu and the keyboard or the top of the screen, and
+// the menu's own vertical padding plus border around its scrolled content.
+const MENU_GAP = 12;
+const MENU_CHROME = 14 * 2 + 2;
+
 const styles = StyleSheet.create({
+  menuScroll: {
+    flexGrow: 0,
+  },
   pill: {
     minHeight: 40,
     paddingHorizontal: 14,

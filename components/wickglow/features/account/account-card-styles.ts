@@ -11,11 +11,15 @@ export const cardStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
+    paddingVertical: 16,
     backgroundColor: 'rgba(5, 3, 15, 0.55)',
   },
+  // Capped to the space above the keyboard; the card's ScrollView then scrolls
+  // instead of the top running off a short landscape screen.
   card: {
     width: '100%',
     maxWidth: 400,
+    maxHeight: '100%',
     ...glassPanel,
     ...rounded(radius.sheet),
     paddingHorizontal: 22,

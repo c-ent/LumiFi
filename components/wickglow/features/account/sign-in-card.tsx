@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors, fade } from '@/src/theme/tokens';
 import { CloseIcon, GoogleIcon } from '@/components/wickglow/shared/icons';
 import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset';
@@ -121,7 +121,14 @@ export function SignInCard({ visible, accent, onClose }: { visible: boolean; acc
             {account.google ? (
               <>
                 <Text style={styles.or}>or</Text>
-                <Pressable accessibilityRole="button" onPress={() => void run(account.signInGoogle)} style={[styles.secondary, { flexDirection: 'row', gap: 8 }]}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    // Close the keyboard first: the Google picker covers the
+                    // app, and a keyboard hidden behind it does not report it.
+                    Keyboard.dismiss();
+                    void run(account.signInGoogle);
+                  }} style={[styles.secondary, { flexDirection: 'row', gap: 8 }]}>
                   <GoogleIcon size={20} />
                   <Text style={styles.secondaryText}>Continue with Google</Text>
                 </Pressable>

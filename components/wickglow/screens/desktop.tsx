@@ -12,6 +12,7 @@ import { sessionFace } from '@/src/core/session-face';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import { darkGlass, glassPanel } from '@/components/wickglow/shared/panel-styles';
 import { useFullscreen } from '@/components/wickglow/hooks/use-fullscreen';
+import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset';
 import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
 import { hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
@@ -89,6 +90,10 @@ export function DesktopWickglow() {
   const insets = useSafeAreaInsets();
   const fullscreen = useFullscreen();
   const { width, height } = useWindowDimensions();
+  // How far the on-screen keyboard covers the bottom (a large Android tablet in
+  // landscape gets this layout). While it is up, the open card ends above it
+  // instead of above the dock, so the field being typed in stays visible.
+  const keyboard = useKeyboardInset();
   const [panel, setPanel] = useState<PanelId | null>(null);
   // Zen: while focusing with no panel open, the whole UI fades out after 3.5s
   // without input.
@@ -156,6 +161,12 @@ export function DesktopWickglow() {
   // Music card height: up to 720px, or whatever fits above the dock.
   const musicRoom = height - insets.top - insets.bottom - 104;
   const musicHeight = Math.min(720, Math.max(0, musicRoom));
+  // Bottom edge of the wide cards and the narrow side cards: above the dock, or
+  // just above the keyboard while it is open.
+  const wideBottom = keyboard > 0 ? keyboard + 12 : insets.bottom + 84;
+  const sideBottom = keyboard > 0 ? keyboard + 12 : insets.bottom + 72;
+  // With the keyboard up, a side card must also not run off the top.
+  const sideMaxHeight = keyboard > 0 ? Math.max(0, height - sideBottom - insets.top - 20) : undefined;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.b1 }]} onTouchStart={poke}>
@@ -280,7 +291,7 @@ export function DesktopWickglow() {
       {panel === 'progress' || panel === 'quests' || panel === 'tasks' ? (
         <View
           pointerEvents="box-none"
-          style={[styles.wideWrap, styles.progressWrap, { top: insets.top + 20, bottom: insets.bottom + 84 }]}
+          style={[styles.wideWrap, styles.progressWrap, { top: insets.top + 20, bottom: wideBottom }]}
         >
           <ScrollView keyboardShouldPersistTaps="handled" style={[styles.progressScroll, panel === 'quests' && styles.questsScroll, panel === 'tasks' && styles.tasksScroll]}>
             <View style={styles.progressCard}>
@@ -294,7 +305,7 @@ export function DesktopWickglow() {
       {/* Narrow side cards: mixer, scenes, timer settings. They anchor left or
           right to sit under the dock button that opened them (PANEL_SIDE). */}
       {panel && panel !== 'music' && panel !== 'progress' && panel !== 'quests' && panel !== 'tasks' ? (
-        <View style={[styles.panel, styles[PANEL_SIDE[panel] === 'right' ? 'panelRight' : 'panelLeft'], { bottom: insets.bottom + 72 }]}>
+        <View style={[styles.panel, styles[PANEL_SIDE[panel] === 'right' ? 'panelRight' : 'panelLeft'], { bottom: sideBottom }, sideMaxHeight != null ? { maxHeight: sideMaxHeight } : null]}>
           <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
           <ScrollView style={styles.panelBody} contentContainerStyle={styles.panelContent}>
             {panel === 'mixer' ? <MixerBlock /> : null}

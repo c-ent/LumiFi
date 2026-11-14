@@ -28,6 +28,22 @@ export interface SessionRecord {
   minutes: number;
   /** The task the session was focused on, or null. Each device counts a task's sessions from these. */
   task: number | null;
+  /**
+   * The local day the session was finished on, on the device that finished
+   * it (`calendarKey` format). Every device files the session on this day, so
+   * devices in different time zones agree (owner, 2026-11-14). Missing on
+   * records from before it existed: those are filed by the reader's clock.
+   */
+  d?: string;
+}
+
+const DAY_KEY = /^\d{4}-\d{1,2}-\d{1,2}$/;
+/** How far a session's day may sit from its end time: time zones span 26 hours. */
+const MAX_DAY_DRIFT_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** The day a session counts on: the writer's day, else this device's day of its end. */
+export function sessionDay(record: SessionRecord): string {
+  return record.d ?? calendarKey(record.end);
 }
 
 export interface DayRecord {
@@ -65,12 +81,19 @@ export function sessionRecordId(end: number, minutes: number): string {
   return `${end}-${minutes}`;
 }
 
-/** A focus session as a record, or null when it cannot be one (under a minute, or too long). */
-export function sessionRecord(end: number, minutes: number, task: number | null = null): SessionRecord | null {
+/**
+ * A focus session as a record, or null when it cannot be one (under a minute,
+ * or too long). `d` is the day it was finished on where it was finished; a day
+ * that is not a calendar key, or is more than three days from `end`, is left
+ * out, and the session is then filed by the reader's clock.
+ */
+export function sessionRecord(end: number, minutes: number, task: number | null = null, d: unknown = null): SessionRecord | null {
   if (!Number.isInteger(end) || end <= 0) return null;
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_RECORD_MINUTES) return null;
   const focused = typeof task === 'number' && Number.isSafeInteger(task) ? task : null;
-  return { id: sessionRecordId(end, minutes), end, minutes, task: focused };
+  const record: SessionRecord = { id: sessionRecordId(end, minutes), end, minutes, task: focused };
+  if (typeof d === 'string' && DAY_KEY.test(d) && Math.abs(noonOf(d) - end) <= MAX_DAY_DRIFT_MS) record.d = d;
+  return record;
 }
 
 /**
@@ -181,7 +204,7 @@ export function rebuildProgress(log: ProgressLog, tasks: Task[], now: number): R
     day.tasks += record.tasks;
   }
   for (const record of log.sessions) {
-    const day = at(calendarKey(record.end));
+    const day = at(sessionDay(record));
     day.minutes += record.minutes;
     if (countsAsRewardSession(record.minutes)) day.sessions += 1;
   }

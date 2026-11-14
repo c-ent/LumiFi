@@ -142,6 +142,28 @@ describe('sessions', () => {
     await assertFails(setDoc(rec(alice(), 'alice', badTask.id), badTask.data));
   });
 
+  it('accepts the writer\'s day within 3 days of the end, and refuses any other', async () => {
+    const end = Date.now() - MINUTE;
+    const keyOf = (ms) => {
+      const date = new Date(ms);
+      return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
+    };
+    const DAY = 24 * 60 * MINUTE;
+    // Its own day, and a day either side (a time zone far east or west).
+    for (const [offset, shift] of [[0, 0], [1, -DAY], [2, DAY]]) {
+      const ok = session(end - offset, 25, { day: keyOf(end + shift) });
+      await assertSucceeds(setDoc(rec(alice(), 'alice', ok.id), ok.data));
+    }
+    const far = session(end - 3, 25, { day: keyOf(end - 5 * DAY) });
+    await assertFails(setDoc(rec(alice(), 'alice', far.id), far.data));
+    const ahead = session(end - 4, 25, { day: keyOf(end + 5 * DAY) });
+    await assertFails(setDoc(rec(alice(), 'alice', ahead.id), ahead.data));
+    for (const [offset, bad] of [[5, 'today'], [6, 20261114], [7, '2026-13-40'], [8, null]]) {
+      const wrong = session(end - offset, 25, { day: bad });
+      await assertFails(setDoc(rec(alice(), 'alice', wrong.id), wrong.data));
+    }
+  });
+
   it('refuses an end time in the future', async () => {
     const { id, data } = session(Date.now() + 60 * MINUTE, 25);
     await assertFails(setDoc(rec(alice(), 'alice', id), data));

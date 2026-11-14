@@ -31,6 +31,18 @@ describe('session records', () => {
     expect(sessionRecord(at(2026, 11, 3), 180)?.minutes).toBe(180);
   });
 
+  it('keeps the writer\'s day only when it is a calendar key within 3 days of the end', () => {
+    const end = at(2026, 11, 3);
+    expect(sessionRecord(end, 25, null, '2026-11-3')?.d).toBe('2026-11-3');
+    expect(sessionRecord(end, 25, null, '2026-11-2')?.d).toBe('2026-11-2');
+    expect(sessionRecord(end, 25, null, '2026-11-4')?.d).toBe('2026-11-4');
+    for (const bad of ['2026-11-9', '2026-10-28', 'today', 20261103, null, undefined]) {
+      const record = sessionRecord(end, 25, null, bad);
+      expect(record).not.toBeNull();
+      expect(record).not.toHaveProperty('d');
+    }
+  });
+
   it('keeps a session once by id', () => {
     const record = sessionRecord(at(2026, 11, 3), 25);
     const once = appendSession(emptyLog(), record);
@@ -89,6 +101,18 @@ describe('rebuildProgress', () => {
     const rebuilt = rebuildProgress(log, [], at(2026, 11, 4, 20));
     expect(rebuilt.days['2026-11-3']).toMatchObject({ sessions: 1, minutes: 25 });
     expect(rebuilt.days['2026-11-4']).toMatchObject({ sessions: 1, minutes: 25 });
+    expect(rebuilt.streak).toEqual({ n: 2, last: '2026-11-4' });
+  });
+
+  it('files a session on the day it was finished where it was finished, in any time zone', () => {
+    // 23:30 here, but finished just after midnight on the 4th in a time zone
+    // further east: every device counts it on the 4th, as the writer did.
+    let log = appendSession(emptyLog(), sessionRecord(new Date(2026, 10, 3, 23, 30).getTime(), 25, null, '2026-11-4'));
+    // A record from before the day was stored: filed by this device's clock.
+    log = appendSession(log, sessionRecord(new Date(2026, 10, 3, 9).getTime(), 25));
+    const rebuilt = rebuildProgress(log, [], at(2026, 11, 4, 20));
+    expect(rebuilt.days['2026-11-4']).toMatchObject({ sessions: 1, minutes: 25 });
+    expect(rebuilt.days['2026-11-3']).toMatchObject({ sessions: 1, minutes: 25 });
     expect(rebuilt.streak).toEqual({ n: 2, last: '2026-11-4' });
   });
 

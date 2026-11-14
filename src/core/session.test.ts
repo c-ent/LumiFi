@@ -288,9 +288,10 @@ describe('subtasks and the daily task count', () => {
 describe('session records', () => {
   const end = new Date(2026, 10, 13, 10).getTime();
 
-  it('records a finished focus session once, with the focused task', () => {
+  it('records a finished focus session once, with the focused task and the day it counted on', () => {
     const done = completeSession(progressAt(end), 'focus', end, 25);
-    expect(done.state.log.sessions).toEqual([{ id: `${end}-25`, end, minutes: 25, task: 1 }]);
+    expect(done.state.log.sessions).toEqual([{ id: `${end}-25`, end, minutes: 25, task: 1, d: '2026-11-13' }]);
+    expect(done.state.day.d).toBe('2026-11-13');
   });
 
   it('records no task when none is focused, and nothing for a break', () => {

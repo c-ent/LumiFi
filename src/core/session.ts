@@ -61,8 +61,9 @@ export function completeSession<T extends ProgressState>(
       days: { ...rolled.days, [nextDay.d]: nextDay },
       streak: rewardSession ? streakAfterFocus(rolled.streak, now) : rolled.streak,
       tasks,
-      // The record accounts sync. `now` is when the session ended.
-      log: appendSession(rolled.log, sessionRecord(Math.round(now), minutes, rolled.activeId)),
+      // The record accounts sync. `now` is when the session ended, and the
+      // day it counted on here goes with it, so every device files it there.
+      log: appendSession(rolled.log, sessionRecord(Math.round(now), minutes, rolled.activeId, nextDay.d)),
     },
     nextMode: modeAfterComplete('focus', cycle),
     messages,

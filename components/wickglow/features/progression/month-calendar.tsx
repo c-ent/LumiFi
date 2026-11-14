@@ -37,7 +37,7 @@ export function MonthCalendar({ mobile = false, wide: desk = false }: { mobile?:
 
   const pick = (key: string) => {
     setPicked(key);
-    setQuiet(quietDayLine(Math.random));
+    setQuiet((shown) => quietDayLine(Math.random, shown));
   };
 
   const shown = view ?? monthRef(now);

@@ -12,11 +12,29 @@ export function hasOpenQuests(day: DayStats): boolean {
   return QUESTS.some((quest) => !day.claimed.includes(quest.id));
 }
 
+/** The quests a day's totals have reached, claimed or not. The one place a quest's goal is checked. */
+export function reachedQuests(day: Pick<DayStats, 'sessions' | 'minutes' | 'tasks'>): typeof QUESTS {
+  return QUESTS.filter((quest) => day[quest.key] >= quest.goal);
+}
+
+/**
+ * Takes back a quest the day no longer reaches (a task reopened), with its XP,
+ * so the device keeps the same credit a sync rebuild works out.
+ */
+export function unclaimLostQuests(day: DayStats, xp: number): { day: DayStats; xp: number } {
+  const reached = new Set(reachedQuests(day).map((quest) => quest.id));
+  const lost = QUESTS.filter((quest) => day.claimed.includes(quest.id) && !reached.has(quest.id));
+  if (lost.length === 0) return { day, xp };
+  const ids = new Set(lost.map((quest) => quest.id));
+  const reward = lost.reduce((sum, quest) => sum + quest.reward, 0);
+  return { day: { ...day, claimed: day.claimed.filter((id) => !ids.has(id)) }, xp: Math.max(0, xp - reward) };
+}
+
 export function claimReachedQuests(day: DayStats, xp: number, messages: string[]): { day: DayStats; xp: number } {
   let nextDay = day;
   let nextXp = xp;
-  for (const quest of QUESTS) {
-    if (nextDay[quest.key] >= quest.goal && !nextDay.claimed.includes(quest.id)) {
+  for (const quest of reachedQuests(day)) {
+    if (!nextDay.claimed.includes(quest.id)) {
       nextDay = { ...nextDay, claimed: [...nextDay.claimed, quest.id] };
       nextXp = grantXp(nextXp, quest.reward, 'quest complete', messages);
     }

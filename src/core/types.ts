@@ -1,3 +1,5 @@
+import type { ProgressLog } from './progress-log';
+
 export type TimerMode = 'focus' | 'short' | 'long';
 
 export interface TimerCfg {
@@ -45,4 +47,6 @@ export interface ProgressState {
   tasks: Task[];
   activeId: number | null;
   cycle: number;
+  /** Every finished focus session and the pre-sync daily totals, which accounts sync. */
+  log: ProgressLog;
 }

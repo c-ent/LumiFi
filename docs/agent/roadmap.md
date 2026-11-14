@@ -27,11 +27,11 @@ The order was updated on 2026-11-03 and is recorded in `progress.md`. #1, #4 and
 | 9   | Optional cosmetics or one-time purchase | —       | Out (owner, 2026-11-10)     | —                                                         |
 | 6   | Study pets                              | —       | Out                         | v1 (server drops after #5)                                |
 | 7   | Achievements                            | —       | Out                         | —                                                         |
-| 5   | Accounts and sync                       | —       | Out (owner, 2026-11-10)     | —                                                         |
+| 5   | Accounts and sync                       | v2      | Current: built 2026-11-13, owner tasks and device checks left | —                                                         |
 | 10  | Private circles (friends' candles)      | —       | Out (owner, 2026-11-10)     | —                                                         |
 | 11  | Focus rooms                             | —       | Out (owner, 2026-11-10)     | —                                                         |
 
-#1, #4 and #8 have shipped. #2 and #3 were removed. #6 and #7 are out. #5, #9, #10 and #11 were dropped by the owner on 2026-11-10; their sections below are history only.
+#1, #4 and #8 have shipped. #2 and #3 were removed. #6 and #7 are out. #9, #10 and #11 were dropped by the owner on 2026-11-10; their sections below are history only. #5 was dropped on 2026-11-10 and brought back on 2026-11-13 as the current feature.
 
 ## v2
 
@@ -117,23 +117,23 @@ The core timer, tasks, sounds and progression stay free, because reviewers compl
 
 ## v4 (dropped: multiplayer)
 
-Out as of 2026-11-10 by owner decision: accounts and sync, private circles and focus rooms. The sections below are kept only as a record of what was proposed; do not build them.
+Out as of 2026-11-10 by owner decision: private circles and focus rooms. Their sections below are kept only as a record of what was proposed; do not build them. Accounts and sync (#5) is back in the plan as of 2026-11-13.
 
 ### 5. Accounts and sync
 
-Out as of 2026-11-10. Historical spec only.
+Back in the plan as of 2026-11-13 (owner) and the current feature, ahead of the Play release. Uses Firebase on the Spark plan.
 
 Behavior:
 
-- Sign up and sign in with Supabase Auth. The app offers it after the first completed session. Local-only use keeps working.
-- On first sign-in, upload local progress. XP, level, streak and quest rewards change only through validated server functions.
+- Sign up and sign in with Firebase Auth: Email/Password and Google. Local-only use keeps working.
+- Sync XP, streaks, tasks and focus history across devices. On first sign-in, upload local progress. Firestore rules bound how much XP, streak and quest rewards can change per write.
 
 Done when:
 
-- A second device shows the same XP, streak, tasks and settings.
-- The client cannot write XP or streak directly. Two-user RLS test passes.
+- A second device shows the same XP, streak, tasks and history.
+- A user cannot read or write another user's data, and a write that jumps XP or streak past the rule bounds is rejected (Firestore emulator rules test).
 
-Open questions: sign-in methods (email, Google). Merge rule when the device and the account both hold progress.
+Answered 2026-11-13; the full plan and answers are in `docs/feature/firebase.md`.
 
 ### 10. Private circles (friends' candles)
 

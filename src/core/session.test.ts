@@ -1,5 +1,6 @@
 import { calendarKey } from './calendar';
 import { emptyDay } from './history';
+import { rebuildProgress } from './progress-log';
 import { addSubtask, completeSession, removeTask, toggleTask } from './session';
 import { ProgressState, Task } from './types';
 
@@ -18,6 +19,7 @@ function progressAt(now: number, focus = 25): ProgressState {
     tasks: [task({ id: 1, text: 'Read chapter 5' })],
     activeId: 1,
     cycle: 0,
+    log: { sessions: [], legacy: [] },
   };
 }
 
@@ -129,24 +131,38 @@ describe('completed sessions', () => {
     expect(skipped.day.minutes).toBe(25);
   });
 
-  it('pays the task quest once per day and again after midnight', () => {
+  it('takes the task quest back on reopen, pays it once per finished day, and again after midnight', () => {
     const first = toggleTask(progressAt(monday), 1, monday);
     expect(first.state.xp).toBe(30);
     expect(first.state.day.claimed).toEqual(['q3']);
 
+    // Reopening takes the credit back, as a sync rebuild does.
     const undone = toggleTask(first.state, 1, monday);
-    expect(undone.state.xp).toBe(30);
+    expect(undone.state.xp).toBe(0);
     expect(undone.state.day.tasks).toBe(0);
+    expect(undone.state.day.claimed).toEqual([]);
+    expect(undone.state.days['2026-11-2'].claimed).toEqual([]);
 
+    // Finishing again pays it again: finish and undo never add up past 30.
     const repeated = toggleTask(undone.state, 1, monday);
     expect(repeated.state.xp).toBe(30);
+    expect(rebuildProgress(repeated.state.log, repeated.state.tasks, monday).xp).toBe(30);
 
     const cleared = toggleTask(repeated.state, 1, monday).state;
     const nextDay = toggleTask(cleared, 1, tuesdayMorning);
     expect(nextDay.state.day.d).toBe('2026-11-3');
-    expect(nextDay.state.xp).toBe(60);
+    expect(nextDay.state.xp).toBe(30);
     expect(nextDay.state.day.claimed).toEqual(['q3']);
-    expect(nextDay.state.days['2026-11-2'].claimed).toEqual(['q3']);
+    expect(nextDay.state.days['2026-11-2'].claimed).toEqual([]);
+  });
+
+  it('takes back a past day\'s task quest when a task finished that day is reopened, matching a rebuild', () => {
+    const finished = toggleTask(progressAt(monday), 1, monday).state;
+    const reopened = toggleTask(finished, 1, tuesdayMorning).state;
+    expect(reopened.xp).toBe(0);
+    expect(reopened.days['2026-11-2'].tasks).toBe(0);
+    expect(reopened.days['2026-11-2'].claimed).toEqual([]);
+    expect(rebuildProgress(reopened.log, reopened.tasks, tuesdayMorning).xp).toBe(reopened.xp);
   });
 
   it('does not let undoing an earlier task erase another day’s count', () => {
@@ -242,12 +258,18 @@ describe('subtasks and the daily task count', () => {
     expect(reopened.tasks.find((item) => item.id === 1)?.done).toBe(false);
   });
 
-  it('undoes a deleted finished task and does not count a deleted subtask', () => {
+  it('keeps the credit of a deleted finished task and does not count a deleted subtask', () => {
     const finished = toggleTask(progressAt(monday), 1, monday).state;
     const removed = removeTask(finished, 1, monday).state;
     expect(removed.tasks).toEqual([]);
-    expect(removed.day.tasks).toBe(0);
+    expect(removed.day.tasks).toBe(1);
+    expect(removed.xp).toBe(finished.xp);
+    expect(removed.log.finished).toEqual([{ task: 1, d: calendarKey(monday) }]);
     expect(removed.activeId).toBeNull();
+    // Deleting an open task gives nothing.
+    const open = removeTask(progressAt(monday), 1, monday).state;
+    expect(open.day.tasks).toBe(0);
+    expect(open.log.finished).toBeUndefined();
 
     const withSub: ProgressState = {
       ...progressAt(monday),
@@ -260,5 +282,20 @@ describe('subtasks and the daily task count', () => {
     const dropped = removeTask(withSub, 2, monday).state;
     expect(dropped.day.tasks).toBe(0);
     expect(dropped.tasks).toEqual([withSub.tasks[0]]);
+  });
+});
+
+describe('session records', () => {
+  const end = new Date(2026, 10, 13, 10).getTime();
+
+  it('records a finished focus session once, with the focused task', () => {
+    const done = completeSession(progressAt(end), 'focus', end, 25);
+    expect(done.state.log.sessions).toEqual([{ id: `${end}-25`, end, minutes: 25, task: 1 }]);
+  });
+
+  it('records no task when none is focused, and nothing for a break', () => {
+    const idle = { ...progressAt(end), activeId: null };
+    expect(completeSession(idle, 'focus', end, 25).state.log.sessions[0].task).toBeNull();
+    expect(completeSession(idle, 'short', end, 5).state.log.sessions).toEqual([]);
   });
 });

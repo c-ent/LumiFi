@@ -1,4 +1,5 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import Reanimated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
   Pressable,
   ScrollView,
@@ -12,17 +13,24 @@ import { sessionFace } from '@/src/core/session-face';
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import { darkGlass, glassPanel } from '@/components/wickglow/shared/panel-styles';
 import { useFullscreen } from '@/components/wickglow/hooks/use-fullscreen';
+import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset';
+import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
 import { hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
-import { RainOverlay } from '@/components/wickglow/features/background/rain';
+import { AmbientEffects } from '@/components/wickglow/features/background/ambient-effects';
 import { SceneBackground } from '@/components/wickglow/features/background/scene-background';
 import { LevelCard } from '@/components/wickglow/features/progression/level-card';
+import { AccountChip } from '@/components/wickglow/features/account/account-chip';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
 import { StatGrid } from '@/components/wickglow/features/progression/stat-grid';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
 import { WeekChart } from '@/components/wickglow/features/progression/week-chart';
 import { ScenePicker } from '@/components/wickglow/features/settings/scene-picker';
+import { EqualizerIcon } from '@/components/wickglow/shared/equalizer-icon';
+import { MarqueeText } from '@/components/wickglow/shared/marquee-text';
+import { AmbientIcon } from '@/components/wickglow/shared/ambient-icon';
+import { ambientOn } from '@/src/core/ambient';
 import { TimerSettings } from '@/components/wickglow/features/settings/timer-settings';
 import { TaskList } from '@/components/wickglow/features/tasks/task-list';
 import { FocusLine } from '@/components/wickglow/features/tasks/focus-line';
@@ -40,6 +48,7 @@ import {
   GearIcon,
   MixerIcon,
   MusicIcon,
+  PauseIcon,
   ResetIcon,
   SceneIcon,
   SkipIcon,
@@ -85,10 +94,14 @@ const PANEL_TITLE: Record<PanelId, string> = {
 export function DesktopWickglow() {
   const lamp = useWickglow();
   // Actions never change identity, so they are pulled out once (see logic.tsx).
-  const { setMode, toggle, startNext, dismissEnding, reset, skip } = lamp;
+  const { setMode, toggle, startNext, dismissEnding, reset, skip, toggleMusic } = lamp;
   const insets = useSafeAreaInsets();
   const fullscreen = useFullscreen();
   const { width, height } = useWindowDimensions();
+  // How far the on-screen keyboard covers the bottom (a large Android tablet in
+  // landscape gets this layout). While it is up, the open card ends above it
+  // instead of above the dock, so the field being typed in stays visible.
+  const keyboard = useKeyboardInset();
   const [panel, setPanel] = useState<PanelId | null>(null);
   // Zen: while focusing with no panel open, the whole UI fades out after 3.5s
   // without input.
@@ -153,15 +166,23 @@ export function DesktopWickglow() {
   );
   // Dot on the Quests button while any daily quest is unclaimed.
   const questOpen = hasOpenQuests(lamp.day);
+  // Any ambient sound turned up, so playing.
+  const ambientLive = ambientOn(lamp.mix);
   // Music card height: up to 720px, or whatever fits above the dock.
   const musicRoom = height - insets.top - insets.bottom - 104;
   const musicHeight = Math.min(720, Math.max(0, musicRoom));
+  // Bottom edge of the wide cards and the narrow side cards: above the dock, or
+  // just above the keyboard while it is open.
+  const wideBottom = keyboard > 0 ? keyboard + 12 : insets.bottom + 84;
+  const sideBottom = keyboard > 0 ? keyboard + 12 : insets.bottom + 72;
+  // With the keyboard up, a side card must also not run off the top.
+  const sideMaxHeight = keyboard > 0 ? Math.max(0, height - sideBottom - insets.top - 20) : undefined;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.b1 }]} onTouchStart={poke}>
-      {/* Back to front: animated scene, rain, then the UI layers below. */}
+      {/* Back to front: animated scene, ambient effects (rain, embers, etc.), then the UI layers below. */}
       <SceneBackground />
-      <RainOverlay amount={lamp.mix.rain} />
+      <AmbientEffects mix={lamp.mix} />
 
       {/* Top bar: logo on the left; streak, minutes and level pills on the
           right (each opens the Progress card). */}
@@ -229,8 +250,18 @@ export function DesktopWickglow() {
           screen. Full screen only appears where the browser supports it. */}
       <View style={[styles.dock, { paddingBottom: insets.bottom + 14, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
         <View style={styles.dockGroup}>
-          <DockButton label="Music" active={panel === 'music'} dot={lamp.musicPlaying || lamp.activeStreamId != null} onPress={() => togglePanel('music')}><MusicIcon /></DockButton>
-          <DockButton label="Ambient mixer" active={panel === 'mixer'} onPress={() => togglePanel('mixer')}><MixerIcon /></DockButton>
+          <MusicDockButton
+            active={panel === 'music'}
+            onOpen={() => togglePanel('music')}
+            onPause={() => { poke(); toggleMusic(); }}
+          />
+          {/* While any ambient sound is turned up (it plays whenever a slider is
+              above zero, timer or not), the mixer's knobs drift slowly in the
+              accent: quieter than the Music oval, and no dot, which already
+              means other things on the dock. */}
+          <DockButton label={ambientLive ? 'Ambient mixer, sounds on' : 'Ambient mixer'} active={panel === 'mixer'} onPress={() => togglePanel('mixer')}>
+            {ambientLive ? <AmbientIcon accent={panel === 'mixer' ? colors.textInverse : theme.accent} paused={zen} /> : <MixerIcon />}
+          </DockButton>
           <DockButton label="Scenes" active={panel === 'scenes'} onPress={() => togglePanel('scenes')}><SceneIcon /></DockButton>
           <DockButton label="Tasks" active={panel === 'tasks'} onPress={() => togglePanel('tasks')}><TaskIcon /></DockButton>
           <DockButton label="Quests" active={panel === 'quests'} dot={questOpen} onPress={() => togglePanel('quests')}><StarIcon /></DockButton>
@@ -280,11 +311,11 @@ export function DesktopWickglow() {
       {panel === 'progress' || panel === 'quests' || panel === 'tasks' ? (
         <View
           pointerEvents="box-none"
-          style={[styles.wideWrap, styles.progressWrap, { top: insets.top + 20, bottom: insets.bottom + 84 }]}
+          style={[styles.wideWrap, styles.progressWrap, { top: insets.top + 20, bottom: wideBottom }]}
         >
           <ScrollView keyboardShouldPersistTaps="handled" style={[styles.progressScroll, panel === 'quests' && styles.questsScroll, panel === 'tasks' && styles.tasksScroll]}>
             <View style={styles.progressCard}>
-              <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
+              <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} actions={panel === 'progress' ? <AccountChip /> : undefined} />
               {panel === 'progress' ? <ProgressBoard /> : panel === 'quests' ? <QuestsBoard /> : <TaskList />}
             </View>
           </ScrollView>
@@ -294,7 +325,7 @@ export function DesktopWickglow() {
       {/* Narrow side cards: mixer, scenes, timer settings. They anchor left or
           right to sit under the dock button that opened them (PANEL_SIDE). */}
       {panel && panel !== 'music' && panel !== 'progress' && panel !== 'quests' && panel !== 'tasks' ? (
-        <View style={[styles.panel, styles[PANEL_SIDE[panel] === 'right' ? 'panelRight' : 'panelLeft'], { bottom: insets.bottom + 72 }]}>
+        <View style={[styles.panel, styles[PANEL_SIDE[panel] === 'right' ? 'panelRight' : 'panelLeft'], panel === 'scenes' && styles.scenesPanel, { bottom: sideBottom }, sideMaxHeight != null ? { maxHeight: sideMaxHeight } : null]}>
           <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
           <ScrollView style={styles.panelBody} contentContainerStyle={styles.panelContent}>
             {panel === 'mixer' ? <MixerBlock /> : null}
@@ -345,6 +376,81 @@ function ProgressBoard() {
 // Quests card contents: just the daily quest list.
 function QuestsBoard() {
   return <QuestList wide />;
+}
+
+// The round size of a dock button, and the Music button's width while a track
+// plays. Fixed, so the oval does not change size from one title to the next;
+// a title or artist too long to fit scrolls slowly (MarqueeText).
+const DOCK_SIZE = 44;
+const NOW_WIDTH = 200;
+
+/**
+ * The Music dock button. Round with a note when nothing plays (plus a dot when
+ * a streaming link is open: whether its player is playing is not known here).
+ * While a local track plays and the Music card is closed, it widens into an
+ * oval with moving bars, the track title and artist, and a pause button. The
+ * width eases between the two (instant under reduced motion); the buttons to
+ * its right slide along. With the card open it is the round, light "on" button,
+ * since the card already shows the track.
+ */
+function MusicDockButton({ active, onOpen, onPause }: { active: boolean; onOpen: () => void; onPause: () => void }) {
+  const { musicPlaying, trackTitle, trackArtist, activeStreamId, sceneTheme } = useWickglow();
+  const reduced = useReducedMotion();
+  const expanded = musicPlaying && !active;
+  // On the UI thread (Reanimated), so the oval grows smoothly even while the
+  // JS thread is busy.
+  const width = useSharedValue(DOCK_SIZE);
+  const target = expanded ? NOW_WIDTH : DOCK_SIZE;
+
+  useEffect(() => {
+    if (reduced) {
+      cancelAnimation(width);
+      width.set(target);
+      return undefined;
+    }
+    width.set(withTiming(target, { duration: 220, easing: Easing.out(Easing.quad) }));
+    return () => cancelAnimation(width);
+  }, [reduced, target, width]);
+
+  const widthStyle = useAnimatedStyle(() => ({ width: width.get() }));
+
+  if (!expanded) {
+    return (
+      <Reanimated.View style={widthStyle}>
+        <DockButton label="Music" active={active} dot={!musicPlaying && activeStreamId != null} onPress={onOpen}>
+          {musicPlaying ? <EqualizerIcon /> : <MusicIcon />}
+        </DockButton>
+      </Reanimated.View>
+    );
+  }
+
+  return (
+    <Reanimated.View style={[styles.ib, styles.nowPill, widthStyle]}>
+      {/* Laid out at the full NOW_WIDTH (not squeezed by the growing oval), so
+          the text does not reflow while the oval grows; the clip reveals it. */}
+      <View pointerEvents="box-none" style={styles.nowTrack}>
+        <View style={styles.nowRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Music, now playing ${trackTitle}${trackArtist ? ` by ${trackArtist}` : ''}`}
+            onPress={onOpen}
+            style={styles.nowOpen}
+          >
+            <View style={styles.nowBadge}>
+              <EqualizerIcon size={17} color={sceneTheme.accent} />
+            </View>
+            <View style={styles.nowCopy}>
+              <MarqueeText style={styles.nowTitle} lineHeight={17}>{trackTitle}</MarqueeText>
+              {trackArtist ? <MarqueeText style={styles.nowArtist} lineHeight={14}>{trackArtist}</MarqueeText> : null}
+            </View>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Pause music" onPress={onPause} style={styles.nowPause}>
+            <PauseIcon size={14} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
+    </Reanimated.View>
+  );
 }
 
 // A round dock icon. Like the phone's DockItem, it recolors its icon child with
@@ -525,6 +631,74 @@ const styles = StyleSheet.create({
     borderColor: colors.textPrimary,
     borderTopColor: colors.textPrimary,
   },
+  // The Music button widened into an oval: clips its content while it grows.
+  nowPill: {
+    alignItems: 'flex-start',
+    overflow: 'hidden',
+  },
+  // A fixed-width track behind the oval's clip, so its content is laid out at
+  // full size whatever the oval's current width.
+  nowTrack: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: NOW_WIDTH,
+    flexDirection: 'row',
+  },
+  // The oval's content fills the track: bars and text on the left (the text
+  // takes the free space), pause button at the right end.
+  nowRow: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 4,
+    paddingRight: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  nowOpen: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    alignSelf: 'stretch',
+  },
+  nowCopy: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  nowTitle: {
+    color: colors.textPrimary,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+  },
+  nowArtist: {
+    color: colors.textMuted,
+    fontFamily: fonts.body,
+    fontSize: 11,
+  },
+  // The shaded circle behind the moving bars, matching the pause button, so
+  // the oval reads as a circle at each end with the title between them.
+  nowBadge: {
+    width: DOCK_SIZE - 10,
+    height: DOCK_SIZE - 10,
+    borderRadius: (DOCK_SIZE - 10) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  nowPause: {
+    width: DOCK_SIZE - 10,
+    height: DOCK_SIZE - 10,
+    borderRadius: (DOCK_SIZE - 10) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
   dot: {
     position: 'absolute',
     top: 8,
@@ -595,10 +769,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingBottom: 18,
   },
+  // Both columns take the taller one's height, so the Last 7 days card (the
+  // left column's last card, which flexes) ends level with the calendar.
   board: {
     flexDirection: 'row',
     gap: 14,
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
   },
   boardCol: {
     flex: 1,
@@ -630,6 +806,12 @@ const styles = StyleSheet.create({
   },
   panelRight: {
     right: 16,
+  },
+  // The Scenes card keeps one height (still capped by maxHeight on short
+  // windows), so switching its All / Pixel art / Video filter does not move
+  // the card's top edge.
+  scenesPanel: {
+    height: 560,
   },
   panelBody: {
     flexGrow: 0,

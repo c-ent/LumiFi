@@ -1,5 +1,5 @@
 import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Image } from 'expo-image';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLoadingBackground } from '@/components/wickglow/features/background/background-loading';
@@ -19,10 +19,11 @@ import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles
 import { SCENES } from '@/components/wickglow/theme';
 import { formatMegabytes } from '@/src/core/remote-scenes';
 
-// Desktop: choose the background. Three groups: the nine gradient scenes
-// (each with a swatch of its middle color; the same nine themes and colors as
-// the phone/tablet MoodPicker, see components/wickglow/theme.ts), Pixel art
-// (looping pixel-art videos) and Videos (looping video).
+// Desktop: choose the background. "Ambient tint" is a row of round swatches,
+// one per gradient scene (its middle color; the same themes and colors as the
+// phone/tablet MoodPicker, see components/wickglow/theme.ts). "Scenes" is one
+// grid of pixel-art and video tiles, each with a Pixel or Video badge, and
+// All / Pixel art / Video filter pills (the filter is not saved).
 // Exactly one choice across all groups is selected. Phone/tablet use MoodPicker
 // instead, which lists the same nine themes under the same names.
 //
@@ -45,55 +46,81 @@ export function ScenePicker() {
     if (lastTap.current === key) select();
   };
 
+  const [filter, setFilter] = useState<SceneFilter>('all');
+
   const pixels = PIXEL_ART.filter((item) => sceneOffered(item.source));
   const videos = VIDEOS.filter((item) => sceneOffered(item.source));
+  // Only offer the filters that have something behind them.
+  const filters = FILTERS.filter((f) => f.id !== 'pixel' || pixels.length > 0);
+  const showPixels = filter !== 'video';
+  const showVideos = filter !== 'pixel';
 
   return (
     <View>
-      <Text style={styles.kicker}>Scenes</Text>
-      <View style={styles.sceneGrid}>
+      <Text style={styles.kicker}>Ambient tint</Text>
+      <View style={tint.row}>
         {SCENES.map((item) => {
           const selected = item.id === scene && !videoBg && pixelBg === null;
           return (
-            <Pressable accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${item.name} scene`} key={item.id} onPress={() => tap(`scene:${item.id}`, () => setScene(item.id))} style={[styles.sceneBtn, selected && { borderColor: colors.textPrimary }]}>
-              <View style={[styles.swatch, { backgroundColor: item.b2 }]} />
-              <Text style={[styles.sceneName, selected && { color: colors.textPrimary }]}>{item.name}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${item.name} tint`}
+              key={item.id}
+              onPress={() => tap(`scene:${item.id}`, () => setScene(item.id))}
+              style={[tint.ring, selected && tint.ringOn]}
+            >
+              <View style={[tint.dot, { backgroundColor: item.b2 }]} />
             </Pressable>
           );
         })}
       </View>
-      {pixels.length > 0 ? (
-        <>
-          <Text style={styles.kicker}>Pixel art</Text>
-          <View style={styles.sceneGrid}>
-            {pixels.map((item) => {
-              const key = `pixel:${item.id}`;
-              return (
-                <SceneTile
-                  key={item.id}
-                  name={item.name}
-                  kind="pixel art background"
-                  thumb={item.thumb}
-                  source={item.source}
-                  selected={item.id === pixelBg}
-                  loading={loading === key}
-                  onTap={(select) => tap(key, select ? () => setPixelBg(item.id) : () => {})}
-                  onDownloaded={() => afterDownload(key, () => setPixelBg(item.id))}
-                />
-              );
-            })}
-          </View>
-        </>
+
+      <Text style={styles.kicker}>Scenes</Text>
+      {filters.length > 2 ? (
+        <View style={tint.filters} accessibilityRole="tablist">
+          {filters.map((f) => {
+            const on = f.id === filter;
+            return (
+              <Pressable
+                key={f.id}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                onPress={() => setFilter(f.id)}
+                style={[tint.pill, on && tint.pillOn]}
+              >
+                <Text style={[tint.pillText, on && tint.pillTextOn]}>{f.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       ) : null}
-      <Text style={styles.kicker}>Videos</Text>
       <View style={styles.sceneGrid}>
-        {videos.map((item) => {
+        {showPixels ? pixels.map((item) => {
+          const key = `pixel:${item.id}`;
+          return (
+            <SceneTile
+              key={key}
+              name={item.name}
+              kind="pixel art background"
+              badge="Pixel"
+              thumb={item.thumb}
+              source={item.source}
+              selected={item.id === pixelBg}
+              loading={loading === key}
+              onTap={(select) => tap(key, select ? () => setPixelBg(item.id) : () => {})}
+              onDownloaded={() => afterDownload(key, () => setPixelBg(item.id))}
+            />
+          );
+        }) : null}
+        {showVideos ? videos.map((item) => {
           const key = `video:${item.id}`;
           return (
             <SceneTile
-              key={item.id}
+              key={key}
               name={item.name}
               kind="video background"
+              badge="Video"
               thumb={item.thumb}
               source={item.source}
               selected={item.id === videoBg}
@@ -102,11 +129,19 @@ export function ScenePicker() {
               onDownloaded={() => afterDownload(key, () => setVideoBg(item.id))}
             />
           );
-        })}
+        }) : null}
       </View>
     </View>
   );
 }
+
+type SceneFilter = 'all' | 'pixel' | 'video';
+
+const FILTERS: { id: SceneFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'pixel', label: 'Pixel art' },
+  { id: 'video', label: 'Video' },
+];
 
 /**
  * One video or pixel-art tile. A playable scene is selected on tap. A remote
@@ -114,9 +149,10 @@ export function ScenePicker() {
  * (`onTap(false)` records the tap without selecting; `onDownloaded` selects it
  * once it is in place). A failed download shows "Tap to retry".
  */
-function SceneTile({ name, kind, thumb, source, selected, loading, onTap, onDownloaded }: {
+function SceneTile({ name, kind, badge, thumb, source, selected, loading, onTap, onDownloaded }: {
   name: string;
   kind: string;
+  badge: string;
   thumb: number;
   source: SceneSource;
   selected: boolean;
@@ -150,6 +186,10 @@ function SceneTile({ name, kind, thumb, source, selected, loading, onTap, onDown
     <Pressable accessibilityRole="button" accessibilityState={{ selected, busy: status.kind === 'downloading' }} accessibilityLabel={label} onPress={press} style={[styles.sceneBtn, selected && { borderColor: colors.textPrimary }]}>
       <View>
         <Image source={thumb} style={styles.sceneThumb} contentFit="cover" />
+        <View style={tile.kind} pointerEvents="none">
+          {badge === 'Video' ? <View style={tile.play} /> : null}
+          <Text style={tile.badgeText}>{badge}</Text>
+        </View>
         {status.kind === 'missing' ? (
           <View style={tile.badge} pointerEvents="none">
             <DownloadIcon size={12} color={colors.textPrimary} />
@@ -223,5 +263,80 @@ const tile = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: fonts.bodyMedium,
     fontSize: 11,
+  },
+  // "Pixel" or "Video", in the tile's bottom-left corner.
+  kind: {
+    position: 'absolute',
+    left: 6,
+    bottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    ...rounded(radius.sm),
+  },
+  // A small play triangle drawn with borders, before "Video".
+  play: {
+    width: 0,
+    height: 0,
+    borderTopWidth: 4,
+    borderBottomWidth: 4,
+    borderLeftWidth: 6,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: colors.textPrimary,
+  },
+});
+
+// The ambient tint circles and the scene filter pills.
+const tint = StyleSheet.create({
+  // Seven 36px circles with 8px gaps fit on one row of the 390px card.
+  row: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  ring: {
+    width: 36,
+    height: 36,
+    padding: 3,
+    borderWidth: 2,
+    borderColor: colors.border,
+    ...rounded(18),
+  },
+  ringOn: {
+    borderColor: colors.textPrimary,
+  },
+  dot: {
+    flex: 1,
+    ...rounded(15),
+  },
+  filters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgCard,
+    ...rounded(radius.pill),
+  },
+  pillOn: {
+    backgroundColor: colors.textPrimary,
+    borderColor: colors.textPrimary,
+  },
+  pillText: {
+    color: colors.textPrimary,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+  },
+  pillTextOn: {
+    color: colors.textInverse,
   },
 });

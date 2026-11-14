@@ -9,17 +9,21 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest && jest --config jest.web.config.js",
-    "test:web": "jest --config jest.web.config.js"
+    "test:web": "jest --config jest.web.config.js",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-wickglow \"jest --config jest.rules.config.js\"",
+    "deploy:rules": "firebase deploy --only firestore:rules"
   },
   "dependencies": {
     "@expo-google-fonts/figtree": "^0.4.1",
     "@expo-google-fonts/outfit": "^0.4.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/slider": "5.2.1",
+    "@react-native-google-signin/google-signin": "^17.0.0",
     "@shopify/flash-list": "2.3.2",
     "expo": "~58.0.22",
     "expo-asset": "~58.0.19",
     "expo-audio": "~58.0.11",
+    "expo-build-properties": "~58.0.12",
     "expo-constants": "^58.0.14",
     "expo-dev-client": "^58.0.18",
     "expo-document-picker": "~58.0.4",
@@ -33,6 +37,7 @@
     "expo-status-bar": "~58.0.4",
     "expo-system-ui": "~58.0.7",
     "expo-video": "~58.0.13",
+    "firebase": "^13.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
@@ -43,16 +48,17 @@
     "react-native-screens": "~4.30.0",
     "react-native-svg": "15.16.0",
     "react-native-web": "^0.21.4",
-    "react-native-webview": "14.0.1",
     "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@react-native/jest-preset": "^0.88.1",
     "@types/jest": "30.0.0",
     "@types/react": "~19.3.0",
     "deepmerge": "file:vendor/deepmerge",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~58.0.4",
+    "firebase-tools": "^15.36.0",
     "jest": "~30.5.2",
     "jest-expo": "~58.0.13",
     "react-native-svg-transformer": "^1.5.3",
@@ -62,6 +68,10 @@
     "preset": "jest-expo",
     "setupFiles": [
       "<rootDir>/jest.setup.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/firestore-tests/"
     ]
   },
   "private": true,
@@ -71,6 +81,24 @@
     "minimatch@9": "11.0.4",
     "minimatch@10": "11.0.4",
     "glob@13": "14.0.3",
+    "archiver-utils": {
+      "glob": "14.0.3"
+    },
+    "exegesis": {
+      "glob": "14.0.3"
+    },
+    "rimraf": {
+      "glob": "14.0.3"
+    },
+    "firebase-tools": {
+      "glob": "14.0.3"
+    },
+    "re2": "1.27.1",
+    "@grpc/grpc-js": "^1.14.7",
+    "uuid": "^11.1.1",
+    "@google-cloud/pubsub": {
+      "@opentelemetry/core": "2.8.0"
+    },
     "test-exclude@6": "8.0.0",
     "test-exclude@7": {
       "glob": "14.0.3"

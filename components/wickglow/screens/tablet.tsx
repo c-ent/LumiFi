@@ -8,10 +8,11 @@ import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
 import { MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
 import { RoomBackground } from '@/components/wickglow/features/background/room-background';
-import { RainOverlay } from '@/components/wickglow/features/background/rain';
+import { AmbientEffects } from '@/components/wickglow/features/background/ambient-effects';
 import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
+import { AccountRow } from '@/components/wickglow/features/account/account-row';
 import { StatGrid } from '@/components/wickglow/features/progression/stat-grid';
 import { WeekChart } from '@/components/wickglow/features/progression/week-chart';
 import { TimerSettings } from '@/components/wickglow/features/settings/timer-settings';
@@ -57,7 +58,7 @@ export function TabletWickglow() {
   return (
     <View style={[styles.root, { backgroundColor: mood.bgBase }]} onTouchStart={poke}>
       <RoomBackground />
-      <RainOverlay amount={lamp.mix.rain} />
+      <AmbientEffects mix={lamp.mix} />
 
       {/* Two columns side by side (flexDirection: 'row'). */}
       <View style={[styles.split, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -152,6 +153,7 @@ export function TabletWickglow() {
                 <StatGrid />
                 <WeekChart mobile />
                 <MonthCalendar mobile />
+                <AccountRow />
                 <Text style={styles.kicker}>Timer settings</Text>
                 <TimerSettings mobile />
               </>

@@ -1,6 +1,6 @@
 import { recentDayMinutes } from '@/src/core/history';
 import { colors, fade, fonts } from '@/src/theme/tokens';
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useWickglow } from '@/components/wickglow/logic';
 import { panelStyles as styles } from '@/components/wickglow/shared/panel-styles';
@@ -15,6 +15,11 @@ import { progressWide as wide } from '@/components/wickglow/features/progression
 export function WeekChart({ mobile = false, wide: desk = false }: { mobile?: boolean; wide?: boolean }) {
   const { days, now } = useWickglow();
   const tone = useTone(mobile);
+  // Desktop: the chart grows to fill its card (which fills the rest of the
+  // Progress column), so the tallest bar uses the measured height minus the
+  // count and day label above and below it (110 - 42 = 68 at the minimum).
+  const [deskHeight, setDeskHeight] = useState(110);
+  const deskBarMax = Math.max(68, deskHeight - 42);
   // Oldest -> newest, including days with 0 minutes, so there are always 7 bars.
   const history = recentDayMinutes(days, now, 7);
   // Scale to at least 120 min so one short day doesn't fill the whole chart.
@@ -23,12 +28,18 @@ export function WeekChart({ mobile = false, wide: desk = false }: { mobile?: boo
     const label = new Date(entry.at).toLocaleDateString('en', { weekday: 'short' });
     const today = index === history.length - 1;
     // Minimum 4px so an empty day still shows as a stub, not nothing.
-    const height = Math.max(4, (entry.minutes / max) * (desk ? 68 : 86));
+    const height = Math.max(4, (entry.minutes / max) * (desk ? deskBarMax : 86));
     return { entry, label, today, height };
   });
 
   const chart = (
-    <View style={desk ? deskStyles.week : styles.week}>
+    <View
+      style={desk ? deskStyles.week : styles.week}
+      onLayout={desk ? (e) => {
+        const h = Math.round(e.nativeEvent.layout.height);
+        if (h !== deskHeight) setDeskHeight(h);
+      } : undefined}
+    >
       {columns.map(({ entry, label, today, height }) => {
         const fill = desk
           ? (today ? tone.accent : entry.minutes > 0 ? fade(tone.accent, 0.45) : 'rgba(255, 255, 255, 0.14)')
@@ -55,7 +66,7 @@ export function WeekChart({ mobile = false, wide: desk = false }: { mobile?: boo
   }
 
   return (
-    <View style={wide.card}>
+    <View style={[wide.card, deskStyles.card]}>
       <Text style={[styles.kicker, wide.label]}>Last 7 days</Text>
       {chart}
     </View>
@@ -63,8 +74,13 @@ export function WeekChart({ mobile = false, wide: desk = false }: { mobile?: boo
 }
 
 const deskStyles = StyleSheet.create({
+  // Fills the rest of the Progress board's left column.
+  card: {
+    flex: 1,
+  },
   week: {
-    height: 110,
+    flex: 1,
+    minHeight: 110,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 7,

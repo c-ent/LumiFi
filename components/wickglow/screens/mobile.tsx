@@ -18,9 +18,10 @@ import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
 import { hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
 import { RoomBackground } from '@/components/wickglow/features/background/room-background';
-import { RainOverlay } from '@/components/wickglow/features/background/rain';
+import { AmbientEffects } from '@/components/wickglow/features/background/ambient-effects';
 import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { LevelCard } from '@/components/wickglow/features/progression/level-card';
+import { AccountRow } from '@/components/wickglow/features/account/account-row';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
 import { StatGrid } from '@/components/wickglow/features/progression/stat-grid';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
@@ -159,7 +160,7 @@ export function MobileWickglow() {
   return (
     // onTouchStart fires for every touch anywhere, which is how zen mode notices activity.
     <View style={[styles.root, { backgroundColor: mood.bgBase }]} onTouchStart={poke}>
-      <RainOverlay amount={lamp.mix.rain} />
+      <AmbientEffects mix={lamp.mix} />
       <RoomBackground video={false} />
 
       {/* Top bar: level ring and the streak / minutes-today pills, all opening
@@ -343,6 +344,7 @@ function StatsTab() {
       <SegmentTabs value={view} options={STATS_VIEWS} labels={STATS_LABEL} onChange={setView} mobile first />
       {view === 'stats' ? (
         <>
+          <AccountRow mobile />
           <LevelCard mobile />
           <StatGrid />
           <WeekChart mobile />

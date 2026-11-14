@@ -294,3 +294,57 @@ describe('saved day history', () => {
     expect(state.tasks.map((item) => item.pomos)).toEqual([0, 2]);
   });
 });
+
+describe('session log and sync record', () => {
+  const now = new Date(2026, 10, 13, 18).getTime();
+
+  it('turns an old save\'s daily totals into day records once', () => {
+    const raw = JSON.stringify({
+      xp: 100,
+      days: {
+        '2026-11-12': { d: '2026-11-12', sessions: 2, minutes: 50, tasks: 1, claimed: ['q3'] },
+        '2026-11-11': { d: '2026-11-11', sessions: 0, minutes: 0, tasks: 0, claimed: [] },
+      },
+    });
+    const state = parseSavedState(raw, now);
+    expect(state.log).toEqual({ sessions: [], legacy: [{ d: '2026-11-12', minutes: 50, sessions: 2, tasks: 1 }] });
+    expect(state.sync).toBeNull();
+  });
+
+  it('keeps a saved log and drops bad records', () => {
+    const end = now - 3600000;
+    const raw = JSON.stringify({
+      log: {
+        sessions: [{ id: 'x', end, minutes: 25, task: 7 }, { end, minutes: 25 }, { end, minutes: 999 }, 'junk'],
+        legacy: [{ d: '2026-11-1', minutes: 5000, sessions: 1, tasks: 0 }, { d: 'nope', minutes: 1, sessions: 0, tasks: 0 }],
+      },
+      sync: { uid: 'u1', epoch: 2, since: 500, sessions: [`${end}-25`, 4], days: [], tasks: { 7: { stamp: 1, sig: 's' }, 8: { stamp: 'x' } }, tombs: { 9: 100, 10: 'x' } },
+    });
+    const state = parseSavedState(raw, now);
+    expect(state.log.sessions).toEqual([{ id: `${end}-25`, end, minutes: 25, task: 7 }]);
+    expect(state.log.legacy).toEqual([{ d: '2026-11-1', minutes: 1440, sessions: 1, tasks: 0 }]);
+    expect(state.sync).toEqual({ uid: 'u1', epoch: 2, since: 500, sessions: [`${end}-25`], days: [], tasks: { 7: { stamp: 1, sig: 's' } }, tombs: { 9: 100 } });
+  });
+
+  it('keeps deleted finished tasks and unsent edit times, and drops bad ones', () => {
+    const raw = JSON.stringify({
+      log: { sessions: [], legacy: [], finished: [{ task: 3, d: '2026-11-3' }, { task: 3, d: '2026-11-4' }, { task: 'x', d: '2026-11-3' }, { task: 4, d: 'soon' }] },
+      sync: { uid: 'u1', epoch: 0, since: 0, sessions: [], days: [], tasks: {}, tombs: {}, finished: ['3', 5], edits: { 1: 1000, 2: -1, 3: 'x' } },
+    });
+    const state = parseSavedState(raw, now);
+    expect(state.log.finished).toEqual([{ task: 3, d: '2026-11-3' }]);
+    expect(state.sync?.finished).toEqual(['3']);
+    expect(state.sync?.edits).toEqual({ 1: 1000 });
+  });
+
+  it('drops a sync record from the first accounts build, so the device links again', () => {
+    const raw = JSON.stringify({ sync: { uid: 'u1', sessions: [], days: [], tasks: {} } });
+    expect(parseSavedState(raw, now).sync).toBeNull();
+  });
+
+  it('starts a fresh install with an empty log and no account link', () => {
+    const state = parseSavedState(null, now);
+    expect(state.log).toEqual({ sessions: [], legacy: [] });
+    expect(state.sync).toBeNull();
+  });
+});

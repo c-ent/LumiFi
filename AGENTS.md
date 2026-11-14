@@ -12,6 +12,7 @@ Status: Expo SDK 58 app. Commands below match this repo.
 - Typecheck: `npx tsc --noEmit`
 - Test one file: `npx jest path/to/file.test.ts`
 - Lint one file: `npx eslint path/to/file.tsx`
+- Firestore rules tests (starts the emulator, needs Java): `npm run test:rules`. Deploy the rules (owner, needs `firebase login`): `npm run deploy:rules`
 - After adding or upgrading a package: `npx expo-doctor@latest`
 
 ## Stack
@@ -25,8 +26,8 @@ Status: Expo SDK 58 app. Commands below match this repo.
 - Navigation: import from `expo-router`, not `@react-navigation/*`, which fails at bundle time since SDK 56.
 - Packages: run `npx expo install`, not `npm install`, for Expo packages so versions match the SDK.
 - Native folders: edit `app.json` or `app.config.ts`, not `android/` or `ios/`, which prebuild generates.
-- XP, levels, streaks, quests, pet drops: write them as pure functions in `src/core` that take `now` (and a random source where chance is involved), not as logic in components. The server validates rewards, so never send an XP total from the client.
-- Env: only `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` go in the client, never the service role key.
+- XP, levels, streaks, quests, pet drops: write them as pure functions in `src/core` that take `now` (and a random source where chance is involved), not as logic in components. Firestore security rules check rewards (Spark plan, no Cloud Functions), so a client write may only make changes the rules can bound.
+- Env: only the six `EXPO_PUBLIC_FIREBASE_*` web config values (read in `src/data/firebase-config.ts`) and `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (the public OAuth web client id for Google sign-in on Android, read in `src/data/google-sign-in.ts`) go in the client. Never a service account key or Admin SDK credential.
 
 ## Decisions
 

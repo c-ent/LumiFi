@@ -76,6 +76,16 @@ export const breakWax = {
   melt: '#BFE3DA',
 } as const;
 
+/** Colors of the ambient scene effects (ambient-effects.tsx). Art for the scene, not accents. */
+export const ambientFx = {
+  embers: ['#FFB36B', '#FF8A3D', '#FFD08A'],
+  fireGlow: '#FF7A2E',
+  fireflyHalo: 'rgba(220, 240, 140, 0.18)',
+  fireflyCore: 'rgba(235, 248, 170, 0.95)',
+  tideMain: '#9FD8E8',
+  tideLow: '#C8ECF2',
+} as const;
+
 export function rounded(size: number) {
   return { borderRadius: size, borderCurve: 'continuous' as const };
 }

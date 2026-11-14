@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform, TextInput } from 'react-native';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
 
 // The keyboard height reported by react-native-keyboard-controller, made safe
@@ -47,9 +47,20 @@ export function useKeyboardInset() {
     // covered the field.
     const show = KeyboardEvents.addListener('keyboardWillShow', (event) => setInset(keyboardCover(event.height)));
     const hide = KeyboardEvents.addListener('keyboardWillHide', () => setInset(0));
+    // Backups for a missed "will hide". Android can drop it when another
+    // screen takes over while the keyboard is up (the Google account picker)
+    // or when the focused field is removed, which left cards lifted above a
+    // keyboard that was gone. "Did hide" catches the second case; for the
+    // first, coming back to the app with no field focused means no keyboard.
+    const hidden = KeyboardEvents.addListener('keyboardDidHide', () => setInset(0));
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && TextInput.State.currentlyFocusedInput() == null) setInset(0);
+    });
     return () => {
       show.remove();
       hide.remove();
+      hidden.remove();
+      appState.remove();
     };
   }, []);
 

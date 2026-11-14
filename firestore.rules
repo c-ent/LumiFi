@@ -1,0 +1,164 @@
+rules_version = '2';
+
+// Wickglow: accounts and saving. Everything lives in users/{uid}/records, and
+// a user reads and writes only their own records. Anything not matched below
+// is denied.
+//
+// One collection, so a device's "anything new since my last sync?" is one
+// query (Firestore charges at least one read per query). Every record carries
+// `at`, the server's write time, which the rules require to be exactly the
+// time of the write; a device asks only for records with `at` at or after its
+// last sync. Every record but the marker also carries `epoch`, the reset it
+// was written under, and must match the marker's (0 before the first reset).
+// Resetting is one write, raising the marker: records from an older reset
+// are then ignored by every device, refused if written again, and cleared.
+// Record ids say what a record is:
+//   s_{end}-{minutes}  a finished focus session        create-only
+//   d_{calendarKey}    a pre-sync day total            create-only
+//   t_{taskId}         a task, or its tombstone         a tombstone cannot be edited back
+//   reset              the account's reset count       may only go up
+//
+// There are no Cloud Functions on the Spark plan, so these rules are the only
+// server check on rewards. XP, streak and quests are never stored: the app
+// works them out from the session and day records (src/core/progress-log.ts).
+// The rules limit what one write can add (not the total: a modified client
+// could still write many sessions, so XP is not fit for comparing users,
+// which nothing does):
+// - a session is 1 to 180 minutes, ending no later than now (plus 5 minutes
+//   for clock drift): at most 360 XP plus the daily quests;
+// - a day record is at most 1440 minutes, 144 sessions and 500 tasks;
+// - a task write can finish or reopen one task, or give one deleted task the
+//   day it was finished (once), which moves the daily task count by one: at
+//   most the 30 XP task quest.
+// Deleting a record is allowed, since it can only lower progress; the app does
+// it to clear records from before a reset, and tombstones older than 30 days.
+// The reset marker is the exception: it cannot be deleted, so its count only
+// goes up.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function notFuture(ms) {
+      return ms <= request.time.toMillis() + 300000;
+    }
+
+    function isCount(value, max) {
+      return value is int && value >= 0 && value <= max;
+    }
+
+    function isShortStringOrNull(value) {
+      return value == null || (value is string && value.size() <= 10);
+    }
+
+    function stamped() {
+      return request.resource.data.at == request.time;
+    }
+
+    function hasExactly(fields) {
+      return request.resource.data.keys().hasOnly(fields) && request.resource.data.keys().hasAll(fields);
+    }
+
+    // The account's reset count: the marker's, or 0 before the first reset.
+    // Reading it costs one document read per write (Firestore counts the same
+    // document once per request).
+    function currentEpoch(uid) {
+      let marker = /databases/$(database)/documents/users/$(uid)/records/reset;
+      return exists(marker) ? get(marker).data.epoch : 0;
+    }
+
+    // Written under the current reset. A device that has not seen a reset
+    // yet cannot put the old progress back.
+    function inEpoch(uid) {
+      return request.resource.data.epoch is int && request.resource.data.epoch == currentEpoch(uid);
+    }
+
+    // A record left from before a reset. Every device ignores it, so it may be
+    // written over as if it were new.
+    function fromOldEpoch(uid) {
+      return resource.data.get('epoch', 0) != currentEpoch(uid);
+    }
+
+    function isSession(id) {
+      let data = request.resource.data;
+      return id.matches('^s_[0-9]{1,16}-[0-9]{1,3}$')
+        && hasExactly(['kind', 'end', 'minutes', 'task', 'epoch', 'at'])
+        && data.kind == 's'
+        && data.end is int && data.end > 0 && notFuture(data.end)
+        && data.minutes is int && data.minutes >= 1 && data.minutes <= 180
+        && (data.task == null || data.task is int)
+        && id == 's_' + string(data.end) + '-' + string(data.minutes);
+    }
+
+    function isDay(id) {
+      let data = request.resource.data;
+      return id.matches('^d_[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$')
+        && hasExactly(['kind', 'minutes', 'sessions', 'tasks', 'epoch', 'at'])
+        && data.kind == 'd'
+        && isCount(data.minutes, 1440)
+        && isCount(data.sessions, 144)
+        && isCount(data.tasks, 500);
+    }
+
+    function isLiveTask() {
+      let data = request.resource.data;
+      return hasExactly(['kind', 'text', 'done', 'doneOn', 'parentId', 'date', 'updatedAt', 'deleted', 'epoch', 'at'])
+        && data.deleted == false
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 200
+        && data.done is bool
+        && isShortStringOrNull(data.doneOn)
+        && (data.parentId == null || data.parentId is int)
+        && isShortStringOrNull(data.date);
+    }
+
+    // A tombstone may carry the day its task was finished (`doneOn`), so a
+    // deleted finished task keeps its credit.
+    function isTombstone() {
+      let data = request.resource.data;
+      return data.deleted == true
+        && (hasExactly(['kind', 'updatedAt', 'deleted', 'epoch', 'at'])
+          || (hasExactly(['kind', 'updatedAt', 'deleted', 'doneOn', 'epoch', 'at'])
+            && data.doneOn is string && data.doneOn.matches('^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$')));
+    }
+
+    function isTask(id) {
+      let data = request.resource.data;
+      return id.matches('^t_[0-9]{1,16}$')
+        && data.kind == 't'
+        && data.updatedAt is int && notFuture(data.updatedAt)
+        && (isLiveTask() || isTombstone());
+    }
+
+    function isReset(id) {
+      let data = request.resource.data;
+      return id == 'reset'
+        && hasExactly(['kind', 'epoch', 'at'])
+        && data.kind == 'r'
+        && data.epoch is int && data.epoch >= 1;
+    }
+
+    match /users/{uid}/records/{id} {
+      // The reset marker is never deleted: with it gone the count would read
+      // 0 again and records from before the reset would count once more.
+      allow read: if isOwner(uid);
+      allow delete: if isOwner(uid) && id != 'reset';
+      allow create: if isOwner(uid) && stamped()
+        && (((isSession(id) || isDay(id) || isTask(id)) && inEpoch(uid)) || isReset(id));
+      // Sessions and day records never change. A deleted task stays deleted;
+      // its tombstone may gain the day it was finished once, never lose it.
+      // A task edit older than the stored one is refused, so the latest edit
+      // wins (a delete always does). The reset count only goes up. A record
+      // from before the last reset counts as gone, so it may be written over.
+      allow update: if isOwner(uid) && stamped()
+        && (((isSession(id) || isDay(id) || isTask(id)) && inEpoch(uid) && fromOldEpoch(uid))
+          || (isTask(id) && inEpoch(uid) && resource.data.deleted == false
+            && (isTombstone() || request.resource.data.updatedAt >= resource.data.updatedAt))
+          || (isTask(id) && inEpoch(uid) && resource.data.deleted == true && isTombstone()
+            && resource.data.get('doneOn', null) == null && request.resource.data.get('doneOn', null) != null)
+          || (isReset(id) && request.resource.data.epoch > resource.data.epoch));
+    }
+  }
+}

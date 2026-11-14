@@ -13,6 +13,7 @@ function progressAt(now: number): ProgressState {
     tasks: [],
     activeId: null,
     cycle: 0,
+    log: { sessions: [], legacy: [] },
   };
 }
 

@@ -787,7 +787,7 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
       <MusicPlayerContext.Provider value={music.player}>
         <ClockProvider session={saved.session} onReachEnd={onReachEnd}>
           {/* The account syncs the same store (domain/account-sync.ts). */}
-          <AccountProvider store={store}>
+          <AccountProvider store={store} notify={showToast}>
             {now == null ? <View style={{ flex: 1, backgroundColor: colors.bgBase }} /> : children}
             <KeepProgressCard />
           </AccountProvider>

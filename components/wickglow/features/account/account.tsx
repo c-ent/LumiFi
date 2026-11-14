@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Linking } from 'react-native';
 import {
   accountsAvailable,
@@ -62,7 +62,21 @@ export function deletionMailto(user: AccountUser): string {
   return `mailto:${DELETION_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-export function AccountProvider({ store, children }: { store: SyncStore; children: React.ReactNode }) {
+/** The short messages shown after a sign-in the user started (not on a restored session). */
+export const SIGNED_IN_MESSAGE = 'Signed in. Your progress saves to your account';
+export const SIGNED_UP_MESSAGE = 'Account created. Check your email to confirm it';
+
+export function AccountProvider({ store, notify, children }: {
+  store: SyncStore;
+  /** Shows a short message (the app toast). */
+  notify: (message: string) => void;
+  children: React.ReactNode;
+}) {
+  // Latest `notify`, so the memoised actions below never call a stale one.
+  const notifyRef = useRef(notify);
+  useEffect(() => {
+    notifyRef.current = notify;
+  });
   const [available] = useState(accountsAvailable);
   const [google] = useState(() => available && googleSignInAvailable());
   const [user, setUser] = useState<AccountUser | null | undefined>(available ? undefined : null);
@@ -110,14 +124,23 @@ export function AccountProvider({ store, children }: { store: SyncStore; childre
     google,
     user,
     sync: status,
-    signIn: signInWithEmail,
+    signIn: async (email, password) => {
+      const result = await signInWithEmail(email, password);
+      if (result.ok) notifyRef.current(SIGNED_IN_MESSAGE);
+      return result;
+    },
     signUp: async (email, password, name) => {
       const result = await createAccount(email, password, name);
       // The name is set after the sign-in event fired, so re-read the user.
       if (result.ok && name?.trim()) void refreshAccount().then((fresh) => { if (fresh) setUser(fresh); });
+      if (result.ok) notifyRef.current(SIGNED_UP_MESSAGE);
       return result;
     },
-    signInGoogle: signInWithGoogle,
+    signInGoogle: async () => {
+      const result = await signInWithGoogle();
+      if (result.ok) notifyRef.current(SIGNED_IN_MESSAGE);
+      return result;
+    },
     resetPassword: sendPasswordReset,
     resend: resendVerification,
     signOut: signOutAccount,

@@ -259,11 +259,17 @@ describe('tasks', () => {
     expect(result.log.finished).toBeUndefined();
     // The account is told the same: only a finish newer than this copy counts.
     expect(result.push.creditAfter).toEqual({ 1: 200 });
-    // With a finished copy of ours still unconfirmed, the stored copy may be ours: never.
-    const pending = { ...meta, tasks: { 1: { stamp: 200, sig: '', sentDone: true as const } } };
-    const unsure = reconcile({ log: emptyLog(), tasks: [] }, pending, remote({ tasks: [done] }), NOW, false);
+    // A finish we sent at 300, unconfirmed, then undid: that copy there is ours
+    // and stays undone, but a newer finish from another device still counts.
+    const pending = { ...meta, tasks: { 1: { stamp: 200, sig: '', sentDoneAt: 300 } } };
+    const ours = remoteTask(task(1, 'essay', { done: true, doneOn: '2026-11-3' }), 300);
+    const unsure = reconcile({ log: emptyLog(), tasks: [] }, pending, remote({ tasks: [ours] }), NOW, false);
     expect(unsure.push.tasks).toEqual([tomb(1, NOW)]);
-    expect(unsure.push.creditAfter).toBeUndefined();
+    expect(unsure.push.creditAfter).toEqual({ 1: 300 });
+    const newer = remoteTask(task(1, 'essay', { done: true, doneOn: '2026-11-4' }), 400);
+    const other = reconcile({ log: emptyLog(), tasks: [] }, pending, remote({ tasks: [newer] }), NOW, false);
+    expect(other.push.tasks).toEqual([tomb(1, NOW, '2026-11-4')]);
+    expect(other.log.finished).toEqual([{ task: 1, d: '2026-11-4' }]);
   });
 
   it('keeps another device\'s finish when this device deletes an open task after an unconfirmed title edit', () => {
@@ -281,9 +287,37 @@ describe('tasks', () => {
     const unseen = reconcile({ log: emptyLog(), tasks: [] }, renamed.meta, emptyRemote(), NOW + 1000, false);
     expect(unseen.push.tasks).toEqual([tomb(1, NOW + 1000)]);
     expect(unseen.push.creditAfter).toEqual({ 1: 100 });
-    // A finish sent from here and not yet confirmed is remembered as such.
+    // A finish sent from here and not yet confirmed is remembered with its time.
     const finishedHere = reconcile({ log: emptyLog(), tasks: [task(1, 'essay', { done: true, doneOn: '2026-11-3' })] }, meta, emptyRemote(), NOW, false);
-    expect(finishedHere.meta.tasks['1']).toEqual({ stamp: 100, sig: '', sentDone: true });
+    expect(finishedHere.meta.tasks['1']).toEqual({ stamp: 100, sig: '', sentDoneAt: NOW });
+  });
+
+  it('keeps an undo when an older matching copy is confirmed before the newer edit it undoes', () => {
+    const meta = seen(emptyMeta('u1'), [remoteTask(task(1, 'A'), 100)]);
+    // Edited to B (sent, held), then undone to A before B is confirmed.
+    const toB = reconcile({ log: emptyLog(), tasks: [task(1, 'B')] }, { ...meta, edits: { 1: NOW } }, emptyRemote(), NOW, false);
+    const undoMeta = { ...toB.meta, edits: { 1: NOW + 1000 } };
+    // The old A copy (written at 100) comes back in a read: it does not settle the undo.
+    const oldA = reconcile({ log: emptyLog(), tasks: [task(1, 'A')] }, undoMeta, remote({ tasks: [remoteTask(task(1, 'A'), 100)] }), NOW + 2000, false);
+    expect(oldA.tasks[0].text).toBe('A');
+    expect(oldA.push.tasks).toEqual([remoteTask(task(1, 'A'), NOW + 1000)]);
+    expect(oldA.meta.edits).toEqual({ 1: NOW + 1000 });
+    // Then B is confirmed: the undo is newer, so A stays and goes up again.
+    const thenB = reconcile({ log: emptyLog(), tasks: [task(1, 'A')] }, oldA.meta, remote({ tasks: [remoteTask(task(1, 'B'), NOW)] }), NOW + 3000, false);
+    expect(thenB.tasks[0].text).toBe('A');
+    expect(thenB.push.tasks).toEqual([remoteTask(task(1, 'A'), NOW + 1000)]);
+    // And the undo's own copy settles it.
+    const settled = reconcile({ log: emptyLog(), tasks: [task(1, 'A')] }, thenB.meta, remote({ tasks: [remoteTask(task(1, 'A'), NOW + 1000)] }), NOW + 4000, false);
+    expect(settled.push.tasks).toEqual([]);
+    expect(settled.meta.edits).toBeUndefined();
+  });
+
+  it('times a tombstone from when the account received it, not when the delete was made', () => {
+    // A delete made 40 days ago offline, received by the account just now.
+    const late = { ...tomb(1, NOW - 40 * 24 * 3600000), writtenAt: NOW - 1000 };
+    const result = reconcile({ log: emptyLog(), tasks: [] }, emptyMeta('u1'), remote({ tasks: [late] }), NOW, false);
+    expect(result.push.purge).toEqual([]);
+    expect(result.meta.tombs).toEqual({ 1: NOW - 1000 });
   });
 
   it('removes a tombstone from the account after 30 days', () => {

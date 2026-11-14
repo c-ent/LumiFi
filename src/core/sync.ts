@@ -47,6 +47,12 @@ export interface RemoteTask {
   /** When this copy was written, epoch ms (the writing device's clock). */
   updatedAt: number;
   deleted: boolean;
+  /**
+   * When the account received it (server time), on a copy read from the
+   * account. A tombstone's 30 days run from here, so a delete sent long after
+   * it was made is still kept long enough for other devices to see it.
+   */
+  writtenAt?: number;
 }
 
 export interface RemoteProgress {
@@ -72,8 +78,9 @@ export interface SyncMeta {
   days: string[];
   /**
    * Each live task as last seen in the account: when it was written and its
-   * synced content. `sentDone`: a copy this device sent and the account has not
-   * confirmed was finished, so a finished copy there may be our own.
+   * synced content. `sentDoneAt`: the time of the newest finished copy this
+   * device sent and the account has not confirmed, so a finished copy there
+   * from that time is our own, and only a newer one is another device's.
    */
   tasks: Record<string, KnownTask>;
   /** Tombstones seen, by task id, with their time, so old ones can be removed. */
@@ -97,7 +104,7 @@ export interface SyncMeta {
 export interface KnownTask {
   stamp: number;
   sig: string;
-  sentDone?: true;
+  sentDoneAt?: number;
 }
 
 export interface SyncPush {
@@ -107,10 +114,11 @@ export interface SyncPush {
   /** Task ids whose tombstones are older than 30 days and can be deleted. */
   purge: number[];
   /**
-   * For a tombstone sent without credit, by task id: the `updatedAt` of the
-   * last copy this device saw. A finish stored in the account counts only if
-   * it is newer (another device's, unseen here); one this device saw and then
-   * undid stays undone. Missing: never take the stored finish.
+   * For a tombstone sent without credit, by task id: the newest of the last
+   * copy this device saw and any finish it sent itself. A finish stored in the
+   * account counts only if it is newer (another device's, unseen here); one
+   * this device saw or sent and then undid stays undone. Missing: never take
+   * the stored finish.
    */
   creditAfter?: Record<string, number>;
 }
@@ -132,13 +140,14 @@ const UNCONFIRMED = { stamp: -1, sig: '' } as const;
  * A known task with an edit sent and not confirmed yet. Its sig matches
  * nothing, so it stays edited here until a confirmed read settles it: undoing
  * back to the last confirmed text before then is still a local edit, and the
- * confirmation of the sent copy cannot replace it. It also remembers whether
- * any copy sent since was finished (`sentDone`), so a title edit alone does not
- * hide another device's finish from a later delete.
+ * confirmation of the sent copy cannot replace it. It also remembers the time
+ * of the newest finished copy sent since (`sentDoneAt`, the time it was sent
+ * with), so a later delete can tell our own finish from another device's.
  */
-function sent(known: KnownTask | undefined, mine: Task): KnownTask {
+function sent(known: KnownTask | undefined, mine: Task, at: number): KnownTask {
   const base = known ?? UNCONFIRMED;
-  return { stamp: base.stamp, sig: '', ...(known?.sentDone || mine.done ? { sentDone: true } : {}) };
+  const doneAt = mine.done ? Math.max(known?.sentDoneAt ?? at, at) : known?.sentDoneAt;
+  return { stamp: base.stamp, sig: '', ...(doneAt != null ? { sentDoneAt: doneAt } : {}) };
 }
 
 export function emptyMeta(uid: string, epoch = 0, since = 0): SyncMeta {
@@ -258,9 +267,10 @@ export function reconcile(
   const tombs: SyncMeta['tombs'] = full ? {} : { ...meta.tombs };
   for (const task of remote.tasks) {
     if (!task.deleted) continue;
-    // A tombstone with credit is kept for good, so it is not timed out.
+    // A tombstone with credit is kept for good, so it is not timed out. One
+    // without is timed from when the account received it.
     if (task.doneOn) delete tombs[String(task.id)];
-    else tombs[String(task.id)] = task.updatedAt;
+    else tombs[String(task.id)] = task.writtenAt || task.updatedAt;
   }
   // When each edit was made, kept until the account confirms it or another
   // copy wins. Never later than now: the rules refuse a time in the future.
@@ -285,14 +295,18 @@ export function reconcile(
     }
     if (theirs) {
       const remoteEdited = !known || theirs.updatedAt > known.stamp;
-      if (edited && taskSig(mine) !== taskSig(theirs) && (!remoteEdited || editTime(id) >= theirs.updatedAt)) {
+      // A copy there that matches this one but is older than the edit waiting
+      // here (an undo back to it) does not settle the edit: the edit still has
+      // to reach the account, or a newer copy sent before it would win.
+      const olderMatch = edits[id] != null && theirs.updatedAt < editTime(id);
+      if (edited && (taskSig(mine) !== taskSig(theirs) || olderMatch) && (!remoteEdited || editTime(id) >= theirs.updatedAt)) {
         // Edited here, and this edit is the latest one. Seen once confirmed.
         push.tasks.push(toRemote(mine, editTime(id)));
         keepEdit(id);
         kept.set(id, mine);
         // As with a new task: remembered as sent, so a delete before the
         // account confirms this edit still sends a tombstone.
-        nextMeta[id] = sent(known, mine);
+        nextMeta[id] = sent(known, mine, editTime(id));
       } else {
         kept.set(id, fromRemote(theirs, mine));
         nextMeta[id] = { stamp: theirs.updatedAt, sig: taskSig(theirs) };
@@ -308,7 +322,7 @@ export function reconcile(
     kept.set(id, mine);
     // A task new here is remembered as sent, so deleting it before the account
     // confirms it still sends a tombstone, and the confirmation cannot bring it back.
-    nextMeta[id] = edited ? sent(known, mine) : known;
+    nextMeta[id] = edited ? sent(known, mine, editTime(id)) : known;
   }
 
   // Deleted here since the last sync: the account gets a tombstone (with the
@@ -323,16 +337,16 @@ export function reconcile(
     // The credit this device holds, else a finish from another device that
     // the account's copy shows: the delete wins, the finish keeps its day. A
     // finish this device already saw does not count: the task was reopened
-    // here before it was deleted. If a finished copy we sent is still
-    // unconfirmed, a finished copy there may be our own, so it never counts;
-    // an unconfirmed edit that was not a finish (a title, say) does not block it.
-    const creditAfter = known.sentDone ? null : known.stamp;
-    const remoteCredit = theirs && creditAfter != null && theirs.updatedAt > creditAfter
+    // here before it was deleted. A finish this device sent and has not seen
+    // confirmed is excluded by its time, so a newer finish from another device
+    // still counts; an unconfirmed title edit does not block anything.
+    const creditAfter = Math.max(known.stamp, known.sentDoneAt ?? known.stamp);
+    const remoteCredit = theirs && theirs.updatedAt > creditAfter
       && theirs.parentId == null && theirs.done && theirs.doneOn ? theirs.doneOn : null;
     const credit = finished.get(id)?.d ?? remoteCredit;
     if (credit && !finished.has(id)) finished.set(id, { task: Number(id), d: credit });
     push.tasks.push(tombstone(Number(id), editTime(id), credit));
-    if (!credit && creditAfter != null) (push.creditAfter ??= {})[id] = creditAfter;
+    if (!credit) (push.creditAfter ??= {})[id] = creditAfter;
     tombstoned.add(id);
     nextMeta[id] = known;
     keepEdit(id);

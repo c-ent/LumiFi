@@ -136,11 +136,10 @@ None right now.
 
 ## Known issues
 
-- `npm audit` reports 4 high findings in `@grpc/grpc-js`, which Firebase installs. It belongs to Firestore's Node build, which the app does not bundle. Re-check on the next Firebase update.
+- `npm audit` reports 0 vulnerabilities (2026-11-14), through `overrides` in `package.json` for transitive copies in dev-only `firebase-tools` (details in progress.md). Re-check them when `firebase-tools` resolves them itself.
 - `npx expo-doctor` fails one check because 13 Expo packages are behind on minor updates. This was already the case before Firebase.
 - A device that comes back after more than 30 days (by its own record of its last confirmed read) reads the whole account once (about 1,500 reads after a year), so it does not miss a delete whose tombstone was cleared. A device opened regularly keeps reading only what is new, even if nothing was written for a month.
 - Sessions are put on days by the clock of the device that rebuilds them: a device in another time zone can file a session near midnight on a different day (open question in progress.md).
-- A task edit is stamped when it is sent, not when it was made: an edit made offline and sent later can win over a newer edit from another device (open question in progress.md).
-- Task edits are ordered by the writing device's clock, and the rules do not check that order: a device with a wrong clock can put an older edit over a newer one. Left as is (owner, 2026-11-14): a rule would refuse real edits from a device whose clock is behind.
+- Task edits are stamped when they are made (`updatedAt`, from `SyncMeta.edits`), not when sent, and the rules refuse an edit older than the stored copy (a delete always wins); the app counts such a refusal as saved, since the newer edit is already there (owner, 2026-11-14). The order still comes from each device's own clock, so a device whose clock runs ahead can win a clash it should lose, and one whose clock runs behind has its edits refused.
 - A task edit reaches other devices about 10 seconds later, unless the app is closed or put in the background first.
-- Once linked, XP is rebuilt from the records, so it can differ from the device's old stored total (owner accepted, 2026-11-13). One more difference: a quest claimed and then undone (a task unticked the same day) is unclaimed after a sync, where the device on its own keeps it.
+- Once linked, XP is rebuilt from the records, so it can differ from the device's old stored total (owner accepted, 2026-11-13). Reopening a task takes its credit back the same way on the device and in a rebuild (owner, 2026-11-14): the task quest and its XP are unclaimed if the day no longer reaches it.

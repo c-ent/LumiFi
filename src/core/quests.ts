@@ -17,6 +17,19 @@ export function reachedQuests(day: Pick<DayStats, 'sessions' | 'minutes' | 'task
   return QUESTS.filter((quest) => day[quest.key] >= quest.goal);
 }
 
+/**
+ * Takes back a quest the day no longer reaches (a task reopened), with its XP,
+ * so the device keeps the same credit a sync rebuild works out.
+ */
+export function unclaimLostQuests(day: DayStats, xp: number): { day: DayStats; xp: number } {
+  const reached = new Set(reachedQuests(day).map((quest) => quest.id));
+  const lost = QUESTS.filter((quest) => day.claimed.includes(quest.id) && !reached.has(quest.id));
+  if (lost.length === 0) return { day, xp };
+  const ids = new Set(lost.map((quest) => quest.id));
+  const reward = lost.reduce((sum, quest) => sum + quest.reward, 0);
+  return { day: { ...day, claimed: day.claimed.filter((id) => !ids.has(id)) }, xp: Math.max(0, xp - reward) };
+}
+
 export function claimReachedQuests(day: DayStats, xp: number, messages: string[]): { day: DayStats; xp: number } {
   let nextDay = day;
   let nextXp = xp;

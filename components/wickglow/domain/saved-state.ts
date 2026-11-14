@@ -136,7 +136,7 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
       session: readSession(saved.session, cfg, now),
       // A save from before the log existed turns its daily totals into day
       // records once, so they can be uploaded to an account.
-      log: saved.log === undefined ? { sessions: [], legacy: legacyFromHistory(restored.days) } : readLog(saved.log),
+      log: saved.log === undefined ? { sessions: [], legacy: legacyFromHistory(restored.days, tasks) } : readLog(saved.log),
       sync: readSyncMeta(saved.sync),
     };
   } catch {
@@ -364,9 +364,9 @@ function readSyncMeta(value: unknown): SyncMeta | null {
   if (meta.tasks && typeof meta.tasks === 'object') {
     for (const [id, entry] of Object.entries(meta.tasks as Record<string, unknown>)) {
       if (!entry || typeof entry !== 'object') continue;
-      const known = entry as { stamp?: unknown; sig?: unknown; sentDone?: unknown };
+      const known = entry as { stamp?: unknown; sig?: unknown; sentDoneAt?: unknown };
       if (typeof known.stamp === 'number' && Number.isFinite(known.stamp) && typeof known.sig === 'string') {
-        tasks[id] = { stamp: known.stamp, sig: known.sig, ...(known.sentDone === true ? { sentDone: true as const } : {}) };
+        tasks[id] = { stamp: known.stamp, sig: known.sig, ...(typeof known.sentDoneAt === 'number' && Number.isFinite(known.sentDoneAt) ? { sentDoneAt: known.sentDoneAt } : {}) };
       }
     }
   }

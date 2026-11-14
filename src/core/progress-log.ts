@@ -122,17 +122,27 @@ export function appendSession(log: ProgressLog, record: SessionRecord | null): P
 
 /**
  * The device's daily totals as day records, for a save from before records
- * existed. Minutes are capped at a whole day, as the rules cap them.
+ * existed. Minutes are capped at a whole day, as the rules cap them. A day's
+ * task count leaves out the finished tasks still in `tasks`: those are counted
+ * from the tasks themselves, so a day record holds only finishes no task shows
+ * any more, and the rebuild adds the two (a later finish or reopen then moves
+ * the total, and nothing is counted twice).
  */
-export function legacyFromHistory(days: DayHistory): DayRecord[] {
+export function legacyFromHistory(days: DayHistory, tasks: Task[] = []): DayRecord[] {
+  const live: Record<string, number> = {};
+  for (const task of tasks) {
+    if (task.parentId != null || !task.done || !task.doneOn) continue;
+    live[task.doneOn] = (live[task.doneOn] ?? 0) + 1;
+  }
   const records: DayRecord[] = [];
   for (const day of Object.values(days)) {
-    if (day.minutes <= 0 && day.sessions <= 0 && day.tasks <= 0) continue;
+    const extraTasks = Math.max(0, Math.floor(day.tasks) - (live[day.d] ?? 0));
+    if (day.minutes <= 0 && day.sessions <= 0 && extraTasks <= 0) continue;
     records.push({
       d: day.d,
       minutes: Math.min(MAX_DAY_MINUTES, Math.max(0, Math.floor(day.minutes))),
       sessions: Math.min(MAX_DAY_MINUTES / 10, Math.max(0, Math.floor(day.sessions))),
-      tasks: Math.min(MAX_DAY_TASKS, Math.max(0, Math.floor(day.tasks))),
+      tasks: Math.min(MAX_DAY_TASKS, extraTasks),
     });
   }
   return records.sort((a, b) => dayOrder(a.d) - dayOrder(b.d));
@@ -152,9 +162,9 @@ export interface RebuiltProgress {
 
 /**
  * XP, streak and the day history, worked out from the log and the tasks.
- * A day's task count is the larger of its day record and the top-level tasks
- * finished that day (live ones, and deleted ones in `log.finished`), so a task
- * counted in a day record is not counted twice.
+ * A day's task count is its day record (finishes from before records that no
+ * task shows, see `legacyFromHistory`) plus the top-level tasks finished that
+ * day (live ones, and deleted ones in `log.finished`).
  * Quests are claimed on any day that reached them. The streak walks the days
  * with at least one 10-minute session in order.
  */
@@ -168,7 +178,7 @@ export function rebuildProgress(log: ProgressLog, tasks: Task[], now: number): R
     const day = at(record.d);
     day.minutes += record.minutes;
     day.sessions += record.sessions;
-    day.tasks = Math.max(day.tasks, record.tasks);
+    day.tasks += record.tasks;
   }
   for (const record of log.sessions) {
     const day = at(calendarKey(record.end));
@@ -184,10 +194,7 @@ export function rebuildProgress(log: ProgressLog, tasks: Task[], now: number): R
   }
   const finished: Record<string, number> = {};
   for (const d of finishedOn.values()) finished[d] = (finished[d] ?? 0) + 1;
-  for (const [d, count] of Object.entries(finished)) {
-    const day = at(d);
-    day.tasks = Math.max(day.tasks, count);
-  }
+  for (const [d, count] of Object.entries(finished)) at(d).tasks += count;
 
   let xp = 0;
   for (const day of Object.values(days)) {

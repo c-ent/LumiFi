@@ -611,6 +611,7 @@ describe('account sync', () => {
     first.store.commit(toggleTask(first.store.get(), id, clock).state);
     first.store.commit(removeTask(first.store.get(), id, clock).state);
     expect(first.store.get().day.tasks).toBe(0);
+    expect(first.store.get().xp).toBe(0);
     await first.settle();
     await second.settle();
     expect(account.tasks()[0]).toMatchObject({ deleted: true, doneOn: null });

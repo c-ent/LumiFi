@@ -58,7 +58,9 @@ function readTask(id: number, data: DocumentData): RemoteTask | null {
   if (data.deleted === true) {
     // `doneOn` on a tombstone: the task was finished, and keeps its credit.
     const doneOn = typeof data.doneOn === 'string' && DAY_KEY.test(data.doneOn) ? data.doneOn : null;
-    return { id, text: '', done: false, doneOn, parentId: null, date: null, updatedAt: data.updatedAt, deleted: true };
+    // Its 30 days run from when the account received it (`at`).
+    const writtenAt = readAt(data);
+    return { id, text: '', done: false, doneOn, parentId: null, date: null, updatedAt: data.updatedAt, deleted: true, ...(writtenAt ? { writtenAt } : {}) };
   }
   const text = typeof data.text === 'string' ? cleanTitle(data.text) : null;
   if (!text || typeof data.done !== 'boolean') return null;
@@ -271,14 +273,18 @@ export async function pushProgress(uid: string, push: SyncPush, epoch: number): 
         at,
       }));
   }
-  // An old tombstone is deleted only if it is still a tombstone without credit
-  // when the transaction reads it (a record written over after a reset, or a
-  // tombstone that gained a finished day meanwhile, is kept).
+  // An old tombstone is deleted only if it is still the same one when the
+  // transaction reads it: a tombstone without credit, from this reset. A record
+  // written over after a reset (even a new tombstone), or a tombstone that
+  // gained a finished day meanwhile, is kept. Within one reset a tombstone can
+  // change in no other way (the rules), so the reset count is its version.
   for (const id of push.purge) {
     const ref = doc(db, path, `t_${id}`);
     writes.push(runTransaction(db, async (transaction) => {
       const current = await transaction.get(ref);
-      if (current.exists() && current.data().deleted === true && current.data().doneOn == null) transaction.delete(ref);
+      if (!current.exists()) return;
+      const data = current.data();
+      if (data.deleted === true && data.doneOn == null && recordEpoch(data) === epoch) transaction.delete(ref);
     }));
   }
   const results = await Promise.allSettled(writes);

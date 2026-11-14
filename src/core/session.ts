@@ -1,7 +1,7 @@
 import { rollToToday } from './history';
 import { modeAfterComplete } from './phase';
 import { appendFinished, appendSession, sessionRecord } from './progress-log';
-import { claimReachedQuests } from './quests';
+import { claimReachedQuests, unclaimLostQuests } from './quests';
 import { streakAfterFocus } from './streak';
 import { appendSubtask, dropTask, flipTask } from './tasks';
 import { DayHistory, DayStats, ProgressState, Task, TimerMode } from './types';
@@ -81,16 +81,24 @@ function applyTaskCount<T extends ProgressState>(
   const targetKey = done ? dayKey : task.doneOn;
   let day: DayStats = state.day;
   let days: DayHistory = state.days;
+  let xp = state.xp;
+  // Reopening takes the credit back (owner, 2026-11-14): a quest the day no
+  // longer reaches is unclaimed with its XP, as a sync rebuild does.
   if (targetKey === dayKey) {
     const nextTotal = done ? state.day.tasks + 1 : Math.max(0, state.day.tasks - 1);
     day = { ...state.day, tasks: nextTotal, claimed: [...state.day.claimed] };
+    if (!done) ({ day, xp } = unclaimLostQuests(day, xp));
     const known = state.days[dayKey] ?? day;
-    days = { ...state.days, [dayKey]: { ...known, tasks: nextTotal } };
+    days = { ...state.days, [dayKey]: { ...known, tasks: nextTotal, claimed: day.claimed } };
   } else if (targetKey != null) {
     const known = state.days[targetKey];
-    if (known) days = { ...state.days, [targetKey]: { ...known, tasks: Math.max(0, known.tasks - 1) } };
+    if (known) {
+      const lowered = unclaimLostQuests({ ...known, tasks: Math.max(0, known.tasks - 1) }, xp);
+      xp = lowered.xp;
+      days = { ...state.days, [targetKey]: lowered.day };
+    }
   }
-  const claimed = claimReachedQuests(day, state.xp, messages);
+  const claimed = claimReachedQuests(day, xp, messages);
   return {
     ...state,
     xp: claimed.xp,

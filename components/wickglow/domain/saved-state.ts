@@ -303,7 +303,7 @@ function readLog(value: unknown): ProgressLog {
       if (!item || typeof item !== 'object') continue;
       const entry = item as Partial<SessionRecord>;
       const record = typeof entry.end === 'number' && typeof entry.minutes === 'number'
-        ? sessionRecord(entry.end, entry.minutes, typeof entry.task === 'number' ? entry.task : null)
+        ? sessionRecord(entry.end, entry.minutes, typeof entry.task === 'number' ? entry.task : null, entry.d)
         : null;
       if (!record || ids.has(record.id)) continue;
       ids.add(record.id);

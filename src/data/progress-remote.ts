@@ -23,7 +23,8 @@ import { getFirebase } from './firebase';
 // "anything new since my last sync?" is a single query (Firestore charges at
 // least one read per query, even an empty one). Rules: firestore.rules.
 //
-//   users/{uid}/records/s_{end}-{minutes}  a session   { kind: 's', end, minutes, task, at }   create-only
+//   users/{uid}/records/s_{end}-{minutes}  a session   { kind: 's', end, minutes, task, day?, at }   create-only
+//                                           (`day`: the writer's local day, which every device files it on)
 //   users/{uid}/records/d_{calendarKey}    a pre-sync day total { kind: 'd', minutes, sessions, tasks, at }   create-only
 //   users/{uid}/records/t_{taskId}         a task      { kind: 't', text, done, doneOn, parentId, date, updatedAt, deleted: false, at }
 //                                           or its tombstone { kind: 't', deleted: true, updatedAt, at }, plus doneOn if it was finished
@@ -110,7 +111,7 @@ function readRecords(docs: QueryDocumentSnapshot<DocumentData>[]): { progress: R
       stale.push(item);
     } else if (id.startsWith('s_')) {
       const record = typeof data.end === 'number' && typeof data.minutes === 'number'
-        ? sessionRecord(data.end, data.minutes, typeof data.task === 'number' ? data.task : null)
+        ? sessionRecord(data.end, data.minutes, typeof data.task === 'number' ? data.task : null, data.day)
         : null;
       if (record && `s_${record.id}` === id) sessions.push(record);
     } else if (id.startsWith('d_')) {
@@ -216,7 +217,10 @@ export async function pushProgress(uid: string, push: SyncPush, epoch: number): 
     throw error;
   });
   for (const record of push.sessions) {
-    writes.push(createOnce(doc(db, path, `s_${record.id}`), { kind: 's', end: record.end, minutes: record.minutes, task: record.task, epoch, at }));
+    // `day`: the day it counted on where it was finished. Older records lack it.
+    writes.push(createOnce(doc(db, path, `s_${record.id}`), {
+      kind: 's', end: record.end, minutes: record.minutes, task: record.task, ...(record.d ? { day: record.d } : {}), epoch, at,
+    }));
   }
   for (const record of push.days) {
     writes.push(createOnce(doc(db, path, `d_${record.d}`), { kind: 'd', minutes: record.minutes, sessions: record.sessions, tasks: record.tasks, epoch, at }));

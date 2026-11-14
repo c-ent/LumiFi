@@ -243,12 +243,18 @@ describe('subtasks and the daily task count', () => {
     expect(reopened.tasks.find((item) => item.id === 1)?.done).toBe(false);
   });
 
-  it('undoes a deleted finished task and does not count a deleted subtask', () => {
+  it('keeps the credit of a deleted finished task and does not count a deleted subtask', () => {
     const finished = toggleTask(progressAt(monday), 1, monday).state;
     const removed = removeTask(finished, 1, monday).state;
     expect(removed.tasks).toEqual([]);
-    expect(removed.day.tasks).toBe(0);
+    expect(removed.day.tasks).toBe(1);
+    expect(removed.xp).toBe(finished.xp);
+    expect(removed.log.finished).toEqual([{ task: 1, d: calendarKey(monday) }]);
     expect(removed.activeId).toBeNull();
+    // Deleting an open task gives nothing.
+    const open = removeTask(progressAt(monday), 1, monday).state;
+    expect(open.day.tasks).toBe(0);
+    expect(open.log.finished).toBeUndefined();
 
     const withSub: ProgressState = {
       ...progressAt(monday),

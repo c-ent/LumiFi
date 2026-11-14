@@ -1,6 +1,6 @@
 import { rollToToday } from './history';
 import { modeAfterComplete } from './phase';
-import { appendSession, sessionRecord } from './progress-log';
+import { appendFinished, appendSession, sessionRecord } from './progress-log';
 import { claimReachedQuests } from './quests';
 import { streakAfterFocus } from './streak';
 import { appendSubtask, dropTask, flipTask } from './tasks';
@@ -140,7 +140,9 @@ export function removeTask<T extends ProgressState>(state: T, id: number, now: n
   if (dropped.parentChange?.done && activeId === dropped.parentChange.before.id) activeId = null;
   let next: T = { ...rolled, tasks: dropped.tasks, activeId };
   const messages: string[] = [];
-  if (dropped.removedDone) next = applyTaskCount(next, dropped.removedDone, false, messages);
+  // Deleting a finished task keeps its credit: the day keeps its count and the
+  // log keeps the task as finished, so a sync rebuild counts it too.
+  if (dropped.removedDone) next = { ...next, log: appendFinished(next.log, dropped.removedDone) };
   if (dropped.parentChange) next = applyTaskCount(next, dropped.parentChange.before, dropped.parentChange.done, messages);
   return { state: next, messages };
 }

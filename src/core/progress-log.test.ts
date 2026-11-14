@@ -26,6 +26,11 @@ describe('session records', () => {
     expect(sessionRecord(at(2026, 11, 3), 25, 7)?.task).toBe(7);
   });
 
+  it('accepts exactly 1 and exactly 180 minutes', () => {
+    expect(sessionRecord(at(2026, 11, 3), 1)?.minutes).toBe(1);
+    expect(sessionRecord(at(2026, 11, 3), 180)?.minutes).toBe(180);
+  });
+
   it('keeps a session once by id', () => {
     const record = sessionRecord(at(2026, 11, 3), 25);
     const once = appendSession(emptyLog(), record);
@@ -66,6 +71,27 @@ describe('rebuildProgress', () => {
     expect(rebuilt.streak).toEqual({ n: 0, last: '' });
   });
 
+  it('counts a session from 10 minutes, not 9, toward sessions and the streak', () => {
+    const nine = rebuildProgress(appendSession(emptyLog(), sessionRecord(at(2026, 11, 3), 9)), [], at(2026, 11, 3, 20));
+    expect(nine.day).toMatchObject({ sessions: 0, minutes: 9 });
+    expect(nine.xp).toBe(18);
+    expect(nine.streak).toEqual({ n: 0, last: '' });
+    const ten = rebuildProgress(appendSession(emptyLog(), sessionRecord(at(2026, 11, 3), 10)), [], at(2026, 11, 3, 20));
+    expect(ten.day).toMatchObject({ sessions: 1, minutes: 10 });
+    expect(ten.xp).toBe(20);
+    expect(ten.streak).toEqual({ n: 1, last: '2026-11-3' });
+  });
+
+  it('puts sessions just before and just after midnight on their own days', () => {
+    let log = emptyLog();
+    log = appendSession(log, sessionRecord(new Date(2026, 10, 3, 23, 59).getTime(), 25));
+    log = appendSession(log, sessionRecord(new Date(2026, 10, 4, 0, 1).getTime(), 25));
+    const rebuilt = rebuildProgress(log, [], at(2026, 11, 4, 20));
+    expect(rebuilt.days['2026-11-3']).toMatchObject({ sessions: 1, minutes: 25 });
+    expect(rebuilt.days['2026-11-4']).toMatchObject({ sessions: 1, minutes: 25 });
+    expect(rebuilt.streak).toEqual({ n: 2, last: '2026-11-4' });
+  });
+
   it('builds the streak across days and restarts after a gap', () => {
     let log = emptyLog();
     log = appendSession(log, sessionRecord(at(2026, 11, 1), 25));
@@ -87,6 +113,13 @@ describe('rebuildProgress', () => {
     const rebuilt = rebuildProgress(log, [task(1, '2026-11-3')], at(2026, 11, 3, 20));
     expect(rebuilt.day.tasks).toBe(1);
     expect(rebuilt.xp).toBe(30);
+  });
+
+  it('counts a deleted finished task on the day it was finished, and each task once', () => {
+    const log = { sessions: [], legacy: [], finished: [{ task: 2, d: '2026-11-3' }, { task: 1, d: '2026-11-3' }] };
+    // Task 1 is also live and finished: it counts once.
+    const rebuilt = rebuildProgress(log, [task(1, '2026-11-3')], at(2026, 11, 3, 20));
+    expect(rebuilt.day.tasks).toBe(2);
   });
 
   it('counts only top-level tasks', () => {
@@ -120,6 +153,14 @@ describe('withSessionCounts', () => {
     log = appendSession(log, sessionRecord(at(2026, 11, 3, 11), 25, 2));
     const tasks = [task(1, null), { ...task(2, null), pomos: 5 }, task(3, null)];
     expect(withSessionCounts(tasks, log).map((item) => item.pomos)).toEqual([2, 5, 0]);
+  });
+
+  it('adds new local and remote sessions on top of a count from before records', () => {
+    // 3 sessions from before records, then one here (the device counted it: 4).
+    const local = appendSession(emptyLog(), sessionRecord(at(2026, 11, 3, 9), 25, 1));
+    const merged = appendSession(local, sessionRecord(at(2026, 11, 3, 10), 25, 1)); // one from another device
+    const tasks = [{ ...task(1, null), pomos: 4 }];
+    expect(withSessionCounts(tasks, merged, local)[0].pomos).toBe(5);
   });
 
   it('returns the same list when nothing changes', () => {

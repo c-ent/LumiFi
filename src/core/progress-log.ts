@@ -1,6 +1,6 @@
 import { calendarKey } from './calendar';
 import { emptyDay } from './history';
-import { QUESTS } from './quests';
+import { reachedQuests } from './quests';
 import { streakAfterFocus } from './streak';
 import { DayHistory, DayStats, StreakState, Task } from './types';
 import { countsAsRewardSession, focusSessionXp } from './xp';
@@ -39,9 +39,22 @@ export interface DayRecord {
   tasks: number;
 }
 
+/**
+ * A finished top-level task that was then deleted. Deleting a finished task
+ * keeps its credit (owner, 2026-11-14), so the day it was finished keeps its
+ * count. Reopening a task still takes the credit back: it is no longer done.
+ */
+export interface FinishedRecord {
+  task: number;
+  /** The day it was finished, `calendarKey` format. */
+  d: string;
+}
+
 export interface ProgressLog {
   sessions: SessionRecord[];
   legacy: DayRecord[];
+  /** Deleted finished tasks. Missing in saves from before it existed. */
+  finished?: FinishedRecord[];
 }
 
 export function emptyLog(): ProgressLog {
@@ -65,20 +78,40 @@ export function sessionRecord(end: number, minutes: number, task: number | null 
  * records that name it. The count is not synced (it would be one more write
  * per session); every device works it out from the session records instead.
  * A count from before records existed is kept on the device that has it.
+ *
+ * `previous` is the log the tasks' counts were last right for (the device's
+ * log before a sync). What a task counted beyond its records there is its
+ * pre-record count, and records added since are counted on top of it, so a
+ * new session from another device is not hidden by an old count.
  */
-export function withSessionCounts(tasks: Task[], log: ProgressLog): Task[] {
+export function withSessionCounts(tasks: Task[], log: ProgressLog, previous: ProgressLog = log): Task[] {
+  const counts = countByTask(log);
+  const before = previous === log ? counts : countByTask(previous);
+  let changed = false;
+  const next = tasks.map((task) => {
+    const base = Math.max(0, task.pomos - (before.get(task.id) ?? 0));
+    const pomos = base + (counts.get(task.id) ?? 0);
+    if (pomos === task.pomos) return task;
+    changed = true;
+    return { ...task, pomos };
+  });
+  return changed ? next : tasks;
+}
+
+function countByTask(log: ProgressLog): Map<number, number> {
   const counts = new Map<number, number>();
   for (const record of log.sessions) {
     if (record.task != null) counts.set(record.task, (counts.get(record.task) ?? 0) + 1);
   }
-  let changed = false;
-  const next = tasks.map((task) => {
-    const counted = counts.get(task.id) ?? 0;
-    if (counted <= task.pomos) return task;
-    changed = true;
-    return { ...task, pomos: counted };
-  });
-  return changed ? next : tasks;
+  return counts;
+}
+
+/** Keeps the credit of a finished task being deleted, once per task. */
+export function appendFinished(log: ProgressLog, task: Task): ProgressLog {
+  if (task.parentId != null || !task.done || !task.doneOn) return log;
+  const finished = log.finished ?? [];
+  if (finished.some((item) => item.task === task.id)) return log;
+  return { ...log, finished: [...finished, { task: task.id, d: task.doneOn }] };
 }
 
 /** Adds a record, once by id, keeping the list in end order. */
@@ -107,7 +140,7 @@ export function legacyFromHistory(days: DayHistory): DayRecord[] {
 
 /** True when the log or the task list holds anything worth keeping. */
 export function hasProgress(log: ProgressLog, tasks: Task[]): boolean {
-  return log.sessions.length > 0 || log.legacy.length > 0 || tasks.length > 0;
+  return log.sessions.length > 0 || log.legacy.length > 0 || (log.finished?.length ?? 0) > 0 || tasks.length > 0;
 }
 
 export interface RebuiltProgress {
@@ -120,7 +153,8 @@ export interface RebuiltProgress {
 /**
  * XP, streak and the day history, worked out from the log and the tasks.
  * A day's task count is the larger of its day record and the top-level tasks
- * finished that day, so a task counted in a day record is not counted twice.
+ * finished that day (live ones, and deleted ones in `log.finished`), so a task
+ * counted in a day record is not counted twice.
  * Quests are claimed on any day that reached them. The streak walks the days
  * with at least one 10-minute session in order.
  */
@@ -141,11 +175,15 @@ export function rebuildProgress(log: ProgressLog, tasks: Task[], now: number): R
     day.minutes += record.minutes;
     if (countsAsRewardSession(record.minutes)) day.sessions += 1;
   }
-  const finished: Record<string, number> = {};
+  // Each task once, by id: a live finished task, else its deleted record.
+  const finishedOn = new Map<number, string>();
+  for (const record of log.finished ?? []) finishedOn.set(record.task, record.d);
   for (const task of tasks) {
     if (task.parentId != null || !task.done || !task.doneOn) continue;
-    finished[task.doneOn] = (finished[task.doneOn] ?? 0) + 1;
+    finishedOn.set(task.id, task.doneOn);
   }
+  const finished: Record<string, number> = {};
+  for (const d of finishedOn.values()) finished[d] = (finished[d] ?? 0) + 1;
   for (const [d, count] of Object.entries(finished)) {
     const day = at(d);
     day.tasks = Math.max(day.tasks, count);
@@ -154,11 +192,9 @@ export function rebuildProgress(log: ProgressLog, tasks: Task[], now: number): R
   let xp = 0;
   for (const day of Object.values(days)) {
     xp += focusSessionXp(day.minutes);
-    for (const quest of QUESTS) {
-      if (day[quest.key] >= quest.goal) {
-        day.claimed.push(quest.id);
-        xp += quest.reward;
-      }
+    for (const quest of reachedQuests(day)) {
+      day.claimed.push(quest.id);
+      xp += quest.reward;
     }
   }
 

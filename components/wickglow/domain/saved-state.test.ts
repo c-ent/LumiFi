@@ -326,6 +326,17 @@ describe('session log and sync record', () => {
     expect(state.sync).toEqual({ uid: 'u1', epoch: 2, since: 500, sessions: [`${end}-25`], days: [], tasks: { 7: { stamp: 1, sig: 's' } }, tombs: { 9: 100 } });
   });
 
+  it('keeps deleted finished tasks and unsent edit times, and drops bad ones', () => {
+    const raw = JSON.stringify({
+      log: { sessions: [], legacy: [], finished: [{ task: 3, d: '2026-11-3' }, { task: 3, d: '2026-11-4' }, { task: 'x', d: '2026-11-3' }, { task: 4, d: 'soon' }] },
+      sync: { uid: 'u1', epoch: 0, since: 0, sessions: [], days: [], tasks: {}, tombs: {}, finished: ['3', 5], edits: { 1: 1000, 2: -1, 3: 'x' } },
+    });
+    const state = parseSavedState(raw, now);
+    expect(state.log.finished).toEqual([{ task: 3, d: '2026-11-3' }]);
+    expect(state.sync?.finished).toEqual(['3']);
+    expect(state.sync?.edits).toEqual({ 1: 1000 });
+  });
+
   it('drops a sync record from the first accounts build, so the device links again', () => {
     const raw = JSON.stringify({ sync: { uid: 'u1', sessions: [], days: [], tasks: {} } });
     expect(parseSavedState(raw, now).sync).toBeNull();

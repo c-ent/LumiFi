@@ -1,7 +1,7 @@
 import { MixLevels, silentAmbient } from '@/src/core/ambient';
 import { idleSession, SessionClock } from '@/src/core/clock';
 import { emptyDay, restoreDayHistory } from '@/src/core/history';
-import { emptyLog, legacyFromHistory, MAX_DAY_MINUTES, MAX_DAY_TASKS, ProgressLog, sessionRecord, type DayRecord, type SessionRecord } from '@/src/core/progress-log';
+import { emptyLog, legacyFromHistory, MAX_DAY_MINUTES, MAX_DAY_TASKS, ProgressLog, sessionRecord, type DayRecord, type FinishedRecord, type SessionRecord } from '@/src/core/progress-log';
 import type { SyncMeta } from '@/src/core/sync';
 import { OwnTrack, parseOwnTracks } from '@/src/core/own-tracks';
 import { parseStreamLinks, StreamLink } from '@/src/core/stream-links';
@@ -295,7 +295,7 @@ function readHistory(value: unknown): DayHistory {
 
 function readLog(value: unknown): ProgressLog {
   if (!value || typeof value !== 'object') return emptyLog();
-  const log = value as { sessions?: unknown; legacy?: unknown };
+  const log = value as { sessions?: unknown; legacy?: unknown; finished?: unknown };
   const sessions: SessionRecord[] = [];
   const ids = new Set<string>();
   if (Array.isArray(log.sessions)) {
@@ -327,7 +327,23 @@ function readLog(value: unknown): ProgressLog {
       });
     }
   }
-  return { sessions: sessions.sort((a, b) => a.end - b.end), legacy };
+  const finished: FinishedRecord[] = [];
+  const finishedIds = new Set<number>();
+  if (Array.isArray(log.finished)) {
+    for (const item of log.finished) {
+      if (!item || typeof item !== 'object') continue;
+      const entry = item as Partial<FinishedRecord>;
+      if (typeof entry.task !== 'number' || !Number.isSafeInteger(entry.task) || finishedIds.has(entry.task)) continue;
+      if (typeof entry.d !== 'string' || !DAY_KEY.test(entry.d)) continue;
+      finishedIds.add(entry.task);
+      finished.push({ task: entry.task, d: entry.d });
+    }
+  }
+  return {
+    sessions: sessions.sort((a, b) => a.end - b.end),
+    legacy,
+    ...(finished.length > 0 ? { finished } : {}),
+  };
 }
 
 // `calendarKey` format: no zero padding.
@@ -348,9 +364,9 @@ function readSyncMeta(value: unknown): SyncMeta | null {
   if (meta.tasks && typeof meta.tasks === 'object') {
     for (const [id, entry] of Object.entries(meta.tasks as Record<string, unknown>)) {
       if (!entry || typeof entry !== 'object') continue;
-      const known = entry as { stamp?: unknown; sig?: unknown };
+      const known = entry as { stamp?: unknown; sig?: unknown; sentDone?: unknown };
       if (typeof known.stamp === 'number' && Number.isFinite(known.stamp) && typeof known.sig === 'string') {
-        tasks[id] = { stamp: known.stamp, sig: known.sig };
+        tasks[id] = { stamp: known.stamp, sig: known.sig, ...(known.sentDone === true ? { sentDone: true as const } : {}) };
       }
     }
   }
@@ -358,6 +374,12 @@ function readSyncMeta(value: unknown): SyncMeta | null {
   if (meta.tombs && typeof meta.tombs === 'object') {
     for (const [id, at] of Object.entries(meta.tombs as Record<string, unknown>)) {
       if (typeof at === 'number' && Number.isFinite(at)) tombs[id] = at;
+    }
+  }
+  const edits: Record<string, number> = {};
+  if (meta.edits && typeof meta.edits === 'object') {
+    for (const [id, at] of Object.entries(meta.edits as Record<string, unknown>)) {
+      if (isCount(at)) edits[id] = Math.floor(at);
     }
   }
   return {
@@ -368,5 +390,8 @@ function readSyncMeta(value: unknown): SyncMeta | null {
     days: strings(meta.days),
     tasks,
     tombs,
+    ...(isCount(meta.checked) ? { checked: Math.floor(meta.checked) } : {}),
+    ...(strings(meta.finished).length > 0 ? { finished: strings(meta.finished) } : {}),
+    ...(Object.keys(edits).length > 0 ? { edits } : {}),
   };
 }

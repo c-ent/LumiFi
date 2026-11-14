@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Animated, Easing, Platform, StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
+import Reanimated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 
 // Scroll speed in px per second, and how long the text rests at each end.
@@ -20,26 +30,28 @@ export function MarqueeText({ children, style, lineHeight }: { children: string;
   const reduced = useReducedMotion();
   const [boxWidth, setBoxWidth] = useState(0);
   const [textWidth, setTextWidth] = useState(0);
-  const [offset] = useState(() => new Animated.Value(0));
+  // On the UI thread (Reanimated), so the glide stays smooth while React works.
+  const offset = useSharedValue(0);
   const overflow = Math.max(0, Math.ceil(textWidth - boxWidth));
 
   useEffect(() => {
-    offset.setValue(0);
+    cancelAnimation(offset);
+    offset.set(0);
     if (reduced || overflow <= 0) return undefined;
     const glide = Math.max(600, (overflow / SPEED) * 1000);
-    const native = Platform.OS !== 'web';
     const ease = Easing.inOut(Easing.quad);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(REST_MS),
-        Animated.timing(offset, { toValue: -overflow, duration: glide, easing: ease, useNativeDriver: native }),
-        Animated.delay(REST_MS),
-        Animated.timing(offset, { toValue: 0, duration: glide, easing: ease, useNativeDriver: native }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
+    offset.set(withRepeat(
+      withSequence(
+        withDelay(REST_MS, withTiming(-overflow, { duration: glide, easing: ease })),
+        withDelay(REST_MS, withTiming(0, { duration: glide, easing: ease })),
+      ),
+      -1,
+      false,
+    ));
+    return () => cancelAnimation(offset);
   }, [children, offset, overflow, reduced]);
+
+  const slide = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }] }));
 
   if (reduced) {
     return <Text style={[style, { lineHeight }]} numberOfLines={1}>{children}</Text>;
@@ -52,7 +64,7 @@ export function MarqueeText({ children, style, lineHeight }: { children: string;
     >
       {/* A wide track so the text is never squeezed and reports its full width. */}
       <View style={s.track} pointerEvents="none">
-        <Animated.View style={{ transform: [{ translateX: offset }] }}>
+        <Reanimated.View style={slide}>
           <Text
             style={[style, { lineHeight }]}
             numberOfLines={1}
@@ -60,7 +72,7 @@ export function MarqueeText({ children, style, lineHeight }: { children: string;
           >
             {children}
           </Text>
-        </Animated.View>
+        </Reanimated.View>
       </View>
     </View>
   );

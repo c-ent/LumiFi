@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import Reanimated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
-  Animated,
-  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -261,7 +260,7 @@ export function DesktopWickglow() {
               accent: quieter than the Music oval, and no dot, which already
               means other things on the dock. */}
           <DockButton label={ambientLive ? 'Ambient mixer, sounds on' : 'Ambient mixer'} active={panel === 'mixer'} onPress={() => togglePanel('mixer')}>
-            {ambientLive ? <AmbientIcon accent={panel === 'mixer' ? colors.textInverse : theme.accent} /> : <MixerIcon />}
+            {ambientLive ? <AmbientIcon accent={panel === 'mixer' ? colors.textInverse : theme.accent} paused={zen} /> : <MixerIcon />}
           </DockButton>
           <DockButton label="Scenes" active={panel === 'scenes'} onPress={() => togglePanel('scenes')}><SceneIcon /></DockButton>
           <DockButton label="Tasks" active={panel === 'tasks'} onPress={() => togglePanel('tasks')}><TaskIcon /></DockButton>
@@ -398,31 +397,35 @@ function MusicDockButton({ active, onOpen, onPause }: { active: boolean; onOpen:
   const { musicPlaying, trackTitle, trackArtist, activeStreamId, sceneTheme } = useWickglow();
   const reduced = useReducedMotion();
   const expanded = musicPlaying && !active;
-  const [width] = useState(() => new Animated.Value(DOCK_SIZE));
+  // On the UI thread (Reanimated), so the oval grows smoothly even while the
+  // JS thread is busy.
+  const width = useSharedValue(DOCK_SIZE);
   const target = expanded ? NOW_WIDTH : DOCK_SIZE;
 
   useEffect(() => {
     if (reduced) {
-      width.setValue(target);
+      cancelAnimation(width);
+      width.set(target);
       return undefined;
     }
-    const anim = Animated.timing(width, { toValue: target, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: false });
-    anim.start();
-    return () => anim.stop();
+    width.set(withTiming(target, { duration: 220, easing: Easing.out(Easing.quad) }));
+    return () => cancelAnimation(width);
   }, [reduced, target, width]);
+
+  const widthStyle = useAnimatedStyle(() => ({ width: width.get() }));
 
   if (!expanded) {
     return (
-      <Animated.View style={{ width }}>
+      <Reanimated.View style={widthStyle}>
         <DockButton label="Music" active={active} dot={!musicPlaying && activeStreamId != null} onPress={onOpen}>
           {musicPlaying ? <EqualizerIcon /> : <MusicIcon />}
         </DockButton>
-      </Animated.View>
+      </Reanimated.View>
     );
   }
 
   return (
-    <Animated.View style={[styles.ib, styles.nowPill, { width }]}>
+    <Reanimated.View style={[styles.ib, styles.nowPill, widthStyle]}>
       {/* Laid out at the full NOW_WIDTH (not squeezed by the growing oval), so
           the text does not reflow while the oval grows; the clip reveals it. */}
       <View pointerEvents="box-none" style={styles.nowTrack}>
@@ -446,7 +449,7 @@ function MusicDockButton({ active, onOpen, onPause }: { active: boolean; onOpen:
           </Pressable>
         </View>
       </View>
-    </Animated.View>
+    </Reanimated.View>
   );
 }
 

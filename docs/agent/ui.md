@@ -31,6 +31,7 @@ No hardcoded hex values. React Native has no CSS variables, so tokens are keys i
 | Success / XP | `colors.success` | `#62D0C0` |
 | Error | `colors.error` | `#FF8F8F` (proposed, not in a prototype yet) |
 | Break wax (body, shadow, melt) | `breakWax.body`, `breakWax.shadow`, `breakWax.melt` | `#D8EEE9`, `#A8C9C2`, `#BFE3DA` |
+| Ambient effects (embers, fire glow, firefly halo and core, tide bands) | `ambientFx.embers`, `fireGlow`, `fireflyHalo`, `fireflyCore`, `tideMain`, `tideLow` | `#FFB36B` / `#FF8A3D` / `#FFD08A`, `#FF7A2E`, `rgba(220, 240, 140, 0.18)`, `rgba(235, 248, 170, 0.95)`, `#9FD8E8`, `#C8ECF2` |
 
 Streaming badges use `streamMark`: Spotify `#7BE8B0`, YouTube and YouTube Music `#FF9F9F`, Apple Music `#F5A3C7`. They name the service. The playing card's header shows the Spotify, YouTube, or Apple Music artwork from `assets/images/icons` at the left of the service name.
 

@@ -12,6 +12,7 @@ import Animated, {
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 import type { AmbientMix } from '@/src/core/ambient';
+import { ambientFx } from '@/src/theme/tokens';
 import { RainOverlay, rand } from './rain';
 
 /**
@@ -97,7 +98,7 @@ function FadeBand({ color, alpha }: { color: string; alpha: number }) {
 // that flickers. 6 embers at the lightest setting, 20 at full.
 
 const EMBER_TURN = 12000;
-const EMBER_COLORS = ['#FFB36B', '#FF8A3D', '#FFD08A'];
+const EMBER_COLORS = ambientFx.embers;
 
 function EmberOverlay({ amount }: { amount: number }) {
   const reduced = useReducedMotion();
@@ -116,7 +117,7 @@ function EmberOverlay({ amount }: { amount: number }) {
   return (
     <View pointerEvents="none" style={styles.layer} onLayout={onLayout}>
       <Animated.View style={[styles.glow, reduced ? null : glowStyle]}>
-        <FadeBand color="#FF7A2E" alpha={0.08 + level * 0.12} />
+        <FadeBand color={ambientFx.fireGlow}alpha={0.08 + level * 0.12} />
       </Animated.View>
       {Array.from({ length: count }, (_, index) => (
         <Ember key={index} index={index} progress={progress} height={height} width={width} reduced={reduced} />
@@ -239,10 +240,10 @@ function TideOverlay({ amount }: { amount: number }) {
   return (
     <View pointerEvents="none" style={styles.layer}>
       <Animated.View style={[styles.tideMain, reduced ? { transform: [{ translateY: 20 }] } : mainStyle]}>
-        <FadeBand color="#9FD8E8" alpha={0.06 + level * 0.12} />
+        <FadeBand color={ambientFx.tideMain}alpha={0.06 + level * 0.12} />
       </Animated.View>
       <Animated.View style={[styles.tideLow, reduced ? { transform: [{ translateY: 13 }] } : lowStyle]}>
-        <FadeBand color="#C8ECF2" alpha={0.04 + level * 0.08} />
+        <FadeBand color={ambientFx.tideLow}alpha={0.04 + level * 0.08} />
       </Animated.View>
     </View>
   );
@@ -281,7 +282,7 @@ const styles = StyleSheet.create({
     width: FLY_BOX,
     height: FLY_BOX,
     borderRadius: FLY_BOX / 2,
-    backgroundColor: 'rgba(220, 240, 140, 0.18)',
+    backgroundColor: ambientFx.fireflyHalo,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
     width: 3.5,
     height: 3.5,
     borderRadius: 1.75,
-    backgroundColor: 'rgba(235, 248, 170, 0.95)',
+    backgroundColor: ambientFx.fireflyCore,
   },
   // The tide bands run past the bottom edge, so moving down never shows a gap.
   tideMain: {

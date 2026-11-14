@@ -13,6 +13,7 @@ import { SignInCard } from './sign-in-card';
 export function statusLine(sync: SyncStatus): string {
   switch (sync.phase) {
     case 'synced': return 'Progress saved to your account';
+    case 'saving': return 'Saving to your account…';
     case 'checking': return 'Connecting…';
     case 'choose': return 'Choose which progress to keep';
     case 'offline': return 'Offline. Saving on this device for now';

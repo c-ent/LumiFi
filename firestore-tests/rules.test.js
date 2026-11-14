@@ -31,11 +31,11 @@ let env;
 const MINUTE = 60000;
 
 function session(end, minutes, extra = {}) {
-  return { id: `s_${end}-${minutes}`, data: { kind: 's', end, minutes, task: null, at: serverTimestamp(), ...extra } };
+  return { id: `s_${end}-${minutes}`, data: { kind: 's', end, minutes, task: null, epoch: 0, at: serverTimestamp(), ...extra } };
 }
 
 function day(extra = {}) {
-  return { kind: 'd', minutes: 30, sessions: 1, tasks: 0, at: serverTimestamp(), ...extra };
+  return { kind: 'd', minutes: 30, sessions: 1, tasks: 0, epoch: 0, at: serverTimestamp(), ...extra };
 }
 
 function task(extra = {}) {
@@ -48,13 +48,14 @@ function task(extra = {}) {
     date: null,
     updatedAt: Date.now(),
     deleted: false,
+    epoch: 0,
     at: serverTimestamp(),
     ...extra,
   };
 }
 
-function tombstone() {
-  return { kind: 't', updatedAt: Date.now(), deleted: true, at: serverTimestamp() };
+function tombstone(extra = {}) {
+  return { kind: 't', updatedAt: Date.now(), deleted: true, epoch: 0, at: serverTimestamp(), ...extra };
 }
 
 beforeAll(async () => {
@@ -208,6 +209,34 @@ describe('tasks', () => {
   it('refuses a tombstone that carries task fields', async () => {
     await assertFails(setDoc(rec(alice(), 'alice', 't_2'), { ...tombstone(), text: 'hidden' }));
   });
+
+  it('lets a tombstone carry the day its task was finished, gained once and never lost', async () => {
+    await assertFails(setDoc(rec(alice(), 'alice', 't_3'), tombstone({ doneOn: 'soon' })));
+    await assertFails(setDoc(rec(alice(), 'alice', 't_3'), tombstone({ doneOn: null })));
+    await assertSucceeds(setDoc(rec(alice(), 'alice', 't_3'), tombstone({ doneOn: '2026-11-3' })));
+    // Neither changed nor dropped.
+    await assertFails(setDoc(rec(alice(), 'alice', 't_3'), tombstone({ doneOn: '2026-11-4' })));
+    await assertFails(setDoc(rec(alice(), 'alice', 't_3'), tombstone()));
+    // A plain tombstone may gain it once.
+    const ref = rec(alice(), 'alice', 't_4');
+    await setDoc(ref, tombstone());
+    await assertSucceeds(setDoc(ref, tombstone({ doneOn: '2026-11-3' })));
+    await assertFails(setDoc(ref, tombstone({ doneOn: '2026-11-4' })));
+    // A live task becomes one with it too.
+    const live = rec(alice(), 'alice', 't_5');
+    await setDoc(live, task({ done: true, doneOn: '2026-11-3' }));
+    await assertSucceeds(setDoc(live, tombstone({ doneOn: '2026-11-3' })));
+  });
+
+  it('keeps the latest task edit: an older one is refused, a delete always wins', async () => {
+    const ref = rec(alice(), 'alice', 't_6');
+    const at = Date.now() - 10 * MINUTE;
+    await setDoc(ref, task({ updatedAt: at }));
+    await assertFails(setDoc(ref, task({ text: 'older', updatedAt: at - MINUTE })));
+    await assertSucceeds(setDoc(ref, task({ text: 'same time', updatedAt: at })));
+    await assertSucceeds(setDoc(ref, task({ text: 'newer', updatedAt: at + MINUTE })));
+    await assertSucceeds(setDoc(ref, tombstone({ updatedAt: at - 5 * MINUTE })));
+  });
 });
 
 describe('the reset count', () => {
@@ -218,5 +247,50 @@ describe('the reset count', () => {
     await assertSucceeds(setDoc(ref, { kind: 'r', epoch: 2, at: serverTimestamp() }));
     await assertFails(setDoc(ref, { kind: 'r', epoch: 2, at: serverTimestamp() }));
     await assertFails(setDoc(ref, { kind: 'r', epoch: 1, at: serverTimestamp() }));
+  });
+
+  it('cannot be deleted, so it cannot be started over lower', async () => {
+    const ref = rec(alice(), 'alice', 'reset');
+    await assertSucceeds(setDoc(ref, { kind: 'r', epoch: 2, at: serverTimestamp() }));
+    await assertSucceeds(getDoc(ref));
+    await assertFails(deleteDoc(ref));
+    await assertFails(setDoc(ref, { kind: 'r', epoch: 1, at: serverTimestamp() }));
+  });
+
+  it('refuses a record without the reset count, or with another than the account has', async () => {
+    const end = Date.now() - MINUTE;
+    const missing = session(end, 25);
+    delete missing.data.epoch;
+    await assertFails(setDoc(rec(alice(), 'alice', missing.id), missing.data));
+    const ahead = session(end, 25, { epoch: 1 });
+    await assertFails(setDoc(rec(alice(), 'alice', ahead.id), ahead.data));
+    await assertFails(setDoc(rec(alice(), 'alice', 'd_2026-11-3'), day({ epoch: '0' })));
+  });
+
+  it('after a reset, refuses records from before it and accepts ones from after', async () => {
+    await setDoc(rec(alice(), 'alice', 'reset'), { kind: 'r', epoch: 1, at: serverTimestamp() });
+    const end = Date.now() - MINUTE;
+    const old = session(end, 25);
+    await assertFails(setDoc(rec(alice(), 'alice', old.id), old.data));
+    await assertFails(setDoc(rec(alice(), 'alice', 't_1'), task()));
+    await assertFails(setDoc(rec(alice(), 'alice', 'd_2026-11-3'), day()));
+    const fresh = session(end, 25, { epoch: 1 });
+    await assertSucceeds(setDoc(rec(alice(), 'alice', fresh.id), fresh.data));
+    await assertSucceeds(setDoc(rec(alice(), 'alice', 't_1'), task({ epoch: 1 })));
+  });
+
+  it('lets a record left from before a reset be written over, but not one from after', async () => {
+    const end = Date.now() - MINUTE;
+    const old = session(end, 25);
+    await setDoc(rec(alice(), 'alice', old.id), old.data);
+    await setDoc(rec(alice(), 'alice', 't_1'), tombstone());
+    await setDoc(rec(alice(), 'alice', 'reset'), { kind: 'r', epoch: 1, at: serverTimestamp() });
+    // The same session again, and the old tombstone's task back, under the new reset.
+    await assertSucceeds(setDoc(rec(alice(), 'alice', old.id), { ...old.data, epoch: 1 }));
+    await assertSucceeds(setDoc(rec(alice(), 'alice', 't_1'), task({ epoch: 1 })));
+    // Now from this reset: create-only again, and a delete still wins.
+    await assertFails(setDoc(rec(alice(), 'alice', old.id), { ...old.data, epoch: 1 }));
+    await assertSucceeds(setDoc(rec(alice(), 'alice', 't_1'), tombstone({ epoch: 1 })));
+    await assertFails(setDoc(rec(alice(), 'alice', 't_1'), task({ epoch: 1 })));
   });
 });

@@ -65,6 +65,8 @@ export function deletionMailto(user: AccountUser): string {
 /** The short messages shown after a sign-in the user started (not on a restored session). */
 export const SIGNED_IN_MESSAGE = 'Signed in. Your progress saves to your account';
 export const SIGNED_UP_MESSAGE = 'Account created. Check your email to confirm it';
+/** Shown when no email app opens for the deletion request, so it can be sent by hand. */
+export const DELETION_FAILED_MESSAGE = `Could not open your email app. To delete your account, write to ${DELETION_EMAIL}`;
 
 export function AccountProvider({ store, notify, children }: {
   store: SyncStore;
@@ -157,7 +159,7 @@ export function AccountProvider({ store, notify, children }: {
       void refreshAccount().then((fresh) => { if (fresh) setUser(fresh); });
     },
     requestDeletion: () => {
-      if (user) void Linking.openURL(deletionMailto(user)).catch(() => undefined);
+      if (user) void Linking.openURL(deletionMailto(user)).catch(() => notifyRef.current(DELETION_FAILED_MESSAGE));
     },
   }), [available, choiceOpen, google, status, sync, user]);
 

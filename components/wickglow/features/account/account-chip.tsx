@@ -23,20 +23,23 @@ export function AccountChip() {
   const [draft, setDraft] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0, chipTop: 0 });
   const chipRef = useRef<React.ComponentRef<typeof Pressable>>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  // The menu is placed under the chip when it opens. While the keyboard is up
-  // (Edit name), it moves up just enough to end above it, and scrolls if it
-  // still does not fit.
+  // The menu is placed under the chip when it opens. If it does not fit below
+  // (a short window), it opens above the chip instead; while the keyboard is up
+  // (Edit name), it moves up just enough to end above it. It is always kept on
+  // screen and scrolls if it still does not fit.
   const keyboard = useKeyboardInset();
   const [contentHeight, setContentHeight] = useState(0);
   const menuFloor = windowHeight - keyboard - MENU_GAP;
   const menuHeight = contentHeight + MENU_CHROME;
-  const menuTop = keyboard > 0 && contentHeight > 0
-    ? Math.max(MENU_GAP, Math.min(menuPos.top, menuFloor - menuHeight))
-    : menuPos.top;
-  const menuMaxHeight = keyboard > 0 ? Math.max(0, menuFloor - menuTop) : undefined;
+  let menuTop = menuPos.top;
+  if (contentHeight > 0 && menuTop + menuHeight > menuFloor) {
+    const above = menuPos.chipTop - MENU_OFFSET - menuHeight;
+    menuTop = keyboard === 0 && above >= MENU_GAP ? above : Math.max(MENU_GAP, menuFloor - menuHeight);
+  }
+  const menuMaxHeight = Math.max(0, menuFloor - menuTop);
   if (!account.available || account.user === undefined) return null;
   const user = account.user;
 
@@ -94,7 +97,7 @@ export function AccountChip() {
             return;
           }
           chipRef.current?.measureInWindow((x, y, width, height) => {
-            setMenuPos({ top: y + height + 8, right: Math.max(8, windowWidth - (x + width)) });
+            setMenuPos({ top: y + height + MENU_OFFSET, right: Math.max(8, windowWidth - (x + width)), chipTop: y });
             setOpen(true);
           });
         }}
@@ -112,7 +115,7 @@ export function AccountChip() {
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
         <Pressable accessible={false} tabIndex={-1} onPress={close} style={StyleSheet.absoluteFill} />
-        <View style={[styles.menu, { top: menuTop, right: menuPos.right }, menuMaxHeight != null ? { maxHeight: menuMaxHeight } : null]}>
+        <View style={[styles.menu, { top: menuTop, right: menuPos.right, maxHeight: menuMaxHeight }]}>
           <ScrollView
             style={styles.menuScroll}
             keyboardShouldPersistTaps="handled"
@@ -216,6 +219,8 @@ export function AccountChip() {
 // Space kept between the menu and the keyboard or the top of the screen, and
 // the menu's own vertical padding plus border around its scrolled content.
 const MENU_GAP = 12;
+// Space between the chip and the menu, below or above it.
+const MENU_OFFSET = 8;
 const MENU_CHROME = 14 * 2 + 2;
 
 const styles = StyleSheet.create({

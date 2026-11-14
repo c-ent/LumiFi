@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Animated, Easing, Platform, StyleSheet, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
+import Reanimated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 import { colors } from '@/src/theme/tokens';
 
@@ -30,36 +31,41 @@ export function EqualizerIcon({ size = 19, color = colors.textPrimary }: { size?
 }
 
 function Bar({ width, height, color, rest, ms, still }: { width: number; height: number; color: string; rest: number; ms: number; still: boolean }) {
-  const [scale] = useState(() => new Animated.Value(rest));
+  // On the UI thread (Reanimated): up to full, down to a quarter, back to rest.
+  const scale = useSharedValue(rest);
 
   useEffect(() => {
-    if (still) {
-      scale.setValue(rest);
-      return;
-    }
+    cancelAnimation(scale);
+    scale.set(rest);
+    if (still) return undefined;
     const half = ms / 2;
     const ease = Easing.inOut(Easing.quad);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(scale, { toValue: 1, duration: half, easing: ease, useNativeDriver: Platform.OS !== 'web' }),
-        Animated.timing(scale, { toValue: 0.25, duration: half, easing: ease, useNativeDriver: Platform.OS !== 'web' }),
-        Animated.timing(scale, { toValue: rest, duration: half, easing: ease, useNativeDriver: Platform.OS !== 'web' }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
+    scale.set(withRepeat(
+      withSequence(
+        withTiming(1, { duration: half, easing: ease }),
+        withTiming(0.25, { duration: half, easing: ease }),
+        withTiming(rest, { duration: half, easing: ease }),
+      ),
+      -1,
+      false,
+    ));
+    return () => cancelAnimation(scale);
   }, [scale, rest, ms, still]);
 
+  const grow = useAnimatedStyle(() => ({ transform: [{ scaleY: scale.get() }] }));
+
   return (
-    <Animated.View
-      style={{
-        width,
-        height,
-        borderRadius: width / 2,
-        backgroundColor: color,
-        transformOrigin: 'bottom',
-        transform: [{ scaleY: scale }],
-      }}
+    <Reanimated.View
+      style={[
+        {
+          width,
+          height,
+          borderRadius: width / 2,
+          backgroundColor: color,
+          transformOrigin: 'bottom',
+        },
+        grow,
+      ]}
     />
   );
 }

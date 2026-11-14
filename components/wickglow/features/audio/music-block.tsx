@@ -252,6 +252,12 @@ function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?:
   // Desktop: the cover tile is a square as tall as the title, bar and controls
   // beside it. The text column is measured, since its height comes from fonts.
   const [artSize, setArtSize] = useState(64);
+  // The tile also never takes the room the controls need: on a narrow card it
+  // shrinks so the text column keeps at least NOW_MIN_TEXT.
+  const [rowWidth, setRowWidth] = useState(0);
+  const fittedArt = rowWidth > 0
+    ? Math.max(NOW_MIN_ART, Math.min(artSize, rowWidth - NOW_CHROME - NOW_MIN_TEXT))
+    : artSize;
   // Built once and reused by both the compact and wide layouts below.
   const transport = (
     <>
@@ -298,8 +304,14 @@ function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?:
   }
 
   return (
-    <View style={wideStyles.now}>
-      <TrackArt index={lamp.trackIndex} size={artSize} />
+    <View
+      style={wideStyles.now}
+      onLayout={(event) => {
+        const width = Math.round(event.nativeEvent.layout.width);
+        if (width > 0) setRowWidth((current) => (current === width ? current : width));
+      }}
+    >
+      <TrackArt index={lamp.trackIndex} size={fittedArt} />
       <View
         style={wideStyles.nowCopy}
         onLayout={(event) => {
@@ -318,6 +330,13 @@ function NowPlaying({ mobile = false, wide = false }: { mobile?: boolean; wide?:
     </View>
   );
 }
+
+// The desktop now-playing row: the width its controls need (four buttons, their
+// gaps and the smallest volume bar), the row's padding, border and gap around
+// the tile, and the smallest the tile gets.
+const NOW_MIN_TEXT = 240;
+const NOW_CHROME = 16 * 2 + 2 + 16;
+const NOW_MIN_ART = 48;
 
 // How long a released seek holds the bar at the picked spot while the player's
 // status catches up, so the thumb does not jump back for a moment.

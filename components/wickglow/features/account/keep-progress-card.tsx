@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Pressable, Text } from 'react-native';
+import { Modal, Pressable, ScrollView, Text } from 'react-native';
 import type { ProgressSummary } from '@/components/wickglow/domain/account-sync';
 import { useAccount } from './account';
 import { cardStyles as styles } from './account-card-styles';
@@ -24,21 +24,25 @@ export function KeepProgressCard() {
     <Modal visible={choiceOpen} transparent animationType="fade" onRequestClose={later} statusBarTranslucent>
       <Pressable accessible={false} tabIndex={-1} style={styles.scrim} onPress={later}>
         <Pressable style={styles.card} onPress={(event) => event.stopPropagation()} accessible={false}>
-          <Text style={styles.title} accessibilityRole="header">Keep which progress?</Text>
-          <Text style={[styles.lead, { marginTop: 6 }]}>
-            This device and your account both have progress. Pick one to keep. The other one is replaced, on every device.
-          </Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Keep this device: ${describe(sync.device)}`} style={styles.option} onPress={() => choose('device')}>
-            <Text style={styles.optionTitle}>Keep this device</Text>
-            <Text style={styles.optionMeta}>{describe(sync.device)}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Keep my account: ${describe(sync.account)}`} style={styles.option} onPress={() => choose('account')}>
-            <Text style={styles.optionTitle}>Keep my account</Text>
-            <Text style={styles.optionMeta}>{describe(sync.account)}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" style={styles.secondary} onPress={later}>
-            <Text style={styles.secondaryText}>Decide later</Text>
-          </Pressable>
+          {/* The card is capped to the screen (like the sign-in card), so on a
+              short screen its choices scroll instead of running off it. */}
+          <ScrollView bounces={false}>
+            <Text style={styles.title} accessibilityRole="header">Keep which progress?</Text>
+            <Text style={[styles.lead, { marginTop: 6 }]}>
+              This device and your account both have progress. Pick one to keep. The other one is replaced, on every device.
+            </Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Keep this device: ${describe(sync.device)}`} style={styles.option} onPress={() => choose('device')}>
+              <Text style={styles.optionTitle}>Keep this device</Text>
+              <Text style={styles.optionMeta}>{describe(sync.device)}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Keep my account: ${describe(sync.account)}`} style={styles.option} onPress={() => choose('account')}>
+              <Text style={styles.optionTitle}>Keep my account</Text>
+              <Text style={styles.optionMeta}>{describe(sync.account)}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" style={styles.secondary} onPress={later}>
+              <Text style={styles.secondaryText}>Decide later</Text>
+            </Pressable>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>

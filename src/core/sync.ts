@@ -1,4 +1,4 @@
-import { DayRecord, ProgressLog, SessionRecord } from './progress-log';
+import { DayRecord, FinishedRecord, ProgressLog, SessionRecord } from './progress-log';
 import { Task } from './types';
 
 // How a device's progress and an account's progress are combined. Pure: the
@@ -15,9 +15,14 @@ import { Task } from './types';
 //
 // - Sessions and day records are kept once each, by id. One the account has
 //   not confirmed is pushed.
-// - Tasks: the latest edit wins, and a delete wins over any edit. A deleted
-//   task stays in the account as a small tombstone, which is removed after
-//   30 days (`TOMBSTONE_KEEP_MS`).
+// - Tasks: the latest edit wins, and a delete wins over any edit. An edit
+//   carries the time it was made on its device (`SyncMeta.edits`), not the
+//   time it was sent, so an edit made offline does not beat a newer one. A
+//   deleted task stays in the account as a small tombstone, which is removed
+//   after 30 days (`TOMBSTONE_KEEP_MS`).
+// - A finished task that is deleted keeps its credit: its tombstone carries
+//   the day it was finished (`doneOn`) and is kept, not removed after 30 days.
+//   A tombstone can gain that day once and never lose it.
 // - Only what matters across devices is synced: a task's open subtask list
 //   and its session count are left out (the count comes from the session
 //   records, see `withSessionCounts`).
@@ -28,7 +33,10 @@ import { Task } from './types';
 /** How long a deleted task's tombstone stays in the account. */
 export const TOMBSTONE_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** A task as the account holds it. A tombstone carries only `id`, `updatedAt` and `deleted`. */
+/**
+ * A task as the account holds it. A tombstone carries only `id`, `updatedAt`
+ * and `deleted`, plus `doneOn` when the task was finished before it was deleted.
+ */
 export interface RemoteTask {
   id: number;
   text: string;
@@ -62,10 +70,34 @@ export interface SyncMeta {
   sessions: string[];
   /** Day record keys seen in the account. */
   days: string[];
-  /** Each live task as last seen in the account: when it was written and its synced content. */
-  tasks: Record<string, { stamp: number; sig: string }>;
+  /**
+   * Each live task as last seen in the account: when it was written and its
+   * synced content. `sentDone`: a copy this device sent and the account has not
+   * confirmed was finished, so a finished copy there may be our own.
+   */
+  tasks: Record<string, KnownTask>;
   /** Tombstones seen, by task id, with their time, so old ones can be removed. */
   tombs: Record<string, number>;
+  /**
+   * When this device last had a confirmed read, on its own clock. Away longer
+   * than tombstones are kept means a full read (`since` cannot tell: it stays
+   * old while nobody writes). Missing on a link from before it existed.
+   */
+  checked?: number;
+  /** Ids of deleted finished tasks whose credit was seen in the account. */
+  finished?: string[];
+  /**
+   * When each task edit not yet confirmed by the account was made, on this
+   * device's clock, by task id. Sent as the edit's `updatedAt` and compared
+   * with the account's copy, so the latest edit wins however late it is sent.
+   */
+  edits?: Record<string, number>;
+}
+
+export interface KnownTask {
+  stamp: number;
+  sig: string;
+  sentDone?: true;
 }
 
 export interface SyncPush {
@@ -74,6 +106,13 @@ export interface SyncPush {
   tasks: RemoteTask[];
   /** Task ids whose tombstones are older than 30 days and can be deleted. */
   purge: number[];
+  /**
+   * For a tombstone sent without credit, by task id: the `updatedAt` of the
+   * last copy this device saw. A finish stored in the account counts only if
+   * it is newer (another device's, unseen here); one this device saw and then
+   * undid stays undone. Missing: never take the stored finish.
+   */
+  creditAfter?: Record<string, number>;
 }
 
 export interface Reconciled {
@@ -81,6 +120,25 @@ export interface Reconciled {
   tasks: Task[];
   meta: SyncMeta;
   push: SyncPush;
+}
+
+/**
+ * A task this device sent and the account has not confirmed yet. It counts as
+ * edited (its sig matches nothing) and older than any copy the account holds.
+ */
+const UNCONFIRMED = { stamp: -1, sig: '' } as const;
+
+/**
+ * A known task with an edit sent and not confirmed yet. Its sig matches
+ * nothing, so it stays edited here until a confirmed read settles it: undoing
+ * back to the last confirmed text before then is still a local edit, and the
+ * confirmation of the sent copy cannot replace it. It also remembers whether
+ * any copy sent since was finished (`sentDone`), so a title edit alone does not
+ * hide another device's finish from a later delete.
+ */
+function sent(known: KnownTask | undefined, mine: Task): KnownTask {
+  const base = known ?? UNCONFIRMED;
+  return { stamp: base.stamp, sig: '', ...(known?.sentDone || mine.done ? { sentDone: true } : {}) };
 }
 
 export function emptyMeta(uid: string, epoch = 0, since = 0): SyncMeta {
@@ -93,7 +151,7 @@ export function emptyRemote(): RemoteProgress {
 
 /** True when the account holds anything worth keeping. */
 export function remoteHasProgress(remote: RemoteProgress): boolean {
-  return remote.sessions.length > 0 || remote.legacy.length > 0 || remote.tasks.some((task) => !task.deleted);
+  return remote.sessions.length > 0 || remote.legacy.length > 0 || remote.tasks.some((task) => !task.deleted || task.doneOn != null);
 }
 
 type SyncedFields = Pick<Task, 'text' | 'done' | 'doneOn' | 'parentId' | 'date'>;
@@ -130,8 +188,8 @@ function toRemote(task: Task, now: number): RemoteTask {
   };
 }
 
-function tombstone(id: number, now: number): RemoteTask {
-  return { id, text: '', done: false, doneOn: null, parentId: null, date: null, updatedAt: now, deleted: true };
+function tombstone(id: number, now: number, doneOn: string | null = null): RemoteTask {
+  return { id, text: '', done: false, doneOn, parentId: null, date: null, updatedAt: now, deleted: true };
 }
 
 /** First sign-in, when the account's copy is kept: the device takes it as it is. */
@@ -178,47 +236,114 @@ export function reconcile(
   }
   for (const [d, record] of remoteDays) if (!legacy.has(d)) legacy.set(d, record);
 
+  // Deleted finished tasks, kept once each by task id, like sessions. The
+  // account's copy is the task's tombstone with `doneOn`.
+  const seenFinished = new Set(meta.finished ?? []);
+  const remoteFinished = new Map<string, string>();
+  for (const task of remote.tasks) if (task.deleted && task.doneOn) remoteFinished.set(String(task.id), task.doneOn);
+  const finished = new Map<string, FinishedRecord>();
+  for (const record of local.log.finished ?? []) {
+    const id = String(record.task);
+    const there = remoteFinished.get(id);
+    if (full && there == null && seenFinished.has(id)) continue; // Removed there.
+    finished.set(id, there != null ? { task: record.task, d: there } : record);
+  }
+  for (const [id, d] of remoteFinished) if (!finished.has(id)) finished.set(id, { task: Number(id), d });
+
   // Tasks.
   const remoteTasks = new Map(remote.tasks.map((task) => [String(task.id), task]));
   const localTasks = new Map(local.tasks.map((task) => [String(task.id), task]));
   const kept = new Map<string, Task>();
   const nextMeta: SyncMeta['tasks'] = {};
   const tombs: SyncMeta['tombs'] = full ? {} : { ...meta.tombs };
-  for (const task of remote.tasks) if (task.deleted) tombs[String(task.id)] = task.updatedAt;
+  for (const task of remote.tasks) {
+    if (!task.deleted) continue;
+    // A tombstone with credit is kept for good, so it is not timed out.
+    if (task.doneOn) delete tombs[String(task.id)];
+    else tombs[String(task.id)] = task.updatedAt;
+  }
+  // When each edit was made, kept until the account confirms it or another
+  // copy wins. Never later than now: the rules refuse a time in the future.
+  const edits = meta.edits ?? {};
+  const nextEdits: Record<string, number> = {};
+  const editTime = (id: string) => Math.min(edits[id] ?? now, now);
+  const keepEdit = (id: string) => {
+    if (edits[id] != null) nextEdits[id] = edits[id];
+  };
 
   for (const [id, mine] of localTasks) {
     const theirs = remoteTasks.get(id);
     const known = meta.tasks[id];
-    const edited = !known || known.sig !== taskSig(mine);
-    if (theirs?.deleted) continue; // The delete wins.
+    const edited = edits[id] != null || !known || known.sig !== taskSig(mine);
+    if (theirs?.deleted) {
+      // The delete wins. A finish made here that the account had not seen
+      // keeps its credit, which the tombstone then gains below.
+      if (edited && mine.parentId == null && mine.done && mine.doneOn && !finished.has(id)) {
+        finished.set(id, { task: mine.id, d: mine.doneOn });
+      }
+      continue;
+    }
     if (theirs) {
       const remoteEdited = !known || theirs.updatedAt > known.stamp;
-      if (edited && taskSig(mine) !== taskSig(theirs) && (!remoteEdited || now >= theirs.updatedAt)) {
+      if (edited && taskSig(mine) !== taskSig(theirs) && (!remoteEdited || editTime(id) >= theirs.updatedAt)) {
         // Edited here, and this edit is the latest one. Seen once confirmed.
-        push.tasks.push(toRemote(mine, now));
+        push.tasks.push(toRemote(mine, editTime(id)));
+        keepEdit(id);
         kept.set(id, mine);
-        if (known) nextMeta[id] = known;
+        // As with a new task: remembered as sent, so a delete before the
+        // account confirms this edit still sends a tombstone.
+        nextMeta[id] = sent(known, mine);
       } else {
         kept.set(id, fromRemote(theirs, mine));
         nextMeta[id] = { stamp: theirs.updatedAt, sig: taskSig(theirs) };
       }
       continue;
     }
-    if (known && full) continue; // Removed from the account.
-    if (edited) push.tasks.push(toRemote(mine, now)); // New here, or edited since the last sync.
+    if (known && known.stamp !== UNCONFIRMED.stamp && full) continue; // Removed from the account.
+    if (edited) {
+      // New here, or edited since the last sync.
+      push.tasks.push(toRemote(mine, editTime(id)));
+      keepEdit(id);
+    }
     kept.set(id, mine);
-    if (known) nextMeta[id] = known;
+    // A task new here is remembered as sent, so deleting it before the account
+    // confirms it still sends a tombstone, and the confirmation cannot bring it back.
+    nextMeta[id] = edited ? sent(known, mine) : known;
   }
 
-  // Deleted here since the last sync: the account gets a tombstone, and the
-  // task is remembered until the tombstone is confirmed.
+  // Deleted here since the last sync: the account gets a tombstone (with the
+  // day it was finished, if it was), and the task is remembered until the
+  // tombstone is confirmed.
+  const tombstoned = new Set<string>();
   for (const [id, known] of Object.entries(meta.tasks)) {
     if (localTasks.has(id)) continue;
     const theirs = remoteTasks.get(id);
     if (theirs?.deleted) continue;
-    if (full && !theirs) continue;
-    push.tasks.push(tombstone(Number(id), now));
+    if (full && !theirs && known.stamp !== UNCONFIRMED.stamp) continue;
+    // The credit this device holds, else a finish from another device that
+    // the account's copy shows: the delete wins, the finish keeps its day. A
+    // finish this device already saw does not count: the task was reopened
+    // here before it was deleted. If a finished copy we sent is still
+    // unconfirmed, a finished copy there may be our own, so it never counts;
+    // an unconfirmed edit that was not a finish (a title, say) does not block it.
+    const creditAfter = known.sentDone ? null : known.stamp;
+    const remoteCredit = theirs && creditAfter != null && theirs.updatedAt > creditAfter
+      && theirs.parentId == null && theirs.done && theirs.doneOn ? theirs.doneOn : null;
+    const credit = finished.get(id)?.d ?? remoteCredit;
+    if (credit && !finished.has(id)) finished.set(id, { task: Number(id), d: credit });
+    push.tasks.push(tombstone(Number(id), editTime(id), credit));
+    if (!credit && creditAfter != null) (push.creditAfter ??= {})[id] = creditAfter;
+    tombstoned.add(id);
     nextMeta[id] = known;
+    keepEdit(id);
+  }
+
+  // Credit the account has not seen yet: a finished task deleted before it was
+  // ever synced, or one whose tombstone there has no `doneOn` (the rules let a
+  // tombstone gain it once).
+  for (const [id, record] of finished) {
+    if (tombstoned.has(id) || remoteFinished.has(id) || seenFinished.has(id) || kept.has(id)) continue;
+    push.tasks.push(tombstone(record.task, editTime(id), record.d));
   }
 
   // New in the account.
@@ -231,6 +356,11 @@ export function reconcile(
 
   // Tombstones past their 30 days are removed from the account.
   for (const [id, at] of Object.entries(tombs)) {
+    // Its tombstone is about to gain credit, and is then kept.
+    if (finished.has(id)) {
+      delete tombs[id];
+      continue;
+    }
     if (now - at > TOMBSTONE_KEEP_MS) {
       push.purge.push(Number(id));
       delete tombs[id];
@@ -253,6 +383,7 @@ export function reconcile(
     log: {
       sessions: [...sessions.values()].sort((a, b) => a.end - b.end),
       legacy: [...legacy.values()],
+      ...(finished.size > 0 || local.log.finished ? { finished: [...finished.values()] } : {}),
     },
     tasks,
     meta: {
@@ -265,9 +396,18 @@ export function reconcile(
       days: full ? [...remoteDays.keys()] : union(meta.days, remoteDays.keys()),
       tasks: nextMeta,
       tombs,
+      ...(meta.checked != null ? { checked: meta.checked } : {}),
+      ...finishedSeen(meta, remoteFinished, full),
+      ...(Object.keys(nextEdits).length > 0 ? { edits: nextEdits } : {}),
     },
     push,
   };
+}
+
+/** Credit seen in the account, like the session ids: only what a confirmed read showed. */
+function finishedSeen(meta: SyncMeta, remote: Map<string, string>, full: boolean): Pick<SyncMeta, 'finished'> {
+  const seen = full ? [...remote.keys()] : union(meta.finished ?? [], remote.keys());
+  return seen.length > 0 ? { finished: seen } : {};
 }
 
 function union(known: string[], more: Iterable<string>): string[] {
@@ -297,6 +437,7 @@ export function isQuiet(
   if (push.sessions.length || push.days.length || push.tasks.length || push.purge.length) return false;
   if (before.log.sessions.length !== after.log.sessions.length) return false;
   if (before.log.legacy.length !== after.log.legacy.length) return false;
+  if ((before.log.finished?.length ?? 0) !== (after.log.finished?.length ?? 0)) return false;
   if (before.tasks.length !== after.tasks.length) return false;
   for (let index = 0; index < before.tasks.length; index += 1) {
     const a = before.tasks[index];

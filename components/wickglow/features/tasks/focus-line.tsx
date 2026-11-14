@@ -100,7 +100,8 @@ const styles = StyleSheet.create({
     gap: 8,
     alignSelf: 'center',
     maxWidth: '100%',
-    height: LINE_HEIGHT,
+    // A minimum, so large system text grows the chip instead of clipping it.
+    minHeight: LINE_HEIGHT,
     borderWidth: 1,
     ...rounded(radius.pill),
     paddingHorizontal: 14,

@@ -94,6 +94,19 @@ describe('saved store', () => {
     expect(seen).toEqual([7]);
   });
 
+  it('adopts another tab\'s state without writing it back', () => {
+    const write = jest.fn();
+    const listener = jest.fn();
+    const store = createSavedStore(loaded, write, 300);
+    store.subscribe(listener);
+    const fromOtherTab = { n: 9, label: 'paused' };
+    store.adopt(fromOtherTab);
+    expect(store.get()).toBe(fromOtherTab);
+    expect(listener).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(1000);
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it('flushes a waiting change at once', () => {
     const write = jest.fn();
     const store = createSavedStore(loaded, write, 300);

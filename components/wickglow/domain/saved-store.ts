@@ -22,6 +22,8 @@ export interface SavedStore<T> {
   commit: (next: T) => void;
   /** Change the state from the newest one. Returning the same object is no change. Written shortly after. */
   update: (change: (current: T) => T) => void;
+  /** Take a state another browser tab saved. Shown at once, and not written back. */
+  adopt: (next: T) => void;
   /** Write a waiting change now, for when the app leaves the foreground. */
   flush: () => void;
   /** Write a waiting change, then never write again. For when the store is retired. */
@@ -62,6 +64,8 @@ export function createSavedStore<T>(loaded: T, write: (state: T) => WriteResult,
       queue.later(next);
       set(next);
     },
+    // No write: the other tab already saved this state.
+    adopt: set,
     flush: queue.flush,
     dispose: queue.dispose,
     revive: queue.revive,

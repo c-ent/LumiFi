@@ -12,7 +12,7 @@ import { addNotificationReceivedListener } from 'expo-notifications';
 import { AppState, Linking, Platform, View } from 'react-native';
 import type { PixelArtId } from '@/components/wickglow/domain/pixel-art-ids';
 import type { VideoId } from '@/components/wickglow/domain/video-ids';
-import { SavedState } from '@/components/wickglow/domain/saved-state';
+import { parseSavedState, SavedState, STORAGE_KEY } from '@/components/wickglow/domain/saved-state';
 import { createSavedStore, SavedStore } from '@/components/wickglow/domain/saved-store';
 import { createSessionRun, SessionEnding, SessionRun, StageChange } from '@/components/wickglow/domain/session-run';
 import { deleteOwnTrackFile, pickOwnTracks } from '@/components/wickglow/domain/own-music';
@@ -354,6 +354,24 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
     SAVE_DELAY_MS,
   ));
   const saved = useSyncExternalStore(store.subscribe, store.get, store.get);
+  // Web: browser tabs share one saved copy. When another tab saves, take its
+  // state, so a pause or change made there is not undone by this tab's next
+  // save. Taken without a write, so the two tabs do not pass a save back and
+  // forth. Invalid JSON is ignored rather than read as a fresh state.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY || event.newValue == null) return;
+      try {
+        JSON.parse(event.newValue);
+      } catch {
+        return;
+      }
+      store.adopt(parseSavedState(event.newValue));
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [store]);
   // Audio. Sliders store 0..100; the music player wants 0..1, hence the
   // `/ 100`. The ambient players take the slider levels as they are.
   const music = useMusic(saved.mix.music / 100, saved.ownTracks, saved.musicLoop);

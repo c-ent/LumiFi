@@ -1,5 +1,7 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +15,7 @@ import { colors, fonts, radius, rounded } from '@/src/theme/tokens';
 import { darkGlass, glassPanel } from '@/components/wickglow/shared/panel-styles';
 import { useFullscreen } from '@/components/wickglow/hooks/use-fullscreen';
 import { useKeyboardInset } from '@/components/wickglow/hooks/use-keyboard-inset';
+import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion';
 import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
 import { hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
@@ -26,6 +29,9 @@ import { MonthCalendar } from '@/components/wickglow/features/progression/month-
 import { WeekChart } from '@/components/wickglow/features/progression/week-chart';
 import { ScenePicker } from '@/components/wickglow/features/settings/scene-picker';
 import { EqualizerIcon } from '@/components/wickglow/shared/equalizer-icon';
+import { MarqueeText } from '@/components/wickglow/shared/marquee-text';
+import { AmbientIcon } from '@/components/wickglow/shared/ambient-icon';
+import { ambientOn } from '@/src/core/ambient';
 import { TimerSettings } from '@/components/wickglow/features/settings/timer-settings';
 import { TaskList } from '@/components/wickglow/features/tasks/task-list';
 import { FocusLine } from '@/components/wickglow/features/tasks/focus-line';
@@ -43,6 +49,7 @@ import {
   GearIcon,
   MixerIcon,
   MusicIcon,
+  PauseIcon,
   ResetIcon,
   SceneIcon,
   SkipIcon,
@@ -88,7 +95,7 @@ const PANEL_TITLE: Record<PanelId, string> = {
 export function DesktopWickglow() {
   const lamp = useWickglow();
   // Actions never change identity, so they are pulled out once (see logic.tsx).
-  const { setMode, toggle, startNext, dismissEnding, reset, skip } = lamp;
+  const { setMode, toggle, startNext, dismissEnding, reset, skip, toggleMusic } = lamp;
   const insets = useSafeAreaInsets();
   const fullscreen = useFullscreen();
   const { width, height } = useWindowDimensions();
@@ -160,6 +167,8 @@ export function DesktopWickglow() {
   );
   // Dot on the Quests button while any daily quest is unclaimed.
   const questOpen = hasOpenQuests(lamp.day);
+  // Any ambient sound turned up, so playing.
+  const ambientLive = ambientOn(lamp.mix);
   // Music card height: up to 720px, or whatever fits above the dock.
   const musicRoom = height - insets.top - insets.bottom - 104;
   const musicHeight = Math.min(720, Math.max(0, musicRoom));
@@ -242,11 +251,18 @@ export function DesktopWickglow() {
           screen. Full screen only appears where the browser supports it. */}
       <View style={[styles.dock, { paddingBottom: insets.bottom + 14, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
         <View style={styles.dockGroup}>
-          {/* While a local track plays, moving bars replace the note (and the
-              dot). A streaming link only shows the dot: whether its player is
-              actually playing is not known here. */}
-          <DockButton label={lamp.musicPlaying ? 'Music, playing' : 'Music'} active={panel === 'music'} dot={!lamp.musicPlaying && lamp.activeStreamId != null} onPress={() => togglePanel('music')}>{lamp.musicPlaying ? <EqualizerIcon /> : <MusicIcon />}</DockButton>
-          <DockButton label="Ambient mixer" active={panel === 'mixer'} onPress={() => togglePanel('mixer')}><MixerIcon /></DockButton>
+          <MusicDockButton
+            active={panel === 'music'}
+            onOpen={() => togglePanel('music')}
+            onPause={() => { poke(); toggleMusic(); }}
+          />
+          {/* While any ambient sound is turned up (it plays whenever a slider is
+              above zero, timer or not), the mixer's knobs drift slowly in the
+              accent: quieter than the Music oval, and no dot, which already
+              means other things on the dock. */}
+          <DockButton label={ambientLive ? 'Ambient mixer, sounds on' : 'Ambient mixer'} active={panel === 'mixer'} onPress={() => togglePanel('mixer')}>
+            {ambientLive ? <AmbientIcon accent={panel === 'mixer' ? colors.textInverse : theme.accent} /> : <MixerIcon />}
+          </DockButton>
           <DockButton label="Scenes" active={panel === 'scenes'} onPress={() => togglePanel('scenes')}><SceneIcon /></DockButton>
           <DockButton label="Tasks" active={panel === 'tasks'} onPress={() => togglePanel('tasks')}><TaskIcon /></DockButton>
           <DockButton label="Quests" active={panel === 'quests'} dot={questOpen} onPress={() => togglePanel('quests')}><StarIcon /></DockButton>
@@ -361,6 +377,77 @@ function ProgressBoard() {
 // Quests card contents: just the daily quest list.
 function QuestsBoard() {
   return <QuestList wide />;
+}
+
+// The round size of a dock button, and the Music button's width while a track
+// plays. Fixed, so the oval does not change size from one title to the next;
+// a title or artist too long to fit scrolls slowly (MarqueeText).
+const DOCK_SIZE = 44;
+const NOW_WIDTH = 200;
+
+/**
+ * The Music dock button. Round with a note when nothing plays (plus a dot when
+ * a streaming link is open: whether its player is playing is not known here).
+ * While a local track plays and the Music card is closed, it widens into an
+ * oval with moving bars, the track title and artist, and a pause button. The
+ * width eases between the two (instant under reduced motion); the buttons to
+ * its right slide along. With the card open it is the round, light "on" button,
+ * since the card already shows the track.
+ */
+function MusicDockButton({ active, onOpen, onPause }: { active: boolean; onOpen: () => void; onPause: () => void }) {
+  const { musicPlaying, trackTitle, trackArtist, activeStreamId, sceneTheme } = useWickglow();
+  const reduced = useReducedMotion();
+  const expanded = musicPlaying && !active;
+  const [width] = useState(() => new Animated.Value(DOCK_SIZE));
+  const target = expanded ? NOW_WIDTH : DOCK_SIZE;
+
+  useEffect(() => {
+    if (reduced) {
+      width.setValue(target);
+      return undefined;
+    }
+    const anim = Animated.timing(width, { toValue: target, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: false });
+    anim.start();
+    return () => anim.stop();
+  }, [reduced, target, width]);
+
+  if (!expanded) {
+    return (
+      <Animated.View style={{ width }}>
+        <DockButton label="Music" active={active} dot={!musicPlaying && activeStreamId != null} onPress={onOpen}>
+          {musicPlaying ? <EqualizerIcon /> : <MusicIcon />}
+        </DockButton>
+      </Animated.View>
+    );
+  }
+
+  return (
+    <Animated.View style={[styles.ib, styles.nowPill, { width }]}>
+      {/* Laid out at the full NOW_WIDTH (not squeezed by the growing oval), so
+          the text does not reflow while the oval grows; the clip reveals it. */}
+      <View pointerEvents="box-none" style={styles.nowTrack}>
+        <View style={styles.nowRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Music, now playing ${trackTitle}${trackArtist ? ` by ${trackArtist}` : ''}`}
+            onPress={onOpen}
+            style={styles.nowOpen}
+          >
+            <View style={styles.nowBadge}>
+              <EqualizerIcon size={17} color={sceneTheme.accent} />
+            </View>
+            <View style={styles.nowCopy}>
+              <MarqueeText style={styles.nowTitle} lineHeight={17}>{trackTitle}</MarqueeText>
+              {trackArtist ? <MarqueeText style={styles.nowArtist} lineHeight={14}>{trackArtist}</MarqueeText> : null}
+            </View>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Pause music" onPress={onPause} style={styles.nowPause}>
+            <PauseIcon size={14} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
+    </Animated.View>
+  );
 }
 
 // A round dock icon. Like the phone's DockItem, it recolors its icon child with
@@ -540,6 +627,74 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textPrimary,
     borderColor: colors.textPrimary,
     borderTopColor: colors.textPrimary,
+  },
+  // The Music button widened into an oval: clips its content while it grows.
+  nowPill: {
+    alignItems: 'flex-start',
+    overflow: 'hidden',
+  },
+  // A fixed-width track behind the oval's clip, so its content is laid out at
+  // full size whatever the oval's current width.
+  nowTrack: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: NOW_WIDTH,
+    flexDirection: 'row',
+  },
+  // The oval's content fills the track: bars and text on the left (the text
+  // takes the free space), pause button at the right end.
+  nowRow: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 4,
+    paddingRight: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  nowOpen: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    alignSelf: 'stretch',
+  },
+  nowCopy: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  nowTitle: {
+    color: colors.textPrimary,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+  },
+  nowArtist: {
+    color: colors.textMuted,
+    fontFamily: fonts.body,
+    fontSize: 11,
+  },
+  // The shaded circle behind the moving bars, matching the pause button, so
+  // the oval reads as a circle at each end with the title between them.
+  nowBadge: {
+    width: DOCK_SIZE - 10,
+    height: DOCK_SIZE - 10,
+    borderRadius: (DOCK_SIZE - 10) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  nowPause: {
+    width: DOCK_SIZE - 10,
+    height: DOCK_SIZE - 10,
+    borderRadius: (DOCK_SIZE - 10) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   dot: {
     position: 'absolute',

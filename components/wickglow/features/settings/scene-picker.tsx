@@ -20,8 +20,8 @@ import { SCENES } from '@/components/wickglow/theme';
 import { formatMegabytes } from '@/src/core/remote-scenes';
 
 // Desktop: choose the background. "Ambient tint" is a row of round swatches,
-// one per gradient scene (its middle color; the same themes and colors as the
-// phone/tablet MoodPicker, see components/wickglow/theme.ts). "Scenes" is one
+// one per theme, in its flame colour (the same colour as that theme's card in
+// the phone/tablet MoodPicker, see components/wickglow/theme.ts). "Scenes" is one
 // grid of pixel-art and video tiles, each with a Pixel or Video badge, and
 // All / Pixel art / Video filter pills (the filter is not saved).
 // Exactly one choice across all groups is selected. Phone/tablet use MoodPicker
@@ -70,7 +70,7 @@ export function ScenePicker() {
               onPress={() => tap(`scene:${item.id}`, () => setScene(item.id))}
               style={[tint.ring, selected && tint.ringOn]}
             >
-              <View style={[tint.dot, { backgroundColor: item.b2 }]} />
+              <View style={[tint.dot, { backgroundColor: item.o2 }]} />
             </Pressable>
           );
         })}

@@ -2,9 +2,9 @@
 // Opacity is written as rgba because React Native has no color-mix.
 
 export const colors = {
-  bgBase: '#0E0A17',
-  bgMid: '#1D1328',
-  bgGlow: '#35201F',
+  bgBase: '#1C1007',
+  bgMid: '#42290F',
+  bgGlow: '#6B4417',
   bgSurface: 'rgba(24, 14, 20, 0.93)',
   bgSurfaceSolid: '#140F1C',
   bgCard: 'rgba(255, 255, 255, 0.06)',

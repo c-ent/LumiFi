@@ -17,7 +17,9 @@ import {
 import { MAX_DAY_MINUTES, MAX_DAY_TASKS, sessionRecord, type DayRecord, type SessionRecord } from '@/src/core/progress-log';
 import type { RemoteProgress, RemoteTask, SyncPush } from '@/src/core/sync';
 import { cleanTitle, parseDueDate } from '@/src/core/tasks';
+import { z } from 'zod';
 import { getFirebase } from './firebase';
+import { DAY_KEY, dayKey, readAs } from './lenient';
 
 // The account's progress in Firestore. Everything is one collection, so
 // "anything new since my last sync?" is a single query (Firestore charges at
@@ -37,7 +39,6 @@ import { getFirebase } from './firebase';
 // before it reaches the app. Writes go one by one, not in a batch, so one
 // refused write cannot take the others down with it.
 
-const DAY_KEY = /^\d{4}-\d{1,2}-\d{1,2}$/;
 const RESET_ID = 'reset';
 
 function records(uid: string) {
@@ -46,40 +47,44 @@ function records(uid: string) {
   return { db: client.db, path: `users/${uid}/records` };
 }
 
-function isCount(value: unknown, max: number): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max;
-}
+/** A whole number from 0 to `max`. */
+const upTo = (max: number) => z.int().min(0).max(max);
 
 function readAt(data: DocumentData): number {
   return data.at instanceof Timestamp ? data.at.toMillis() : 0;
 }
 
+const optionalDay = dayKey.nullable().catch(null);
+
+// `doneOn` on a tombstone: the task was finished, and keeps its credit.
+const tombstoneSchema = z.object({ deleted: z.literal(true), updatedAt: z.number(), doneOn: optionalDay });
+
+const liveTaskSchema = z.object({
+  updatedAt: z.number(),
+  text: z.string().transform(cleanTitle).pipe(z.string().min(1)),
+  done: z.boolean(),
+  doneOn: optionalDay,
+  parentId: z.int().nullable().catch(null),
+  date: z.string().transform(parseDueDate).nullable().catch(null),
+});
+
 function readTask(id: number, data: DocumentData): RemoteTask | null {
-  if (typeof data.updatedAt !== 'number' || !Number.isFinite(data.updatedAt)) return null;
   if (data.deleted === true) {
-    // `doneOn` on a tombstone: the task was finished, and keeps its credit.
-    const doneOn = typeof data.doneOn === 'string' && DAY_KEY.test(data.doneOn) ? data.doneOn : null;
+    const tomb = readAs(tombstoneSchema, data, null);
+    if (!tomb) return null;
     // Its 30 days run from when the account received it (`at`).
     const writtenAt = readAt(data);
-    return { id, text: '', done: false, doneOn, parentId: null, date: null, updatedAt: data.updatedAt, deleted: true, ...(writtenAt ? { writtenAt } : {}) };
+    return { id, text: '', done: false, doneOn: tomb.doneOn, parentId: null, date: null, updatedAt: tomb.updatedAt, deleted: true, ...(writtenAt ? { writtenAt } : {}) };
   }
-  const text = typeof data.text === 'string' ? cleanTitle(data.text) : null;
-  if (!text || typeof data.done !== 'boolean') return null;
-  return {
-    id,
-    text,
-    done: data.done,
-    doneOn: typeof data.doneOn === 'string' && DAY_KEY.test(data.doneOn) ? data.doneOn : null,
-    parentId: typeof data.parentId === 'number' && Number.isSafeInteger(data.parentId) ? data.parentId : null,
-    date: typeof data.date === 'string' ? parseDueDate(data.date) : null,
-    updatedAt: data.updatedAt,
-    deleted: false,
-  };
+  const task = readAs(liveTaskSchema, data, null);
+  return task ? { id, ...task, deleted: false } : null;
 }
+
+const dayRecordSchema = z.object({ minutes: upTo(MAX_DAY_MINUTES), sessions: upTo(MAX_DAY_MINUTES / 10), tasks: upTo(MAX_DAY_TASKS) });
 
 /** The reset a record was written under. Records from before epochs existed count as 0. */
 function recordEpoch(data: DocumentData): number {
-  return isCount(data.epoch, Number.MAX_SAFE_INTEGER) ? data.epoch : 0;
+  return readAs(upTo(Number.MAX_SAFE_INTEGER), data.epoch, 0);
 }
 
 /**
@@ -100,7 +105,7 @@ function readRecords(docs: QueryDocumentSnapshot<DocumentData>[]): { progress: R
   for (const item of docs) {
     if (item.id !== RESET_ID) continue;
     const data = item.data();
-    if (isCount(data.epoch, Number.MAX_SAFE_INTEGER)) epoch = data.epoch;
+    epoch = readAs(upTo(Number.MAX_SAFE_INTEGER).nullable(), data.epoch, null);
   }
   for (const item of docs) {
     const data = item.data();
@@ -117,8 +122,8 @@ function readRecords(docs: QueryDocumentSnapshot<DocumentData>[]): { progress: R
     } else if (id.startsWith('d_')) {
       const d = id.slice(2);
       if (!DAY_KEY.test(d)) continue;
-      if (!isCount(data.minutes, MAX_DAY_MINUTES) || !isCount(data.sessions, MAX_DAY_MINUTES / 10) || !isCount(data.tasks, MAX_DAY_TASKS)) continue;
-      legacy.push({ d, minutes: data.minutes, sessions: data.sessions, tasks: data.tasks });
+      const day = readAs(dayRecordSchema, data, null);
+      if (day) legacy.push({ d, ...day });
     } else if (id.startsWith('t_')) {
       const taskId = Number(id.slice(2));
       if (!Number.isSafeInteger(taskId)) continue;

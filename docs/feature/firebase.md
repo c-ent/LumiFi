@@ -1,6 +1,6 @@
 # Firebase: accounts and saving
 
-The plan for adding accounts and cloud saving to Wickglow with Firebase. It covers what is decided, what is set up, the build steps, and what is still open. Status as of 2026-11-13: steps 1 to 6 are built in code, with the read-cost fix (fix B and savings 1 to 4); what is left needs the owner (see Owner tasks) or a device.
+The plan for adding accounts and cloud saving to Wickglow with Firebase. It covers what is decided, what is set up, the build steps, and what is still open. Status: done (owner, 2026-11-14). Steps 1 to 6 are built, with the read-cost fix (fix B and savings 1 to 4); the rules are deployed and the EAS Firebase vars are set. The privacy policy deploy and the Play deletion-policy check moved to the Play release steps in progress.md.
 
 Related: [progress.md](../agent/progress.md) (current status), [architecture.md](../agent/architecture.md) (rules for `src/data` and auth), [roadmap.md](../agent/roadmap.md) (item 5, Accounts and sync).
 

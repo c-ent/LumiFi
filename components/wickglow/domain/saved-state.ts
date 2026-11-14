@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { MixLevels, silentAmbient } from '@/src/core/ambient';
 import { idleSession, SessionClock } from '@/src/core/clock';
 import { emptyDay, restoreDayHistory } from '@/src/core/history';
@@ -9,6 +10,7 @@ import { DEFAULT_MINUTES, MAX_MINUTES, MIN_MINUTES, modeDurationMs } from '@/src
 import { MusicEnd } from '@/src/core/session-end';
 import { parseDueDate } from '@/src/core/tasks';
 import type { DayHistory, DayStats, ProgressState, StreakState, Task, TimerCfg, TimerMode } from '@/src/core/types';
+import { count, dayKey, readAs, validEntries, validItems } from '@/src/data/lenient';
 import { PixelArtId, readPixelArtId } from '@/components/wickglow/domain/pixel-art-ids';
 import { readVideoId, VideoId } from '@/components/wickglow/domain/video-ids';
 import { MoodId, SceneId } from '@/components/wickglow/theme';
@@ -17,16 +19,16 @@ import { MoodId, SceneId } from '@/components/wickglow/theme';
 // `storage.ts` hands the raw string in, `parseSavedState` turns it into a
 // `SavedState`, and `logic.tsx` writes that same shape back out. Every read is
 // defensive: a stored save can come from an older version or be hand-edited, so
-// every field is read through a check and falls back to a default rather than
-// throwing. The result is built from the known fields only, so a key this
-// version does not know (an old `goals` list, a typo) is dropped instead of
-// being carried in the save forever. Parsing never throws: a save that is not
-// valid JSON becomes a fresh state.
+// every field is read through a Zod schema (src/data/lenient.ts) and falls back
+// to a default rather than throwing. The result is built from the known fields
+// only, so a key this version does not know (an old `goals` list, a typo) is
+// dropped instead of being carried in the save forever. Parsing never throws: a
+// save that is not valid JSON becomes a fresh state.
 
 export const STORAGE_KEY = 'wickglow:state';
 export const LEGACY_STORAGE_KEY = 'lumifi:state';
 
-const MODES: TimerMode[] = ['focus', 'short', 'long'];
+const MODES = ['focus', 'short', 'long'] as const satisfies readonly TimerMode[];
 // Scenes and moods are the same themes (see components/wickglow/theme.ts).
 const THEME_IDS: MoodId[] = ['amber', 'moon', 'rose', 'violet', 'ash', 'forest', 'tide'];
 const SCENE_IDS: SceneId[] = THEME_IDS;
@@ -125,7 +127,7 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fresh;
     const saved = parsed as { [key in keyof SavedState]?: unknown };
-    const restored = restoreDayHistory(readHistory(saved.days), isDayStats(saved.day) ? saved.day : null, now);
+    const restored = restoreDayHistory(readHistory(saved.days), readDayStats(saved.day), now);
     const cfg = readCfg(saved.cfg);
     const tasks = readTasks(saved.tasks) ?? fresh.tasks;
     const xp = readXp(saved.xp);
@@ -165,35 +167,35 @@ export function parseSavedState(raw: string | null, now = Date.now()): SavedStat
   }
 }
 
+// A missing, non-numeric or out-of-range length falls back to the default
+// rather than reaching modeDurationMs, which would not clamp it.
+const minutesFor = (mode: TimerMode) => z.number().min(MIN_MINUTES)
+  .transform((minutes) => Math.min(minutes, MAX_MINUTES[mode]))
+  .catch(DEFAULT_MINUTES[mode]);
+const cfgSchema = z.object({ focus: minutesFor('focus'), short: minutesFor('short'), long: minutesFor('long') });
+
 function readCfg(value: unknown): TimerCfg {
-  if (!value || typeof value !== 'object') return { ...DEFAULT_MINUTES };
-  const saved = value as Partial<Record<TimerMode, unknown>>;
-  const cfg = {} as TimerCfg;
-  for (const mode of MODES) {
-    const minutes = saved[mode];
-    // A missing, non-numeric or out-of-range length falls back to the default
-    // rather than reaching modeDurationMs, which would not clamp it.
-    cfg[mode] = typeof minutes === 'number' && Number.isFinite(minutes) && minutes >= MIN_MINUTES
-      ? Math.min(minutes, MAX_MINUTES[mode])
-      : DEFAULT_MINUTES[mode];
-  }
-  return cfg;
+  return readAs(cfgSchema, value, { ...DEFAULT_MINUTES });
 }
 
+const xpSchema = z.number().positive().transform((xp) => Math.min(Math.floor(xp), MAX_XP));
+
 function readXp(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
-  return Math.min(Math.floor(value), MAX_XP);
+  return readAs(xpSchema, value, 0);
 }
 
 function readMusicEnd(value: unknown): MusicEnd {
-  return value === 'keep' || value === 'lower' || value === 'fade' ? value : 'lower';
+  return readAs(z.enum(['keep', 'lower', 'fade']), value, 'lower');
 }
 
 /** A whole number that cannot go below zero: the focus-session count, the streak length. */
+const wholeCount = z.number().positive().transform(Math.floor).catch(0);
+
 function readCount(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
-  return Math.floor(value);
+  return wholeCount.parse(value);
 }
+
+const mixLevel = z.number().transform((level) => Math.max(0, Math.min(100, level)));
 
 /**
  * Each slider is 0..100. A value that is not a real number would reach the
@@ -201,21 +203,26 @@ function readCount(value: unknown): number {
  * default, and an out-of-range one is clamped. Unknown sliders are dropped.
  */
 function readMix(value: unknown, fallback: MixLevels): MixLevels {
-  const mix = { ...fallback };
-  if (!value || typeof value !== 'object') return mix;
-  const saved = value as Partial<Record<keyof MixLevels, unknown>>;
-  for (const key of Object.keys(fallback) as (keyof MixLevels)[]) {
-    const level = saved[key];
-    if (typeof level === 'number' && Number.isFinite(level)) mix[key] = Math.max(0, Math.min(100, level));
-  }
-  return mix;
+  const keys = Object.keys(fallback) as (keyof MixLevels)[];
+  const schema = z.object(Object.fromEntries(keys.map((key) => [key, mixLevel.catch(fallback[key])])));
+  return readAs(schema, value, { ...fallback }) as MixLevels;
 }
 
+const streakSchema = z.object({ n: wholeCount, last: z.string().catch('') });
+
 function readStreak(value: unknown): StreakState {
-  if (!value || typeof value !== 'object') return { n: 0, last: '' };
-  const streak = value as Partial<Record<keyof StreakState, unknown>>;
-  return { n: readCount(streak.n), last: typeof streak.last === 'string' ? streak.last : '' };
+  return readAs(streakSchema, value, { n: 0, last: '' });
 }
+
+const sessionFields = z.object({
+  mode: z.enum(MODES).catch('focus'),
+  status: z.enum(['running', 'paused', 'idle']).catch('idle'),
+  // Lengths are always whole minutes; anything else (9.5 minutes, which would
+  // round up to the 10-minute reward threshold) is not trusted.
+  totalMs: z.number().positive().multipleOf(60000).nullable().catch(null),
+  remainingMs: count.nullable().catch(null),
+  endAt: z.number().nullable().catch(null),
+});
 
 /**
  * Rebuilds a session from storage, clamping its length to the configured
@@ -226,57 +233,39 @@ function readStreak(value: unknown): StreakState {
  * `endAt - now` can never show more time than the session holds.
  */
 function readSession(value: unknown, cfg: TimerCfg, now: number): SessionClock {
-  const fallback = idleSession('focus', modeDurationMs(cfg, 'focus'));
-  if (!value || typeof value !== 'object') return fallback;
-  const session = value as Partial<SessionClock>;
-  const mode = MODES.includes(session.mode as TimerMode) ? session.mode as TimerMode : 'focus';
-  const status = session.status === 'running' || session.status === 'paused' || session.status === 'idle'
-    ? session.status
-    : 'idle';
-  const limit = MAX_MINUTES[mode] * 60000;
+  const session = readAs(sessionFields, value, null);
+  if (!session) return idleSession('focus', modeDurationMs(cfg, 'focus'));
+  const { mode, status } = session;
   // A save from before totalMs existed falls back to the configured length.
-  // Lengths are always whole minutes; anything else (9.5 minutes, which would
-  // round up to the 10-minute reward threshold) is not trusted either.
-  const storedTotal = typeof session.totalMs === 'number' && Number.isFinite(session.totalMs)
-    && session.totalMs > 0 && session.totalMs % 60000 === 0
-    ? session.totalMs
-    : modeDurationMs(cfg, mode);
-  const totalMs = Math.min(storedTotal, limit);
-  const remainingMs = typeof session.remainingMs === 'number' && Number.isFinite(session.remainingMs) && session.remainingMs >= 0
-    ? Math.min(session.remainingMs, totalMs)
-    : totalMs;
-  const storedEnd = typeof session.endAt === 'number' && Number.isFinite(session.endAt) ? session.endAt : null;
-  const endAt = storedEnd == null ? null : Math.min(storedEnd, now + totalMs);
+  const totalMs = Math.min(session.totalMs ?? modeDurationMs(cfg, mode), MAX_MINUTES[mode] * 60000);
+  const remainingMs = session.remainingMs == null ? totalMs : Math.min(session.remainingMs, totalMs);
+  const endAt = session.endAt == null ? null : Math.min(session.endAt, now + totalMs);
   if (status === 'running' && endAt == null) return { mode, status: 'paused', endAt: null, remainingMs, totalMs };
   return { mode, status, endAt: status === 'running' ? endAt : null, remainingMs, totalMs };
 }
 
+const taskSchema = z.object({
+  id: z.number(),
+  text: z.string(),
+  done: z.boolean(),
+  // A count of finished sessions: a whole number, never below zero.
+  pomos: z.number().transform((pomos) => Math.max(0, Math.floor(pomos))),
+  // A save from before doneOn existed has no completion day to fall back on,
+  // so only a task already marked done keeps an unknown day.
+  doneOn: z.string().nullable().catch(null),
+  parentId: z.number().nullable().catch(null),
+  date: z.string().transform(parseDueDate).nullable().catch(null),
+  open: z.boolean().catch(false),
+});
+
 function readTasks(value: unknown): Task[] | null {
   if (!Array.isArray(value)) return null;
-  const tasks: Task[] = [];
   const ids = new Set<number>();
-  for (const item of value) {
-    if (!item || typeof item !== 'object') continue;
-    const task = item as Partial<Task>;
-    if (typeof task.id !== 'number' || typeof task.text !== 'string' || typeof task.done !== 'boolean' || typeof task.pomos !== 'number') continue;
+  const tasks: Task[] = [];
+  for (const task of validItems(taskSchema, value)) {
     if (ids.has(task.id)) continue;
     ids.add(task.id);
-    // A save from before doneOn existed has no completion day to fall back on,
-    // so only a task already marked done keeps an unknown day.
-    const doneOn = typeof task.doneOn === 'string' ? task.doneOn : null;
-    const parentId = typeof task.parentId === 'number' ? task.parentId : null;
-    const date = typeof task.date === 'string' ? parseDueDate(task.date) : null;
-    tasks.push({
-      id: task.id,
-      text: task.text,
-      done: task.done,
-      // A count of finished sessions: a whole number, never below zero.
-      pomos: Number.isFinite(task.pomos) ? Math.max(0, Math.floor(task.pomos)) : 0,
-      doneOn,
-      parentId,
-      date,
-      open: task.open === true,
-    });
+    tasks.push(task);
   }
   const parents = new Set(tasks.filter((task) => task.parentId == null).map((task) => task.id));
   return tasks.map((task) => {
@@ -289,76 +278,58 @@ function readTasks(value: unknown): Task[] | null {
   });
 }
 
-function isDayStats(value: unknown): value is DayStats {
-  if (!value || typeof value !== 'object') return false;
-  const day = value as Partial<DayStats>;
-  return typeof day.d === 'string'
-    && isCount(day.sessions)
-    && isCount(day.minutes)
-    && isCount(day.tasks)
-    && Array.isArray(day.claimed)
-    && day.claimed.every((id) => typeof id === 'string');
-}
+const dayStatsSchema = z.object({
+  d: z.string(),
+  sessions: count,
+  minutes: count,
+  tasks: count,
+  claimed: z.array(z.string()),
+});
 
-/** A finite number that is not below zero. */
-function isCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+function readDayStats(value: unknown): DayStats | null {
+  return readAs(dayStatsSchema, value, null);
 }
 
 function readHistory(value: unknown): DayHistory {
-  if (!value || typeof value !== 'object') return {};
   const history: DayHistory = {};
-  for (const entry of Object.values(value)) {
-    if (isDayStats(entry)) history[entry.d] = entry;
-  }
+  for (const [, day] of validEntries(dayStatsSchema, value)) history[day.d] = day;
   return history;
 }
+
+// `task` and `d` are checked by `sessionRecord`, and either may be missing.
+const logSessionSchema = z.object({ end: z.number(), minutes: z.number(), task: z.unknown().optional(), d: z.unknown().optional() });
+const logDaySchema = z.object({ d: dayKey, minutes: count, sessions: count, tasks: count });
+const finishedSchema = z.object({ task: z.int(), d: dayKey });
 
 function readLog(value: unknown): ProgressLog {
   if (!value || typeof value !== 'object') return emptyLog();
   const log = value as { sessions?: unknown; legacy?: unknown; finished?: unknown };
   const sessions: SessionRecord[] = [];
   const ids = new Set<string>();
-  if (Array.isArray(log.sessions)) {
-    for (const item of log.sessions) {
-      if (!item || typeof item !== 'object') continue;
-      const entry = item as Partial<SessionRecord>;
-      const record = typeof entry.end === 'number' && typeof entry.minutes === 'number'
-        ? sessionRecord(entry.end, entry.minutes, typeof entry.task === 'number' ? entry.task : null, entry.d)
-        : null;
-      if (!record || ids.has(record.id)) continue;
-      ids.add(record.id);
-      sessions.push(record);
-    }
+  for (const entry of validItems(logSessionSchema, log.sessions)) {
+    const record = sessionRecord(entry.end, entry.minutes, typeof entry.task === 'number' ? entry.task : null, entry.d);
+    if (!record || ids.has(record.id)) continue;
+    ids.add(record.id);
+    sessions.push(record);
   }
   const legacy: DayRecord[] = [];
   const days = new Set<string>();
-  if (Array.isArray(log.legacy)) {
-    for (const item of log.legacy) {
-      if (!item || typeof item !== 'object') continue;
-      const entry = item as Partial<DayRecord>;
-      if (typeof entry.d !== 'string' || !DAY_KEY.test(entry.d) || days.has(entry.d)) continue;
-      if (!isCount(entry.minutes) || !isCount(entry.sessions) || !isCount(entry.tasks)) continue;
-      days.add(entry.d);
-      legacy.push({
-        d: entry.d,
-        minutes: Math.min(MAX_DAY_MINUTES, Math.floor(entry.minutes)),
-        sessions: Math.min(MAX_DAY_MINUTES / 10, Math.floor(entry.sessions)),
-        tasks: Math.min(MAX_DAY_TASKS, Math.floor(entry.tasks)),
-      });
-    }
+  for (const entry of validItems(logDaySchema, log.legacy)) {
+    if (days.has(entry.d)) continue;
+    days.add(entry.d);
+    legacy.push({
+      d: entry.d,
+      minutes: Math.min(MAX_DAY_MINUTES, Math.floor(entry.minutes)),
+      sessions: Math.min(MAX_DAY_MINUTES / 10, Math.floor(entry.sessions)),
+      tasks: Math.min(MAX_DAY_TASKS, Math.floor(entry.tasks)),
+    });
   }
   const finished: FinishedRecord[] = [];
   const finishedIds = new Set<number>();
-  if (Array.isArray(log.finished)) {
-    for (const item of log.finished) {
-      if (!item || typeof item !== 'object') continue;
-      const entry = item as Partial<FinishedRecord>;
-      if (typeof entry.task !== 'number' || !Number.isSafeInteger(entry.task) || finishedIds.has(entry.task)) continue;
-      if (typeof entry.d !== 'string' || !DAY_KEY.test(entry.d)) continue;
-      finishedIds.add(entry.task);
-      finished.push({ task: entry.task, d: entry.d });
-    }
+  for (const entry of validItems(finishedSchema, log.finished)) {
+    if (finishedIds.has(entry.task)) continue;
+    finishedIds.add(entry.task);
+    finished.push(entry);
   }
   return {
     sessions: sessions.sort((a, b) => a.end - b.end),
@@ -367,8 +338,9 @@ function readLog(value: unknown): ProgressLog {
   };
 }
 
-// `calendarKey` format: no zero padding.
-const DAY_KEY = /^\d{4}-\d{1,2}-\d{1,2}$/;
+const syncBase = z.object({ uid: z.string().min(1), epoch: count, since: count });
+const knownTaskSchema = z.object({ stamp: z.number(), sig: z.string(), sentDoneAt: z.number().optional().catch(undefined) })
+  .transform(({ sentDoneAt, ...known }) => (sentDoneAt != null ? { ...known, sentDoneAt } : known));
 
 /**
  * The link to an account. A record from the first build of accounts (no
@@ -376,43 +348,22 @@ const DAY_KEY = /^\d{4}-\d{1,2}-\d{1,2}$/;
  * read rather than trusting a shape the sync no longer uses.
  */
 function readSyncMeta(value: unknown): SyncMeta | null {
-  if (!value || typeof value !== 'object') return null;
+  const base = readAs(syncBase, value, null);
+  if (!base) return null;
   const meta = value as Partial<Record<keyof SyncMeta, unknown>>;
-  if (typeof meta.uid !== 'string' || meta.uid.length === 0) return null;
-  if (!isCount(meta.epoch) || !isCount(meta.since)) return null;
-  const strings = (list: unknown) => (Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string') : []);
-  const tasks: SyncMeta['tasks'] = {};
-  if (meta.tasks && typeof meta.tasks === 'object') {
-    for (const [id, entry] of Object.entries(meta.tasks as Record<string, unknown>)) {
-      if (!entry || typeof entry !== 'object') continue;
-      const known = entry as { stamp?: unknown; sig?: unknown; sentDoneAt?: unknown };
-      if (typeof known.stamp === 'number' && Number.isFinite(known.stamp) && typeof known.sig === 'string') {
-        tasks[id] = { stamp: known.stamp, sig: known.sig, ...(typeof known.sentDoneAt === 'number' && Number.isFinite(known.sentDoneAt) ? { sentDoneAt: known.sentDoneAt } : {}) };
-      }
-    }
-  }
-  const tombs: SyncMeta['tombs'] = {};
-  if (meta.tombs && typeof meta.tombs === 'object') {
-    for (const [id, at] of Object.entries(meta.tombs as Record<string, unknown>)) {
-      if (typeof at === 'number' && Number.isFinite(at)) tombs[id] = at;
-    }
-  }
-  const edits: Record<string, number> = {};
-  if (meta.edits && typeof meta.edits === 'object') {
-    for (const [id, at] of Object.entries(meta.edits as Record<string, unknown>)) {
-      if (isCount(at)) edits[id] = Math.floor(at);
-    }
-  }
+  const edits = Object.fromEntries(validEntries(count, meta.edits).map(([id, at]) => [id, Math.floor(at)]));
+  const finished = validItems(z.string(), meta.finished);
+  const checked = readAs(count.nullable(), meta.checked, null);
   return {
-    uid: meta.uid,
-    epoch: Math.floor(meta.epoch),
-    since: Math.floor(meta.since),
-    sessions: strings(meta.sessions),
-    days: strings(meta.days),
-    tasks,
-    tombs,
-    ...(isCount(meta.checked) ? { checked: Math.floor(meta.checked) } : {}),
-    ...(strings(meta.finished).length > 0 ? { finished: strings(meta.finished) } : {}),
+    uid: base.uid,
+    epoch: Math.floor(base.epoch),
+    since: Math.floor(base.since),
+    sessions: validItems(z.string(), meta.sessions),
+    days: validItems(z.string(), meta.days),
+    tasks: Object.fromEntries(validEntries(knownTaskSchema, meta.tasks)),
+    tombs: Object.fromEntries(validEntries(z.number(), meta.tombs)),
+    ...(checked != null ? { checked: Math.floor(checked) } : {}),
+    ...(finished.length > 0 ? { finished } : {}),
     ...(Object.keys(edits).length > 0 ? { edits } : {}),
   };
 }

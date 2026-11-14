@@ -11,10 +11,11 @@ const AnimatedPath = Reanimated.createAnimatedComponent(Path);
 // knob rests (as on the still MixerIcon), where it drifts to, and how long one
 // drift there and back takes (halved 2026-11-14, owner asked for faster). Out
 // of step, so it reads as "on" rather than "playing".
+// Columns and knobs match Lucide's sliders-vertical (MixerIcon, 2026-11-14).
 const COLUMNS = [
-  { x: 4, rest: 14, to: 9, ms: 1700 },
+  { x: 5, rest: 14, to: 9, ms: 1700 },
   { x: 12, rest: 8, to: 13, ms: 2050 },
-  { x: 20, rest: 16, to: 11, ms: 1850 },
+  { x: 19, rest: 16, to: 11, ms: 1850 },
 ];
 // One loop of the shared clock: a whole number of every column's drift
 // (the least common multiple of 1700, 2050 and 1850 ms, about 43 minutes), so
@@ -22,7 +23,7 @@ const COLUMNS = [
 const CYCLE_MS = 2578900;
 // Gap left in the track on each side of a knob, and the knob's half width.
 const GAP = 2;
-const HALF_KNOB = 3;
+const HALF_KNOB = 2;
 
 /** Each knob's height at `clock` ms: it eases between rest and `to` along a cosine, slowing at both ends. */
 function knobY(column: (typeof COLUMNS)[number], clock: number): number {

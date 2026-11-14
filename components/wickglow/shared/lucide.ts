@@ -1,0 +1,32 @@
+// The Lucide icons the app uses, from `lucide-react-native` on Android and
+// iOS. The web build takes `lucide.web.ts` (the same names from
+// `lucide-react`) instead. Chosen in AGENTS.md (Icons row).
+export {
+  Calendar,
+  ChartNoAxesColumn,
+  ChevronRight,
+  Clock,
+  Download,
+  Flame,
+  Image,
+  Maximize,
+  Music,
+  Pause,
+  PenLine,
+  Play,
+  Repeat,
+  RotateCcw,
+  Settings,
+  SkipBack,
+  SkipForward,
+  SlidersVertical,
+  SquareCheckBig,
+  Star,
+  Target,
+  Timer,
+  Trash2,
+  Upload,
+  User,
+  Volume1,
+  X,
+} from 'lucide-react-native';

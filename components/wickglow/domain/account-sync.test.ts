@@ -621,7 +621,7 @@ describe('account sync', () => {
     expect(second.store.get().tasks).toEqual([]);
   });
 
-  it('keeps everything on the device after signing out, and sends what was done meanwhile on the next sign-in', async () => {
+  it('keeps everything on the device when syncing stops without a sign-out, and sends what was done meanwhile on the next start', async () => {
     const account = fakeAccount();
     const first = device(account, withFocus(createInitialState(NOW), NOW - 3600000, 25));
     track(first);
@@ -635,6 +635,115 @@ describe('account sync', () => {
     first.sync.start('u1');
     await first.settle();
     expect(account.sessions()).toBe(2);
+  });
+
+  it('signing out clears the device, so the next account to sign in does not take the progress', async () => {
+    const account = fakeAccount();
+    const other = fakeAccount();
+    let state = withFocus(createInitialState(NOW), NOW - 3600000, 50);
+    state = { ...addTask(state, 'Essay', null, NOW), mood: 'violet', cfg: { ...state.cfg, focus: 40 } };
+    const first = device(account, state);
+    track(first);
+    first.sync.start('u1');
+    await first.settle();
+    expect(first.sync.unsaved()).toBe(false);
+
+    first.sync.forget();
+    const cleared = first.store.get();
+    expect(first.sync.status()).toEqual({ phase: 'off' });
+    expect(cleared.xp).toBe(0);
+    expect(cleared.tasks).toEqual([]);
+    expect(cleared.log.sessions).toEqual([]);
+    expect(cleared.day.minutes).toBe(0);
+    expect(cleared.sync).toBeNull();
+    // Settings are per device and stay.
+    expect(cleared.mood).toBe('violet');
+    expect(cleared.cfg.focus).toBe(40);
+    // Clearing is not a delete: the account keeps everything.
+    await first.settle();
+    expect(account.sessions()).toBe(1);
+    expect(account.tasks().filter((task) => !task.deleted)).toHaveLength(1);
+
+    // A new account signing in on this device starts empty and stays empty.
+    const next = { ...first, sync: createAccountSync({ store: first.store, remote: other.remote, now: () => NOW }) };
+    track(next);
+    next.sync.start('u2');
+    await flush();
+    expect(other.sessions()).toBe(0);
+    expect(other.tasks()).toEqual([]);
+    expect(first.store.get().xp).toBe(0);
+  });
+
+  it('signing back in after a sign-out brings the progress back from the account', async () => {
+    const account = fakeAccount();
+    const first = device(account, withFocus(createInitialState(NOW), NOW - 3600000, 25));
+    track(first);
+    first.sync.start('u1');
+    await first.settle();
+    first.sync.forget();
+    first.sync.start('u1');
+    await first.settle();
+    expect(first.store.get().xp).toBe(50);
+    expect(first.store.get().day.minutes).toBe(25);
+  });
+
+  it('counts a finished session or a task edit as unsaved until the account confirms it', async () => {
+    const account = fakeAccount();
+    const first = device(account);
+    track(first);
+    first.sync.start('u1');
+    await first.settle();
+    expect(first.sync.unsaved()).toBe(false);
+
+    first.store.commit(withFocus(first.store.get(), NOW - 600000, 25));
+    expect(first.sync.unsaved()).toBe(true);
+    const saved = first.sync.whenSaved(4000);
+    first.sync.flush();
+    await flush();
+    await expect(saved).resolves.toBe(true);
+    expect(first.sync.unsaved()).toBe(false);
+
+    first.store.commit(addTask(first.store.get(), 'Read', null, NOW));
+    expect(first.sync.unsaved()).toBe(true);
+    await first.settle();
+    expect(first.sync.unsaved()).toBe(false);
+  });
+
+  it('reports progress as unsaved when the account does not answer in time', async () => {
+    const account = fakeAccount();
+    const first = device(account);
+    track(first);
+    first.sync.start('u1');
+    await first.settle();
+    account.hold();
+    first.store.commit(withFocus(first.store.get(), NOW - 600000, 25));
+    first.sync.flush();
+    const saved = first.sync.whenSaved(4000);
+    await flush();
+    // The wait's deadline is the only timer left.
+    expect(first.timers.map((timer) => timer.ms)).toEqual([4000]);
+    first.timers.shift()?.run();
+    await expect(saved).resolves.toBe(false);
+    expect(first.sync.unsaved()).toBe(true);
+    account.release();
+  });
+
+  it('counts all device progress as unsaved before a choice is made ("Decide later")', async () => {
+    const account = fakeAccount();
+    const elsewhere = device(account, withFocus(createInitialState(NOW), NOW - 7200000, 25));
+    track(elsewhere);
+    elsewhere.sync.start('u1');
+    await elsewhere.settle();
+
+    const first = device(account, withFocus(createInitialState(NOW), NOW - 3600000, 50));
+    track(first);
+    first.sync.start('u1');
+    await first.settle();
+    expect(first.sync.status().phase).toBe('choose');
+    expect(first.sync.unsaved()).toBe(true);
+    first.sync.forget();
+    expect(first.store.get().xp).toBe(0);
+    expect(first.sync.unsaved()).toBe(false);
   });
 
   it('sends waiting task edits at once when the app leaves the foreground', async () => {

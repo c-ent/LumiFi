@@ -93,6 +93,27 @@ export function createInitialState(now = Date.now()): SavedState {
 }
 
 /**
+ * The state after signing out (owner, 2026-11-14): the progress (XP, streak,
+ * history, tasks, the log and the link to the account) goes back to a fresh
+ * install's, so the next account to sign in here cannot take it. Settings,
+ * sounds, scenes and the timer stay: they are per device and never synced.
+ */
+export function withoutProgress(state: SavedState, now = Date.now()): SavedState {
+  const fresh = createInitialState(now);
+  return {
+    ...state,
+    xp: fresh.xp,
+    streak: fresh.streak,
+    day: fresh.day,
+    days: fresh.days,
+    tasks: fresh.tasks,
+    activeId: fresh.activeId,
+    log: fresh.log,
+    sync: fresh.sync,
+  };
+}
+
+/**
  * Turns stored JSON into a `SavedState`, never throwing. Anything missing or
  * unrecognised falls back to `createInitialState`, and a key that is not part
  * of the state (a legacy `goals` list) is dropped on the way through.

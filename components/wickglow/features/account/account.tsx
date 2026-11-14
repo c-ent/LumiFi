@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Linking } from 'react-native';
 import {
   accountsAvailable,
@@ -37,7 +37,17 @@ export interface AccountValue {
   signInGoogle: () => Promise<AuthResult>;
   resetPassword: (email: string) => Promise<AuthResult>;
   resend: () => Promise<AuthResult>;
-  signOut: () => Promise<AuthResult>;
+  /**
+   * Signs out and clears the progress from this device (owner, 2026-11-14).
+   * If some of it is not in the account yet, waits a moment for it, then asks
+   * first (`leaving`).
+   */
+  signOut: () => Promise<void>;
+  /** The sign-out card: waiting for progress to save, or warning that some is not saved. */
+  leaving: 'saving' | 'unsaved' | null;
+  /** "Sign out anyway": the unsaved progress is removed from this device. */
+  confirmSignOut: () => void;
+  cancelSignOut: () => void;
   setName: (name: string) => Promise<AuthResult>;
   choose: (keep: 'device' | 'account') => void;
   /** The keep-which-progress card is showing (it can be put off with "Decide later"). */
@@ -65,6 +75,8 @@ export function deletionMailto(user: AccountUser): string {
 /** The short messages shown after a sign-in the user started (not on a restored session). */
 export const SIGNED_IN_MESSAGE = 'Signed in. Your progress saves to your account';
 export const SIGNED_UP_MESSAGE = 'Account created. Check your email to confirm it';
+/** How long Sign out waits for unsaved progress to reach the account before asking. */
+export const SIGN_OUT_WAIT_MS = 4000;
 /** Shown when no email app opens for the deletion request, so it can be sent by hand. */
 export const DELETION_FAILED_MESSAGE = `Could not open your email app. To delete your account, write to ${DELETION_EMAIL}`;
 
@@ -91,6 +103,9 @@ export function AccountProvider({ store, notify, children }: {
   // The question last put off with "Decide later". A new question shows again.
   const [putOff, setPutOff] = useState<SyncStatus | null>(null);
   const choiceOpen = status.phase === 'choose' && putOff !== status;
+  const [leaving, setLeaving] = useState<'saving' | 'unsaved' | null>(null);
+  // Bumped when a sign-out is answered or cancelled, so a wait still running drops out.
+  const leaveRun = useRef(0);
 
   useEffect(() => watchAccount(setUser), []);
   useEffect(() => () => sync.dispose(), [sync]);
@@ -121,6 +136,21 @@ export function AccountProvider({ store, notify, children }: {
     return () => subscription.remove();
   }, [unverified]);
 
+  // The device is cleared before the sign-out, so a sign-out cut short (the
+  // app closed in between) cannot leave this account's progress behind for
+  // the next one. If the sign-out fails, the account is still signed in and
+  // its progress comes back from the account.
+  const leave = useCallback(async () => {
+    leaveRun.current += 1;
+    setLeaving(null);
+    sync.forget();
+    const result = await signOutAccount();
+    if (!result.ok) {
+      if (uid) sync.start(uid);
+      if (result.message) notifyRef.current(result.message);
+    }
+  }, [sync, uid]);
+
   const value = useMemo<AccountValue>(() => ({
     available,
     google,
@@ -145,7 +175,27 @@ export function AccountProvider({ store, notify, children }: {
     },
     resetPassword: sendPasswordReset,
     resend: resendVerification,
-    signOut: signOutAccount,
+    signOut: async () => {
+      // A task edit may be in its 10 s wait: send it now.
+      sync.flush();
+      if (!sync.unsaved()) {
+        await leave();
+        return;
+      }
+      leaveRun.current += 1;
+      const run = leaveRun.current;
+      setLeaving('saving');
+      const saved = await sync.whenSaved(SIGN_OUT_WAIT_MS);
+      if (run !== leaveRun.current) return;
+      if (saved) await leave();
+      else setLeaving('unsaved');
+    },
+    leaving,
+    confirmSignOut: () => void leave(),
+    cancelSignOut: () => {
+      leaveRun.current += 1;
+      setLeaving(null);
+    },
     setName: async (name) => {
       const result = await changeName(name);
       if (result.ok) void refreshAccount().then((fresh) => { if (fresh) setUser(fresh); });
@@ -161,7 +211,7 @@ export function AccountProvider({ store, notify, children }: {
     requestDeletion: () => {
       if (user) void Linking.openURL(deletionMailto(user)).catch(() => notifyRef.current(DELETION_FAILED_MESSAGE));
     },
-  }), [available, choiceOpen, google, status, sync, user]);
+  }), [available, choiceOpen, google, leave, leaving, status, sync, user]);
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
 }

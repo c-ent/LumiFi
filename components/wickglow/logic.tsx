@@ -37,6 +37,7 @@ import { SESSION_NOTIFICATION_ID, cancelSessionEnd, prepareNotificationPermissio
 import { loadWickglowState, saveWickglowState } from '@/components/wickglow/domain/storage';
 import { AccountProvider } from '@/components/wickglow/features/account/account';
 import { KeepProgressCard } from '@/components/wickglow/features/account/keep-progress-card';
+import { SignOutCard } from '@/components/wickglow/features/account/sign-out-card';
 import {
   levelInfo,
   MixLevels,
@@ -790,6 +791,7 @@ function WickglowSession({ loaded, children }: { loaded: SavedState; children: R
           <AccountProvider store={store} notify={showToast}>
             {now == null ? <View style={{ flex: 1, backgroundColor: colors.bgBase }} /> : children}
             <KeepProgressCard />
+            <SignOutCard />
           </AccountProvider>
         </ClockProvider>
       </MusicPlayerContext.Provider>

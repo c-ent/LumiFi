@@ -3,6 +3,7 @@ import {
   adoptRemote,
   emptyMeta,
   emptyRemote,
+  hasUnsaved,
   isQuiet,
   reconcile,
   Reconciled,
@@ -15,7 +16,7 @@ import {
 } from '@/src/core/sync';
 import type { Task } from '@/src/core/types';
 import { levelInfo } from '@/src/core/xp';
-import type { SavedState } from './saved-state';
+import { withoutProgress, type SavedState } from './saved-state';
 
 // Keeps the saved state and the signed-in account in step. Not React and not
 // Firebase: the store and the Firestore calls are handed in, so the tests run
@@ -31,7 +32,10 @@ import type { SavedState } from './saved-state';
 //   session, 10 s after the last task edit (so a burst of edits is one write
 //   per task), and at once when the app leaves the foreground (`flush`).
 // - XP, streak and history are rebuilt from the log while linked.
-// - Signing out stops syncing and keeps everything on the device.
+// - Signing out (`forget`) clears the progress from the device (owner,
+//   2026-11-14), so the next account to sign in here cannot take it. The
+//   caller first waits for it to be saved (`whenSaved`) and warns if it is
+//   not (`unsaved`). `stop` (the session ended without a sign-out) keeps it.
 
 export interface ProgressRemote {
   /** Everything the account holds. */
@@ -72,6 +76,12 @@ export interface AccountSync {
   start: (uid: string) => void;
   /** Stops syncing; the device keeps its progress. */
   stop: () => void;
+  /** True when this device holds progress the signed-in account has not confirmed. */
+  unsaved: () => boolean;
+  /** Resolves true once nothing is unsaved, or false after `ms` if something still is. */
+  whenSaved: (ms: number) => Promise<boolean>;
+  /** Signing out: stops syncing and clears the progress from the device. */
+  forget: () => void;
   /** Answers the first sign-in question. */
   choose: (keep: 'device' | 'account') => void;
   /** Tries again after the account could not be reached. */
@@ -369,6 +379,22 @@ export function createAccountSync(options: {
     listen(account, isStale(sync) ? 0 : sync?.since ?? 0);
   };
 
+  const stop = () => {
+    generation += 1;
+    uid = null;
+    fetched = null;
+    ready = false;
+    stopListening?.();
+    stopListening = null;
+    cancelTimer();
+    setStatus({ phase: 'off' });
+  };
+
+  const unsaved = () => {
+    const state = store.get();
+    return hasUnsaved({ log: state.log, tasks: state.tasks }, state.sync, uid, now());
+  };
+
   return {
     start: (account) => {
       if (uid === account && status.phase !== 'off') return;
@@ -377,15 +403,33 @@ export function createAccountSync(options: {
       if (store.get().sync?.uid === account) resume(account);
       else check(account);
     },
-    stop: () => {
-      generation += 1;
-      uid = null;
-      fetched = null;
-      ready = false;
-      stopListening?.();
-      stopListening = null;
-      cancelTimer();
-      setStatus({ phase: 'off' });
+    stop,
+    unsaved,
+    // A write is saved once a confirmed read shows it, which updates the
+    // save's view of the account, so every store change is a moment to check.
+    whenSaved: (ms) => new Promise<boolean>((resolve) => {
+      if (!unsaved()) {
+        resolve(true);
+        return;
+      }
+      let done = false;
+      const finish = (saved: boolean) => {
+        if (done) return;
+        done = true;
+        unsubscribe();
+        clearTimer(deadline);
+        resolve(saved);
+      };
+      const unsubscribe = store.subscribe(() => {
+        if (!unsaved()) finish(true);
+      });
+      const deadline = setTimer(() => finish(!unsaved()), ms);
+    }),
+    forget: () => {
+      stop();
+      heldBack = false;
+      // Through `commit`, so the cleared tasks are not noted as local edits.
+      commit(withoutProgress(store.get(), now()));
     },
     choose: (keep) => {
       const account = uid;

@@ -1,4 +1,4 @@
-import { DayRecord, FinishedRecord, ProgressLog, SessionRecord } from './progress-log';
+import { DayRecord, FinishedRecord, hasProgress, ProgressLog, SessionRecord } from './progress-log';
 import { Task } from './types';
 
 // How a device's progress and an account's progress are combined. Pure: the
@@ -440,6 +440,25 @@ function normaliseTasks(tasks: Task[]): Task[] {
   return tasks.map((task) => (
     task.parentId != null && !parents.has(task.parentId) ? { ...task, parentId: null } : task
   ));
+}
+
+/**
+ * True when this device holds progress the account `uid` has not confirmed:
+ * a session, day record, task edit, delete or credit still to be sent or
+ * acknowledged. A device not linked to that account (never linked, linked to
+ * another, or "Decide later") has all of its progress unsaved. Old tombstones
+ * waiting to be purged are not progress. Used before a sign-out clears the
+ * device (owner, 2026-11-14).
+ */
+export function hasUnsaved(
+  local: { log: ProgressLog; tasks: Task[] },
+  meta: SyncMeta | null,
+  uid: string | null,
+  now: number,
+): boolean {
+  if (!meta || meta.uid !== uid) return hasProgress(local.log, local.tasks);
+  const { push } = reconcile(local, meta, emptyRemote(), now, false);
+  return push.sessions.length > 0 || push.days.length > 0 || push.tasks.length > 0;
 }
 
 /** True when the reconcile changed nothing on the device and has nothing to push. */

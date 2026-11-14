@@ -8,6 +8,10 @@ v2
 
 ## Recent
 
+- 2026-11-14 Ambient mixer dock knobs faster (owner request): each drift now takes 1.7 to 2.05 s instead of 3.4 to 4.1 s, still out of step. Needs a look in the browser.
+
+- 2026-11-14 desktop Music card cover (owner request): the now-playing cover tile was a fixed 64px square beside a much taller text column. It is now a square as tall as the title, seek bar and controls (the column is measured with `onLayout`); the note inside scales with it. Phone and tablet unchanged. Needs a look in the browser.
+
 - 2026-11-14 focus line height (owner report): the line under the timer was shorter in a break (plain text) than in focus (the "Pick a task" pill), so the layout shifted on a mode change. `FocusLine` now gives every look a 36px slot: the pill is a fixed 36px, the break text sits centred in a 36px slot (it may grow only if it wraps on a very narrow screen). Typecheck, lint, tests and web export pass; needs a look switching Focus and Short break on each layout.
 
 - 2026-11-14 ambient effects (owner request; owner picked Fireplace, Wind, Forest and Waves, 2026-11-14): like the rain, more ambient sounds show over the scene on every layout (`features/background/ambient-effects.tsx`, which also holds the rain): Fireplace, warm embers rising from the bottom over a faint flickering orange glow (6 to 20); Wind had tilted streaks in gusts, removed the same day at the owner's request (no wind effect); Forest, fireflies wandering in the lower part and glowing on and off (8 to 28, doubled at the owner's request); Waves, two soft light bands rising and falling along the bottom (brightness follows the slider). Clock, Brown noise, Keyboard and Cafe have no effect (owner agreed). Reanimated, one clock per effect, no taps blocked; reduced motion shows still versions. Typecheck, lint, tests and web export pass; needs a look in the browser and on a device (smoothness with all five on).

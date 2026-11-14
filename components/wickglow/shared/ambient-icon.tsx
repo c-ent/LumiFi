@@ -5,12 +5,12 @@ import { colors } from '@/src/theme/tokens';
 
 // The mixer icon's three columns, in its 24-unit grid: x position, where the
 // knob rests (as on the still MixerIcon), where it drifts to, and how long one
-// drift there and back takes. Slower than the music bars and out of step, so
-// it reads as "on" rather than "playing".
+// drift there and back takes (halved 2026-11-14, owner asked for faster). Out
+// of step, so it reads as "on" rather than "playing".
 const COLUMNS = [
-  { x: 4, rest: 14, to: 9, ms: 3400 },
-  { x: 12, rest: 8, to: 13, ms: 4100 },
-  { x: 20, rest: 16, to: 11, ms: 3700 },
+  { x: 4, rest: 14, to: 9, ms: 1700 },
+  { x: 12, rest: 8, to: 13, ms: 2050 },
+  { x: 20, rest: 16, to: 11, ms: 1850 },
 ];
 // Gap left in the track on each side of a knob, and the knob's half width.
 const GAP = 2;

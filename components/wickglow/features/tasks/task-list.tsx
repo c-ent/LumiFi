@@ -425,15 +425,13 @@ export function TaskList({ mobile = false }: { mobile?: boolean }) {
                       onPress={() => focusTask(task.id)}
                       style={styles.titleBtn}
                     >
-                      <Text style={[styles.title, task.done ? styles.done : null]} numberOfLines={1}>{task.text}</Text>
+                      {/* On a phone or tablet the title wraps (up to 3 lines)
+                          so the date and buttons can stay on the same row. */}
+                      <Text style={[styles.title, task.done ? styles.done : null]} numberOfLines={mobile ? 3 : 1}>{task.text}</Text>
                     </Pressable>
                   )}
-                  {mobile ? null : controls}
+                  {controls}
                 </View>
-                {/* On a phone or tablet the title keeps the first row to itself
-                    and the date and buttons sit on a second one, so a narrow
-                    screen does not squeeze the title to nothing. */}
-                {mobile ? <View style={styles.rowControls}>{controls}</View> : null}
                 {/* Expanded subtasks, with their own add field. */}
                 {task.open ? (
                   <View style={styles.subs}>
@@ -656,16 +654,6 @@ const styles = StyleSheet.create({
   editSm: {
     fontSize: 13,
     minHeight: 30,
-  },
-  rowControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: -4,
-    paddingBottom: 6,
-    paddingLeft: 40,
-    paddingRight: 6,
   },
   dateSlot: {
     position: 'relative',

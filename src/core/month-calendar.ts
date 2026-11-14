@@ -71,14 +71,16 @@ export const QUIET_DAY_LINES = [
   'There\'s room to begin',
 ] as const;
 
-/** One of `QUIET_DAY_LINES`, the way `focusEndLine` picks a session-end line. */
-export function quietDayLine(random: () => number): string {
+/**
+ * One of `QUIET_DAY_LINES`, the way `focusEndLine` picks a session-end line.
+ * `previous`, the line on screen, is left out of the draw, so tapping one
+ * empty day after another always changes the line.
+ */
+export function quietDayLine(random: () => number, previous?: string): string {
+  const lines = QUIET_DAY_LINES.filter((line) => line !== previous);
   const rolled = random();
-  const index = Math.min(
-    QUIET_DAY_LINES.length - 1,
-    Math.max(0, Math.floor(rolled * QUIET_DAY_LINES.length)),
-  );
-  return QUIET_DAY_LINES[index];
+  const index = Math.min(lines.length - 1, Math.max(0, Math.floor(rolled * lines.length)));
+  return lines[index];
 }
 
 export function monthRef(now: number): MonthRef {

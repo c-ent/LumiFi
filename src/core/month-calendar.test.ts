@@ -141,7 +141,7 @@ describe('quietDayLine', () => {
     const count = QUIET_DAY_LINES.length;
     // The middle of each band, so each line is reachable.
     const middles = QUIET_DAY_LINES.map((_, index) => () => (index + 0.5) / count);
-    expect(middles.map(quietDayLine)).toEqual([...QUIET_DAY_LINES]);
+    expect(middles.map((random) => quietDayLine(random))).toEqual([...QUIET_DAY_LINES]);
 
     // A random source at or beyond the ends still returns a real line.
     expect(quietDayLine(() => 0)).toBe(QUIET_DAY_LINES[0]);
@@ -151,6 +151,16 @@ describe('quietDayLine', () => {
     // Both ends of every band, so the boundaries land where the floor says.
     expect(quietDayLine(() => 1 / count)).toBe(QUIET_DAY_LINES[1]);
     expect(quietDayLine(() => 1 / count - 0.000001)).toBe(QUIET_DAY_LINES[0]);
+  });
+
+  it('never repeats the line on screen, whatever the roll', () => {
+    for (const previous of QUIET_DAY_LINES) {
+      for (const roll of [0, 0.25, 0.5, 0.75, 0.999999, 1]) {
+        const next = quietDayLine(() => roll, previous);
+        expect(next).not.toBe(previous);
+        expect(QUIET_DAY_LINES).toContain(next);
+      }
+    }
   });
 });
 

@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import type { StreamService } from '@/src/core/stream-links';
 import AppleMusicIcon from '@/assets/images/icons/Apple_Music_icon.svg';
 import SpotifyIcon from '@/assets/images/icons/Spotify_icon.svg';
@@ -17,16 +18,17 @@ const MARKS: Record<StreamService, { src: typeof SpotifyIcon; ratio: number }> =
   'apple-music': { src: AppleMusicIcon, ratio: 1 },
 };
 
+// Decorative, so hidden from screen readers. On web, react-native-svg spreads unknown
+// props onto the DOM <svg>, so the native-only props would reach React DOM and warn;
+// web gets aria-hidden instead.
+const HIDDEN =
+  Platform.OS === 'web'
+    ? { 'aria-hidden': true }
+    : { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const };
+
 /** The mark for the service playing right now. Brand colours stay on the artwork. */
 export function StreamServiceMark({ service, size = 28 }: { service: StreamService; size?: number }) {
   const mark = MARKS[service];
   const Mark = mark.src;
-  return (
-    <Mark
-      width={size}
-      height={size * mark.ratio}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    />
-  );
+  return <Mark width={size} height={size * mark.ratio} {...HIDDEN} />;
 }

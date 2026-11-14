@@ -137,25 +137,34 @@ export function TabletWickglow() {
           <SoundsScroller
             mobile
             contentContainerStyle={[styles.sideContent, keyboard > 0 ? { paddingBottom: keyboard + 28 } : null]}
+            // Each group is its own section: a hairline divider and room above
+            // it, so the column reads as separate blocks instead of one run.
+            // The blocks' own titles carry a 16px top margin, which sits under
+            // the divider's padding. The Sounds section cannot wrap the track
+            // rows (they are the list's items), so its divider tops the title.
             before={(
               <>
-                <Text style={styles.kicker}>Tasks</Text>
+                <Text style={[styles.kicker, styles.kickerFirst]}>Tasks</Text>
                 <TaskList mobile />
-                <Text style={styles.kicker}>Sounds</Text>
-                <MoodPicker video />
+                <View style={styles.section}><MoodPicker video /></View>
+                <View style={styles.section}><Text style={styles.kicker}>Sounds</Text></View>
               </>
             )}
             after={(
               <>
-                <MixerBlock mobile />
-                <QuestList mobile />
-                <Text style={styles.kicker}>Stats</Text>
-                <StatGrid />
-                <WeekChart mobile />
-                <MonthCalendar mobile />
-                <AccountRow />
-                <Text style={styles.kicker}>Timer settings</Text>
-                <TimerSettings mobile />
+                <View style={styles.section}><MixerBlock mobile /></View>
+                <View style={styles.section}><QuestList mobile /></View>
+                <View style={styles.section}>
+                  <Text style={styles.kicker}>Stats</Text>
+                  <StatGrid />
+                  <WeekChart mobile />
+                  <MonthCalendar mobile />
+                </View>
+                <View style={styles.section}><AccountRow /></View>
+                <View style={styles.section}>
+                  <Text style={styles.kicker}>Timer settings</Text>
+                  <TimerSettings mobile />
+                </View>
               </>
             )}
           />
@@ -345,8 +354,16 @@ const styles = StyleSheet.create({  root: {
     backgroundColor: colors.bgSurface,
   },
   sideContent: {
-    padding: 16,
-    paddingBottom: 28,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  // A side-column group: 24 above the divider, 8 + the title's 16 below it.
+  section: {
+    marginTop: 24,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   kicker: {
     color: colors.textMuted,
@@ -354,7 +371,11 @@ const styles = StyleSheet.create({  root: {
     fontSize: 16,
     letterSpacing: 1.4,
     textTransform: 'uppercase',
+    marginTop: 16,
     marginBottom: 8,
+  },
+  kickerFirst: {
+    marginTop: 0,
   },
   toast: {
     position: 'absolute',

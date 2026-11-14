@@ -53,4 +53,7 @@ None right now.
 
 ## Tooling notes
 
+- Docs (2026-11-15): added `docs/user-guide.md` (for users) and `docs/developer-guide.md` (for contributors; links to the agent docs instead of copying them), linked from `README.md`. Keep both in step when a user-visible feature or the code layout changes.
+
 - `npm audit` reports 0 vulnerabilities through the `overrides` in `package.json` (`@grpc/grpc-js`, `uuid`, `re2`, `@opentelemetry/core`, `glob`), all transitive copies in dev-only `firebase-tools`; the app bundle is unaffected. Do not run `npm audit fix --force`: it downgrades `firebase`/`firebase-tools` to older majors. Re-check the overrides when `firebase-tools` resolves them itself.
+- Agent skills (2026-11-15): removed `add-supabase-table` and `change-progression-rules` (both written for the old Supabase backend). Installed `grilling`, `codebase-design` and `domain-modeling` from `mattpocock/skills` with `npx skills add`, because `grill-me` and `improve-codebase-architecture` call them. They are pinned in `skills-lock.json` and linked into `.claude/skills/` for Claude Code.

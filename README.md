@@ -43,6 +43,9 @@ Run the build, typecheck and tests before finishing a change.
 
 ## Documentation
 
+- [`docs/user-guide.md`](docs/user-guide.md): how to use the app, for users.
+- [`docs/developer-guide.md`](docs/developer-guide.md): how the code fits together, for contributors. Start here if you are new to the codebase.
+
 Start with [`AGENTS.md`](AGENTS.md) for commands, conventions and boundaries. The design and planning docs live in [`docs/agent/`](docs/agent/):
 
 - [`progress.md`](docs/agent/progress.md): current status and open questions. Read this first in a new session.

@@ -8,7 +8,7 @@ v2
 
 ## Current feature
 
-Google Play release (resumed 2026-11-14, after the owner marked accounts and saving done). Steps under Next up.
+Google Play release (resumed 2026-11-14, after the owner marked accounts and saving done). Steps under Next up. Merge conflicts with `main` were resolved on `dev` on 2026-11-14.
 
 ## Current goal
 

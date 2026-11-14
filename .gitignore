@@ -49,6 +49,7 @@ app-example
 
 #background
 /assets/backgrounds/videos/original/
+/backup/
 
 # Firebase emulator logs
 firestore-debug.log

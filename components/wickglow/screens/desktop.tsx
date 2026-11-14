@@ -19,7 +19,7 @@ import { useReducedMotion } from '@/components/wickglow/hooks/use-reduced-motion
 import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
 import { hasOpenQuests, MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
-import { RainOverlay } from '@/components/wickglow/features/background/rain';
+import { AmbientEffects } from '@/components/wickglow/features/background/ambient-effects';
 import { SceneBackground } from '@/components/wickglow/features/background/scene-background';
 import { LevelCard } from '@/components/wickglow/features/progression/level-card';
 import { AccountChip } from '@/components/wickglow/features/account/account-chip';
@@ -181,9 +181,9 @@ export function DesktopWickglow() {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.b1 }]} onTouchStart={poke}>
-      {/* Back to front: animated scene, rain, then the UI layers below. */}
+      {/* Back to front: animated scene, ambient effects (rain, embers, etc.), then the UI layers below. */}
       <SceneBackground />
-      <RainOverlay amount={lamp.mix.rain} />
+      <AmbientEffects mix={lamp.mix} />
 
       {/* Top bar: logo on the left; streak, minutes and level pills on the
           right (each opens the Progress card). */}

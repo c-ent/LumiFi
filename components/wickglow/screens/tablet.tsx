@@ -8,7 +8,7 @@ import { useZen } from '@/components/wickglow/hooks/use-zen';
 import { useWickglow } from '@/components/wickglow/logic';
 import { MODE_LABEL, TimerMode } from '@/components/wickglow/theme';
 import { RoomBackground } from '@/components/wickglow/features/background/room-background';
-import { RainOverlay } from '@/components/wickglow/features/background/rain';
+import { AmbientEffects } from '@/components/wickglow/features/background/ambient-effects';
 import { SessionCandle } from '@/components/wickglow/features/clock/candle';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
 import { QuestList } from '@/components/wickglow/features/progression/quest-list';
@@ -58,7 +58,7 @@ export function TabletWickglow() {
   return (
     <View style={[styles.root, { backgroundColor: mood.bgBase }]} onTouchStart={poke}>
       <RoomBackground />
-      <RainOverlay amount={lamp.mix.rain} />
+      <AmbientEffects mix={lamp.mix} />
 
       {/* Two columns side by side (flexDirection: 'row'). */}
       <View style={[styles.split, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>

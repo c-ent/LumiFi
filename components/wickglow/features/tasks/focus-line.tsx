@@ -10,6 +10,9 @@ import { TaskIcon } from '@/components/wickglow/shared/icons';
 export type FocusLineMode = 'break' | 'empty' | 'task';
 
 const ICON_SIZE = 15;
+// One height for every look, so switching between focus and a break does not
+// move the timer above or the controls below.
+const LINE_HEIGHT = 36;
 
 /**
  * The line under the timer. In focus mode it is a pill that shows which task
@@ -35,7 +38,11 @@ export function FocusLine({
   const opacity = zen ? 0 : 1;
 
   if (mode === 'break') {
-    return <Text style={[styles.break, { opacity }]}>{text}</Text>;
+    return (
+      <View style={[styles.breakSlot, { opacity }]}>
+        <Text style={styles.break}>{text}</Text>
+      </View>
+    );
   }
 
   const body = (
@@ -72,13 +79,20 @@ export function FocusLine({
 }
 
 const styles = StyleSheet.create({
+  // Same height as the chip; minHeight so a line that wraps on a very narrow
+  // screen still shows in full.
+  breakSlot: {
+    minHeight: LINE_HEIGHT,
+    justifyContent: 'center',
+    alignSelf: 'center',
+    maxWidth: '100%',
+  },
   break: {
     color: colors.textMuted,
     fontFamily: fonts.body,
     fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 6,
   },
   chip: {
     flexDirection: 'row',
@@ -86,11 +100,10 @@ const styles = StyleSheet.create({
     gap: 8,
     alignSelf: 'center',
     maxWidth: '100%',
-    minHeight: 34,
+    height: LINE_HEIGHT,
     borderWidth: 1,
     ...rounded(radius.pill),
     paddingHorizontal: 14,
-    paddingVertical: 7,
   },
   chipEmpty: {
     borderStyle: 'dashed',

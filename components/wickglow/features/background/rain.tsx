@@ -29,7 +29,7 @@ const TURN_MS = 9000;
 // gives the same value, so streaks keep their look across renders and the
 // slider can add/remove streaks without reshuffling the rest.
 // 'worklet' lets Reanimated run this on the UI thread inside animated styles.
-function rand(seed: number) {
+export function rand(seed: number) {
   'worklet';
   const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
   return x - Math.floor(x);

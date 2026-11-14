@@ -307,19 +307,21 @@ export const panelStyles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 2,
   },
-  // 3 per row (a 3x3-ish grid; 6 moods make two full rows, a 7th "Video" tile
-  // on tablet starts a third). `moodBtn` gets a fixed width instead of `flex: 1`
-  // so a short last row doesn't stretch to fill the width.
+  // 3 per row. Each row spreads its tiles edge to edge; MoodPicker pads a
+  // short last row with invisible `moodSpacer`s so its tiles start at the left
+  // under the first column (owner, 2026-11-14) instead of being centered or
+  // pushed to the edges. `moodBtn` has a fixed width so nothing stretches.
   moodRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    // Centers each wrapped row on its own, so an odd last tile (7 moods at
-    // 3 per row) sits in the middle instead of flush left with a gap beside it.
-    justifyContent: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
+    rowGap: 10,
+  },
+  moodSpacer: {
+    width: '31%',
   },
   moodBtn: {
-    width: '30%',
+    width: '31%',
     borderWidth: 2,
     // A faint edge so each card reads on its own; selected turns it white.
     borderColor: colors.border,

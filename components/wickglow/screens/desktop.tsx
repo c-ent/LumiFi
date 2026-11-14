@@ -25,6 +25,7 @@ import { StatGrid } from '@/components/wickglow/features/progression/stat-grid';
 import { MonthCalendar } from '@/components/wickglow/features/progression/month-calendar';
 import { WeekChart } from '@/components/wickglow/features/progression/week-chart';
 import { ScenePicker } from '@/components/wickglow/features/settings/scene-picker';
+import { EqualizerIcon } from '@/components/wickglow/shared/equalizer-icon';
 import { TimerSettings } from '@/components/wickglow/features/settings/timer-settings';
 import { TaskList } from '@/components/wickglow/features/tasks/task-list';
 import { FocusLine } from '@/components/wickglow/features/tasks/focus-line';
@@ -241,7 +242,10 @@ export function DesktopWickglow() {
           screen. Full screen only appears where the browser supports it. */}
       <View style={[styles.dock, { paddingBottom: insets.bottom + 14, opacity: zen ? 0 : 1 }]} pointerEvents={zen ? 'none' : 'auto'}>
         <View style={styles.dockGroup}>
-          <DockButton label="Music" active={panel === 'music'} dot={lamp.musicPlaying || lamp.activeStreamId != null} onPress={() => togglePanel('music')}><MusicIcon /></DockButton>
+          {/* While a local track plays, moving bars replace the note (and the
+              dot). A streaming link only shows the dot: whether its player is
+              actually playing is not known here. */}
+          <DockButton label={lamp.musicPlaying ? 'Music, playing' : 'Music'} active={panel === 'music'} dot={!lamp.musicPlaying && lamp.activeStreamId != null} onPress={() => togglePanel('music')}>{lamp.musicPlaying ? <EqualizerIcon /> : <MusicIcon />}</DockButton>
           <DockButton label="Ambient mixer" active={panel === 'mixer'} onPress={() => togglePanel('mixer')}><MixerIcon /></DockButton>
           <DockButton label="Scenes" active={panel === 'scenes'} onPress={() => togglePanel('scenes')}><SceneIcon /></DockButton>
           <DockButton label="Tasks" active={panel === 'tasks'} onPress={() => togglePanel('tasks')}><TaskIcon /></DockButton>
@@ -306,7 +310,7 @@ export function DesktopWickglow() {
       {/* Narrow side cards: mixer, scenes, timer settings. They anchor left or
           right to sit under the dock button that opened them (PANEL_SIDE). */}
       {panel && panel !== 'music' && panel !== 'progress' && panel !== 'quests' && panel !== 'tasks' ? (
-        <View style={[styles.panel, styles[PANEL_SIDE[panel] === 'right' ? 'panelRight' : 'panelLeft'], { bottom: sideBottom }, sideMaxHeight != null ? { maxHeight: sideMaxHeight } : null]}>
+        <View style={[styles.panel, styles[PANEL_SIDE[panel] === 'right' ? 'panelRight' : 'panelLeft'], panel === 'scenes' && styles.scenesPanel, { bottom: sideBottom }, sideMaxHeight != null ? { maxHeight: sideMaxHeight } : null]}>
           <PanelHeading title={PANEL_TITLE[panel]} onClose={() => setPanel(null)} />
           <ScrollView style={styles.panelBody} contentContainerStyle={styles.panelContent}>
             {panel === 'mixer' ? <MixerBlock /> : null}
@@ -607,10 +611,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingBottom: 18,
   },
+  // Both columns take the taller one's height, so the Last 7 days card (the
+  // left column's last card, which flexes) ends level with the calendar.
   board: {
     flexDirection: 'row',
     gap: 14,
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
   },
   boardCol: {
     flex: 1,
@@ -642,6 +648,12 @@ const styles = StyleSheet.create({
   },
   panelRight: {
     right: 16,
+  },
+  // The Scenes card keeps one height (still capped by maxHeight on short
+  // windows), so switching its All / Pixel art / Video filter does not move
+  // the card's top edge.
+  scenesPanel: {
+    height: 560,
   },
   panelBody: {
     flexGrow: 0,

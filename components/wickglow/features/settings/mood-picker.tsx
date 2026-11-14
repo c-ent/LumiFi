@@ -16,6 +16,10 @@ export function MoodPicker({ video = false }: { video?: boolean }) {
   const { mood, setMood, videoBg, setVideoBg } = useWickglow();
   const loading = useLoadingBackground();
   const reduced = useReducedMotion();
+  // Empty cells that fill out the last row of three, so a short last row
+  // starts at the left (see `moodRow`).
+  const tiles = MOODS.length + (video ? 1 : 0);
+  const spacers = (3 - (tiles % 3)) % 3;
   return (
     <View>
       <Text style={[styles.kicker, styles.kickerLg]}>Mood</Text>
@@ -40,6 +44,9 @@ export function MoodPicker({ video = false }: { video?: boolean }) {
             <Text style={[styles.sceneName, videoBg && { color: colors.textPrimary }]}>Video</Text>
           </Pressable>
         ) : null}
+        {Array.from({ length: spacers }, (_, i) => (
+          <View key={`spacer-${i}`} style={styles.moodSpacer} pointerEvents="none" importantForAccessibility="no-hide-descendants" />
+        ))}
       </View>
     </View>
   );
